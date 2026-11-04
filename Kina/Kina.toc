@@ -1,0 +1,55 @@
+## Interface: 16001
+## Title: |cff4fc3f7Kina|r
+## IconTexture: Interface\AddOns\Kina\Media\KinaLogo
+## Notes: Kina: shared farm gold tracker and player reputation for WoW Forever. Every Kina user in the group sees the same totals, the split and who owes whom; settle by trade or mail, both sides confirm it, and your Kina reputation grows.
+## Author: Taylor
+## Version: 1.0.9
+## SavedVariables: KinaDB
+## OptionalDeps: KinaScoutC, ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
+## X-Category: Auction/Economy
+
+Core.lua
+Schema.lua
+Data.lua
+DropData.lua
+CampData.lua
+FarmSeeds.lua
+NPCData.lua
+Items.lua
+Nav.lua
+Market.lua
+QuickScan.lua
+Vendor.lua
+Value.lua
+Econ.lua
+Merchants.lua
+RecipeData.lua
+Crafts.lua
+Hot.lua
+Favor.lua
+Loot.lua
+Share.lua
+Duo.lua
+Pockets.lua
+PocketSync.lua
+PocketPins.lua
+PocketPins.xml
+Ledger.lua
+Farms.lua
+ClassFarms.lua
+Brain.lua
+Group.lua
+SyncCore.lua
+FarmSync.lua
+Payout.lua
+Log.lua
+Rep.lua
+Books.lua
+SelfTest.lua
+Advisor.lua
+Tooltip.lua
+UI.lua
+Widget.lua
+Minimap.lua
+Layers.lua
+Commands.lua

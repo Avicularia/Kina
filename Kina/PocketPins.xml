@@ -1,0 +1,7 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- Map pin template for PocketPins.lua. No scripts on purpose: the map canvas
+         calls the mixin's OnLoad / OnMouseEnter / OnMouseLeave itself. -->
+    <Frame name="KinaPocketPinTemplate" mixin="KinaPocketPinMixin" virtual="true" enableMouse="true">
+        <Size x="28" y="28"/>
+    </Frame>
+</Ui>
