@@ -122,13 +122,26 @@ local function showBest(s)
   end
 end
 
+-- (plain locals, not fields on the frame: 1.2.2)
+local chipIron, modeWord = false, nil
+-- the line under gold per hour; in the iron look it carries the mode ("per hour · duo · Darkshore")
+local function setSub(txt)
+  if chipIron then
+    txt = txt:gsub("^per hour, group", "per hour")
+    if modeWord then
+      local head, rest = txt:match("^(%S+ %S+)%s+(.*)$")
+      if head then txt = head .. "  |cff6f6f6f·|r  " .. modeWord .. "  |cff6f6f6f·|r  " .. rest
+      else txt = txt .. "  |cff6f6f6f·|r  " .. modeWord end
+    end
+  end
+  w.rateSub:SetText(txt)
+end
 local function chip(textv, r, g, b)
   w.chip.text:SetText(textv)
-  if w.chip.iron then
-    -- 1.2.1: just the word, in the state's colour, lightened to read on iron
-    local function up(v) return math.min(1, 0.35 + v * 1.6) end
-    w.chip.text:SetTextColor(up(r), up(g), up(b))
-    w.chip:SetWidth(math.max(24, (w.chip.text:GetStringWidth() or 30) + 2))
+  if chipIron then
+    -- 1.2.2: no badge in the header; the mode goes into the line under the gold
+    local function up(v) return math.floor(math.min(1, 0.35 + v * 1.6) * 255) end
+    modeWord = (textv ~= "READY") and string.format("|cff%02x%02x%02x%s|r", up(r), up(g), up(b), textv:lower()) or nil
     return
   end
   w.chip.bg:SetColorTexture(r, g, b, 0.9)
@@ -153,7 +166,7 @@ function C.RefreshWidget()
     else w.scan:Hide() end
   end
   local s = C.session
-  if w.chip and w.chip.iron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
+  if chipIron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
   else w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND") end
   if w.rep and C.RepLine then pcall(function() w.rep.text:SetText(C.RepLine() .. (C.ShareData() and "" or " |cff888888paused|r")) end) end
   w.timer:SetText(presetText(C.settings.farmPreset))
@@ -169,7 +182,7 @@ function C.RefreshWidget()
         end
         w.clock:SetText((v.paused and "|cffffd100" or "|cffffffff") .. clock(secs) .. "|r")
         w.rate:SetText(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r")
-        w.rateSub:SetText("per hour, group" .. (v.noSplit and " |cffffd100no split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
+        setSub("per hour, group" .. (v.noSplit and " |cffffd100no split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
         setTile(w.tNet, signed(v.net), "same for all")
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
@@ -181,7 +194,7 @@ function C.RefreshWidget()
       else
         chip("WAITING", 0.45, 0.35, 0.05)
         w.clock:SetText("|cff9d9d9d" .. clock(C.SessionSecs(s)) .. "|r")
-        w.rate:SetText("|cff9d9d9d...|r"); w.rateSub:SetText("waiting for " .. tostring(leader) .. "'s numbers")
+        w.rate:SetText("|cff9d9d9d...|r"); setSub("waiting for " .. tostring(leader) .. "'s numbers")
         for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
         w.status:SetText("")
       end
@@ -195,7 +208,7 @@ function C.RefreshWidget()
     if s.paused then chip("PAUSED", 0.55, 0.42, 0.05) else chip("SOLO", 0.12, 0.25, 0.50) end
     w.clock:SetText((s.paused and "|cffffd100" or "|cffffffff") .. clock(secs) .. "|r")
     w.rate:SetText(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r")
-    w.rateSub:SetText("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
+    setSub("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
     setTile(w.tNet, signed(sum.total), ((sum.used or 0) > 0) and ("used " .. C.Money(sum.used)) or "what you looted")
     setTile(w.tCoin, C.Money(sum.cash or 0), ((s.money.pickpocket or 0) > 0) and ("picks " .. C.Money(s.money.pickpocket)) or "looted coin")
     local extra = {}
@@ -216,13 +229,13 @@ function C.RefreshWidget()
     local secs = g and math.max(1, g.secs or 1) or 1
     if g then
       w.rate:SetText("|cffbbbbbb" .. C.Money(net * 3600 / secs) .. "|r")
-      w.rateSub:SetText("last farm  |cff9d9d9d" .. ((last.label or "?"):sub(1, 18)) .. ", " .. (last.why or "stopped") .. "|r")
+      setSub("last farm  |cff9d9d9d" .. ((last.label or "?"):sub(1, 18)) .. ", " .. (last.why or "stopped") .. "|r")
       setTile(w.tNet, signed(net), last.gview and "group" or "")
       setTile(w.tCoin, C.Money((last.gview and last.gview.coin) or (last.result and last.result.cash) or 0), "")
       setTile(w.tLoot, C.Money((last.gview and last.gview.items) or (last.result and last.result.items) or 0), "")
       setTile(w.tKills, tostring(g.kills or 0), "")
     else
-      w.rate:SetText("|cff9d9d9d--|r"); w.rateSub:SetText("press Start when you begin farming")
+      w.rate:SetText("|cff9d9d9d--|r"); modeWord = nil; setSub("press Start when you begin farming")
       for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
     end
     local tr = last and last.split and last.split.loot and last.split.transfers
@@ -296,8 +309,10 @@ local function build()
   -- 1.1.0 iron look: the A-30 frame (20 px, Rev 59) and the A-33 header bar
   if iron then
     C.Skin.Frame(w, 20, false)
-    local hb = C.Skin.Strip(w, "header", 24)
-    if hb then hb:SetPoint("TOPLEFT", 1, -1); hb:SetPoint("TOPRIGHT", -1, -1) end
+    -- 1.2.2: a plain header (the hammered strip behind small text was unreadable),
+    -- just a fine gold rule under it
+    local rl = w:CreateTexture(nil, "ARTWORK"); rl:SetPoint("TOPLEFT", 10, -27); rl:SetPoint("TOPRIGHT", -10, -27)
+    rl:SetHeight(1); rl:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.45)
   end
   -- header band with a soft gradient
   local bar = w:CreateTexture(nil, "ARTWORK"); bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1); bar:SetHeight(22)
@@ -316,7 +331,7 @@ local function build()
   w.chip = CreateFrame("Frame", nil, w); w.chip:SetSize(44, iron and 18 or 14); w.chip:SetPoint("LEFT", title, "RIGHT", 6, 0)
   w.chip.bg = w.chip:CreateTexture(nil, "ARTWORK"); w.chip.bg:SetAllPoints()
   w.chip.text = text(w.chip, "GameFontHighlightSmall", "CENTER"); w.chip.text:SetPoint("CENTER", 0, 0)
-  if iron then w.chip.bg:Hide(); w.chip.iron = true end
+  if iron then w.chip.bg:Hide(); chipIron = true end
   -- your Kina level (hover for details)
   w.rep = CreateFrame("Button", nil, w); w.rep:SetSize(70, 16); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 6, 0)
   w.rep:SetFrameLevel(w:GetFrameLevel() + 5)
@@ -435,12 +450,13 @@ local function build()
     local IH = 256
     w:SetSize(W, IH)
     -- header: logo, KINA, mode, level ... Sound, close
-    icon:ClearAllPoints(); icon:SetPoint("TOPLEFT", 9, -4); icon:SetSize(18, 18)
-    fx(title, 13); title:SetTextColor(1, 0.82, 0.25)
-    w.chip:ClearAllPoints(); w.chip:SetPoint("LEFT", title, "RIGHT", 10, 0); w.chip:SetHeight(16)
-    fx(w.chip.text, 11, "LEFT"); w.chip.text:ClearAllPoints(); w.chip.text:SetPoint("LEFT", 0, 0)
-    w.rep:ClearAllPoints(); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 10, 0)
-    fx(w.rep.text, 11, "LEFT")
+    icon:ClearAllPoints(); icon:SetPoint("TOPLEFT", 10, -5); icon:SetSize(18, 18)
+    fx(title, 14); title:SetText("Kina"); title:SetTextColor(1, 0.82, 0.25)
+    title:ClearAllPoints(); title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+    w.chip.text:Hide()
+    -- your Kina level: hover the logo (it's also on the You tab)
+    w.rep:ClearAllPoints(); w.rep:SetPoint("TOPLEFT", w, "TOPLEFT", 8, -3); w.rep:SetSize(70, 22)
+    w.rep.text:Hide()
     alpha:Hide() -- (background: Settings, or right-click the title)
     close:Hide()
     local x = CreateFrame("Button", nil, w, "UIPanelCloseButton")
@@ -471,7 +487,7 @@ local function build()
       tl:ClearAllPoints(); tl:SetPoint("TOPLEFT", w, "TOPLEFT", x0 + (i - 1) * (tw + gap), ty); tl:SetSize(tw, 54)
       fx(tl.label, 9, "CENTER"); tl.label:ClearAllPoints(); tl.label:SetPoint("TOP", tl, "TOP", 0, -9)
       tl.label:SetTextColor(0.62, 0.62, 0.62)
-      fx(tl.value, 14, "CENTER"); tl.value:ClearAllPoints(); tl.value:SetPoint("CENTER", tl, "CENTER", 0, -1); tl.value:SetWidth(tw - 12)
+      fx(tl.value, 13, "CENTER"); tl.value:ClearAllPoints(); tl.value:SetPoint("CENTER", tl, "CENTER", 0, -1); tl.value:SetWidth(tw - 6)
       fx(tl.sub, 8, "CENTER"); tl.sub:ClearAllPoints(); tl.sub:SetPoint("BOTTOM", tl, "BOTTOM", 0, 9); tl.sub:SetWidth(tw - 12)
       tl.sub:SetTextColor(0.55, 0.55, 0.55)
     end
