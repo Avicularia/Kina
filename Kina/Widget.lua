@@ -23,7 +23,8 @@ local function signed(cp)
   return (cp < 0 and "|cffff6060-" or "|cff7CFC00+") .. C.Money(math.abs(cp)) .. "|r"
 end
 local function text(parent, font, justify)
-  local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
+  -- 1.1.1: Kina's own font copies, so the widget follows the Text size setting (115% by default)
+  local fs = C.Text and C.Text(parent, "OVERLAY", font or "GameFontHighlightSmall") or parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
   fs:SetJustifyH(justify or "LEFT")
   if fs.SetWordWrap then fs:SetWordWrap(false) end
   return fs
@@ -32,7 +33,7 @@ local function tip(btn, title, body) if C.ButtonTip then C.ButtonTip(btn, title,
 local function smallButton(parent, label, width, onClick, height)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(width, height or 18); b:SetText(label); b:SetScript("OnClick", onClick)
-  if b.GetFontString and b:GetFontString() then b:GetFontString():SetFontObject("GameFontHighlightSmall") end
+  if b.GetFontString and b:GetFontString() then b:GetFontString():SetFontObject(C.Font and C.Font("GameFontHighlightSmall") or "GameFontHighlightSmall") end
   if C.Skin then C.Skin.Button(b) end
   return b
 end
@@ -242,7 +243,7 @@ end
 
 local function makeTile(parent, label, x, y, width)
   local t = CreateFrame("Frame", nil, parent)
-  t:SetSize(width, 38); t:SetPoint("TOPLEFT", x, y)
+  t:SetSize(width, (C.Skin and C.Skin.On()) and 44 or 38); t:SetPoint("TOPLEFT", x, y)
   local bg = t:CreateTexture(nil, "BACKGROUND", nil, 1); bg:SetAllPoints(); bg:SetColorTexture(TILE[1], TILE[2], TILE[3], 0.9)
   local top = t:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1)
   top:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.35)
@@ -252,7 +253,7 @@ local function makeTile(parent, label, x, y, width)
   t.label = text(t, "GameFontDisableSmall", "CENTER"); t.label:SetPoint("TOP", 0, iron and -5 or -3); t.label:SetText(label)
   t.value = text(t, "GameFontHighlight", "CENTER"); t.value:SetPoint("CENTER", 0, -1); t.value:SetWidth(width - (iron and 10 or 4))
   t.sub = text(t, "GameFontDisableSmall", "CENTER"); t.sub:SetPoint("BOTTOM", 0, iron and 5 or 2); t.sub:SetWidth(width - (iron and 10 or 4))
-  if t.sub.SetFont then local f, _, fl = t.sub:GetFont(); if f then t.sub:SetFont(f, 8, fl) end end
+  if t.sub.SetFont then local f, _, fl = t.sub:GetFont(); if f then t.sub:SetFont(f, 8 * (C.TextScale and C.TextScale() or 1), fl) end end
   -- one line each: a long text is cut short instead of wrapping over the value
   for _, fs in ipairs({ t.label, t.value, t.sub }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
   return t
@@ -260,9 +261,18 @@ end
 
 local function build()
   w = CreateFrame("Frame", "KinaWidget", UIParent)
-  w:SetSize(W, H); w:SetFrameStrata("MEDIUM")
+  local ironLook = C.Skin and C.Skin.On()
+  local DY = ironLook and 8 or 0 -- 1.1.1: taller tiles in the iron look
+  w:SetSize(W, H + DY); w:SetFrameStrata("MEDIUM")
   C.RestorePos(w, "widget", "TOP", UIParent, "TOP", 0, -120)
-  C.MakeDraggable(w, "widget")
+  -- 1.1.1: with the iron look the widget moves by its title area only
+  local handle
+  if ironLook then
+    handle = CreateFrame("Frame", nil, w)
+    handle:SetPoint("TOPLEFT", 0, 0); handle:SetSize(206, 26)
+    handle:SetFrameLevel(w:GetFrameLevel() + 1)
+  end
+  C.MakeDraggable(w, "widget", handle)
   if C.ScaleGrip then C.ScaleGrip(w, "widgetScale") end
   w.bg = w:CreateTexture(nil, "BACKGROUND"); w.bg:SetAllPoints()
   local iron = C.Skin and C.Skin.On()
@@ -300,6 +310,7 @@ local function build()
   if iron then C.Skin.Chip(w.chip) end
   -- your Kina level (hover for details)
   w.rep = CreateFrame("Button", nil, w); w.rep:SetSize(70, 16); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 6, 0)
+  w.rep:SetFrameLevel(w:GetFrameLevel() + 5)
   w.rep.text = text(w.rep, "GameFontHighlightSmall", "LEFT"); w.rep.text:SetPoint("LEFT", 0, 0)
   w.rep:SetScript("OnEnter", function(self)
     if not GameTooltip then return end
@@ -327,7 +338,7 @@ local function build()
 
   -- hero: gold per hour
   w.rate = text(w, "GameFontNormalLarge", "LEFT"); w.rate:SetPoint("TOPLEFT", 10, -30); w.rate:SetWidth(180)
-  if w.rate.SetFont then local f, _, fl = w.rate:GetFont(); if f then w.rate:SetFont(f, 20, fl or "OUTLINE") end end
+  if w.rate.SetFont then local f, _, fl = w.rate:GetFont(); if f then w.rate:SetFont(f, 20 * (C.TextScale and C.TextScale() or 1), fl or "OUTLINE") end end
   w.rateSub = text(w, "GameFontHighlightSmall", "LEFT"); w.rateSub:SetPoint("TOPLEFT", 10, -54); w.rateSub:SetWidth(190)
   w.clock = text(w, "GameFontNormalLarge", "RIGHT"); w.clock:SetPoint("TOPRIGHT", -10, -30); w.clock:SetWidth(100)
   w.timer = smallButton(w, "no timer", 74, function()
@@ -348,9 +359,9 @@ local function build()
   w.tKills = makeTile(w, "KILLS", x0 + (tw + gap) * 3, -72, tw)
 
   -- best drop + status
-  w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116)
+  w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116 - DY)
   w.best = text(w, "GameFontHighlightSmall", "LEFT"); w.best:SetPoint("LEFT", w.bestIcon, "RIGHT", 5, 0); w.best:SetWidth(W - 40)
-  w.status = text(w, "GameFontHighlightSmall", "LEFT"); w.status:SetPoint("TOPLEFT", 10, -135); w.status:SetWidth(W - 20)
+  w.status = text(w, "GameFontHighlightSmall", "LEFT"); w.status:SetPoint("TOPLEFT", 10, -135 - DY); w.status:SetWidth(W - 20)
   for _, fs in ipairs({ w.rate, w.rateSub, w.clock, w.best, w.status }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
 
   -- buttons
@@ -371,7 +382,13 @@ local function build()
   hide:SetPoint("LEFT", runs, "RIGHT", 4, 0)
   tip(hide, "Kina", "Opens the main Kina window: dungeons, farms, Hot and skill-up plans.")
   -- pay what the split says you owe: opens the trade and puts the money in
-  w.pay = smallButton(w, "Pay", W - 16, function()
+  w.pay = smallButton(w, "Pay", W - 16, function(_, btn)
+    -- 1.1.1: right-click opens the farm's Ledger details (forgive, more time)
+    if btn == "RightButton" then
+      local due = w.pay.rcv or (C.PayDue and C.PayDue())
+      if due and due.s and C.OpenLedgerFarm then C.OpenLedgerFarm(due.s) end
+      return
+    end
     if w.pay.rcv then if C.RequestSettle then C.RequestSettle(w.pay.rcv) end
     elseif C.PayStart then C.PayStart(C.PayDue and C.PayDue()) end
   end, (C.Skin and C.Skin.On()) and 24 or 20)
@@ -391,7 +408,8 @@ local function build()
     GameTooltip:Show()
   end)
   w.scan:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.")
+  w.pay:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.\n\nRight-click: the farm's details, to forgive the debt or ask for (or give) more time.")
 
   local acc, tick = 0, 0
   w:SetScript("OnUpdate", function(_, el)

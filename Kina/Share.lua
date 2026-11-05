@@ -743,6 +743,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnForgiven(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "fga" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
           C.OnForgiveAck(from, label)
+        elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and C.FirstName and C.FirstName(to) == mine and C.OnDebtNote then
+          C.OnDebtNote(action, from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and (action == "pla" or action == "exa") and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
+          C.OnForgiveAck(from, label, action == "pla" and "plea" or "ext")
         end
       elseif kind == "S" then
         local uid, payload_to, payload = rest:match("^(%x+)|([^|]*)|(.*)$")
@@ -940,16 +944,18 @@ function S.SendSettle(action, to, amt, label)
   enqueue(table.concat({ "T", db().uid, to or "", action, tostring(math.floor(amt or 0)), ((tostring(label or "")):gsub("|", "")) }, "|"), ch, nil, true)
 end
 -- 1.0.10 forgive: "T|uid|to|fgv|amount|farmref" and its answer "fga" (group channel)
-function S.SendForgive(to, amt, ref)
+function S.SendForgive(to, amt, ref, kind)
   if not db().opts.enabled then return end
   local ch = groupChannel()
-  local msg = table.concat({ "T", db().uid, to or "", "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
+  local msg = table.concat({ "T", db().uid, to or "", kind or "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
   if ch then enqueue(msg, ch, nil, true) end -- not grouped: re-sent when you group up again
 end
-function S.SendForgiveAck(to, ref)
+function S.SendForgiveAck(to, ref, kind)
   if not db().opts.enabled then return end
   local ch = groupChannel()
-  local msg = table.concat({ "T", db().uid, to or "", "fga", "0", ((tostring(ref or "")):gsub("|", "")) }, "|")
+  -- the answer names what it answers: fga (forgive), pla (plea), exa (extension)
+  local ack = ({ plea = "pla", ext = "exa" })[kind or ""] or "fga"
+  local msg = table.concat({ "T", db().uid, to or "", ack, "0", ((tostring(ref or "")):gsub("|", "")) }, "|")
   if ch then enqueue(msg, ch, nil, true) end
 end
 -- a consumable you used during the group farm

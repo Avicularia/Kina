@@ -62,7 +62,7 @@ local NUMMAP = map(N)
 
 local transfer = { t = T, f = { from = S, to = S, amt = N }, req = { "from", "to", "amt" } }
 local split = { t = T, f = { total = N, each = N, transfers = list(transfer), paid = map({ number = true, boolean = true }),
-  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP } }
+  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B) } }
 local chainEv = { t = T, f = { seq = N, origin = S, oseq = N, kind = S, t = N, hash = S, data = S }, req = { "seq", "origin", "kind", "hash" } }
 local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, closed = B, chain = map(chainEv),
   outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }) },
@@ -74,7 +74,7 @@ local session = { t = T, f = { start = N, stop = N, last = N, label = S, kills =
     spent = N, kills = N, net = B, income = B } },
   gview = { t = T, f = { secs = N, net = N, coin = N, items = N, used = N, kills = N, paused = B } }, why = S, zone = S, skins = N, nodes = N,
   skinItems = NUMMAP, gather = NUMMAP, excl = { t = T, f = { coin = N, items = NUMMAP } }, sx = map(NUMMAP), byParty = B, camp = S, startBag = N,
-  minLvl = N, maxLvl = N, groupN = N, noSplit = B },
+  minLvl = N, maxLvl = N, groupN = N, noSplit = B, apartTicks = N, togetherTicks = N, apartAsked = B },
   req = { "start" } }
 local SETTINGS = {}
 for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "launchTime", "minDealProfit", "farmPreset", "widgetAlpha",
@@ -82,7 +82,7 @@ for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "l
   "minConfidence", "minProfit", "minimapAngle", "partnerLevel", "postDuration", "priorKills", "rareRate", "tripMinutes", "widgetScale",
   "kinaScale", "dataNoticeSeen", "welcomed" }) do SETTINGS[k] = N end
 for _, k in ipairs({ "hudShown", "autoScan", "farmSound", "tooltip", "worthOnly", "assumeSkinning", "autoOpen", "deMine", "hotAlerts",
-  "matLowest", "farmNoSplit", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
+  "matLowest", "farmNoSplit", "text115", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
 for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots", "lowLevelSeen", "forgiven" }) do SETTINGS[k] = T end
 SETTINGS.partnerClass = S
 SETTINGS.look = S
@@ -108,7 +108,7 @@ local DB = { t = T, f = {
   ledger = { t = T, f = { seen = T, seenN = NUMMAP, entries = list(T), transfers = T } },
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N,
-  selftest = T, repairs = list(T), forgive = { t = T, f = { pending = list({ t = T, f = { who = S, amt = N, ref = S, t = N }, req = { "who", "ref" } }) } },
+  selftest = T, repairs = list(T), forgive = { t = T, f = { pending = list({ t = T, f = { who = S, amt = N, ref = S, t = N, kind = S }, req = { "who", "ref" } }) } },
   tradeStats = { t = T, f = { complete = N, missed = N, cancelled = N, lastMissed = N, msgs = list(S) } },
 } }
 

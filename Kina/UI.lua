@@ -1032,12 +1032,26 @@ if C.PUBLIC then
         local st = left < 1 and (GREEN .. "paid|r") or (d.done > 0 and (ORANGE .. money(left) .. " left|r") or (ORANGE .. "unpaid|r"))
         local forgiven = s.split.forgiven and s.split.forgiven[d.who]
         if forgiven then st = GREEN .. "forgiven|r" end
+        -- the live debt (with its due date), if it's still open
+        local od
+        for _, x in ipairs(C.Debts()) do if x.s == s and x.key == d.who and x.dir == d.dir then od = x end end
+        if od and not forgiven and C.DueText then st = st .. "  " .. GREY .. C.DueText(od) .. "|r" end
         row("", (d.dir == "owe" and "you owe " or "owes you: ") .. d.who, money(d.amt), st)
-        -- 1.0.10: whoever is owed can forgive the rest
-        if d.dir == "owed" and left >= 1 and not forgiven then
-          for _, od in ipairs(C.Debts()) do
-            if od.dir == "owed" and od.s == s and od.key == d.who then
-              out[#out + 1] = { cols = { "", "   |cff4fc3f7click here to forgive " .. C.Books.Name(d.who) .. " the " .. C.Money(math.floor(od.amt)) .. "|r", "", "" }, sort = { #out, 0, 0, 0 }, forgive = od }
+        local LINK = "   |cff4fc3f7"
+        if od and left >= 1 and not forgiven then
+          local sp = s.split
+          if d.dir == "owed" then
+            -- the person owed: forgive, and give more time when asked (1.1.1)
+            if sp.pleaFrom and sp.pleaFrom[d.who] then
+              out[#out + 1] = { cols = { "", LINK .. C.Books.Name(d.who) .. " asked for more time: click here to give " .. C.EXTEND_DAYS .. " more days|r", "", "" }, sort = { #out, 0, 0, 0 }, debtAct = { "ext", od } }
+            end
+            out[#out + 1] = { cols = { "", LINK .. "click here to forgive " .. C.Books.Name(d.who) .. " the " .. C.Money(math.floor(od.amt)) .. "|r", "", "" }, sort = { #out, 0, 0, 0 }, forgive = od }
+          else
+            -- the debtor: pay (the widget's Pay button), or ask once for more time
+            if not (sp.plea and sp.plea[d.who]) then
+              out[#out + 1] = { cols = { "", LINK .. "can't pay yet? click here to ask " .. C.Books.Name(d.who) .. " for more time|r", "", "" }, sort = { #out, 0, 0, 0 }, debtAct = { "plea", od } }
+            else
+              out[#out + 1] = { cols = { "", GREY .. "   you asked " .. C.Books.Name(d.who) .. " for more time|r", "", "" }, sort = { #out, 0, 0, 0 } }
             end
           end
         end
@@ -2675,6 +2689,8 @@ end
 ------------------------------------------------------------------ main window
 local function build()
   local f = CreateFrame("Frame", "KinaFrame", UIParent, "BasicFrameTemplateWithInset")
+  -- 1.1.1 iron look: remove the template's own art first, before Kina adds its parts
+  if C.Skin and C.Skin.On() then C.Skin.StripTemplate(f) end
   -- never bigger than the screen (a saved size from a broken drag is shrunk back)
   local screenW, screenH = (UIParent:GetWidth() or 1900) - 20, (UIParent:GetHeight() or 1200) - 20
   local MINW, MINH = 780, 420
@@ -2722,12 +2738,22 @@ local function build()
   f:SetFrameStrata("DIALOG")
   -- 1.1.0 iron look: the template's art hidden, the A-30 frame (24 px, Rev 59), the A-33 header
   if C.Skin and C.Skin.On() then
-    C.Skin.HideTemplate(f)
-    C.Skin.Frame(f, 24)
-    local hb = C.Skin.Strip(f, "header", 24)
-    if hb then hb:SetPoint("TOPLEFT", 3, -1); hb:SetPoint("TOPRIGHT", -3, -1) end
+    -- 1.1.1: the template's art is all removed (it showed as grey stone and an extra
+    -- bar over the title); the title sits on the frame's top band, above everything
+    local fr = C.Skin.Frame(f, 24)
+    local holder = fr and fr.parent
+    if holder then
+      local title = C.Text(holder, "OVERLAY", "GameFontNormal")
+      title:SetPoint("TOP", f, "TOP", 0, 9); title:SetText("Kina " .. C.version)
+      if title.SetShadowOffset then title:SetShadowOffset(1, -1) end
+      ui.ironTitle = title
+    end
+    -- the shelf the tabs stand on (A-36), so they don't float
+    local shelf = C.Skin.Strip(f, "row", 8)
+    if shelf then shelf:SetPoint("TOPLEFT", 8, -51); shelf:SetPoint("TOPRIGHT", -8, -51) end
+    if f.CloseButton then f.CloseButton:ClearAllPoints(); f.CloseButton:SetPoint("TOPRIGHT", 2, 6); f.CloseButton:SetFrameLevel(f:GetFrameLevel() + 40) end
   end
-  if f.TitleText then f.TitleText:SetText("Kina " .. C.version) end
+  if f.TitleText and not ui.ironTitle then f.TitleText:SetText("Kina " .. C.version) end
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaFrame") end
   ui.frame = f
   ui.tabButtons = {}
@@ -3029,6 +3055,9 @@ local function build()
         showMenu(list)
       elseif d.slog then
         ui.logOf = d.slog; ui.offset = 0; ui.sort.Session = nil; C.Refresh()
+      elseif d.debtAct then
+        local kind, od = d.debtAct[1], d.debtAct[2]
+        if kind == "plea" and C.AskForTime then C.AskForTime(od) elseif kind == "ext" and C.ExtendDebt then C.ExtendDebt(od) end
       elseif d.forgive then
         local od = d.forgive
         StaticPopupDialogs["KINA_FORGIVE"] = StaticPopupDialogs["KINA_FORGIVE"] or {
@@ -3052,6 +3081,15 @@ local function build()
     ui.rows[r] = row
   end
   fitWidths()
+  -- 1.1.1: a scrollbar for long lists (the farm log got very long)
+  if C.Skin and C.Skin.Scrollbar then
+    ui.scroll = C.Skin.Scrollbar(f, function(v)
+      if v ~= (ui.offset or 0) then ui.offset = v; C.Draw() end
+    end)
+    ui.scroll:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -94)
+    ui.scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 70)
+    ui.scroll:Hide()
+  end
   f:EnableMouseWheel(true)
   f:SetScript("OnMouseWheel", function(_, delta)
     ui.offset = math.max(0, math.min((ui.count or 0) - ui.visible, (ui.offset or 0) - delta * 3)); C.Draw()
@@ -3127,6 +3165,7 @@ function C.Draw()
     if d then row:SetHeight(h); row:Show(); used = used + h; shown = shown + 1 else row:Hide() end
   end
   ui.visible = math.max(1, shown)
+  if ui.scroll and ui.scroll.KinaSet then ui.scroll:KinaSet((ui.count or 0) - ui.visible, ui.offset or 0) end
 end
 
 local function sortRows(data, s)
@@ -3268,6 +3307,13 @@ function C.Toggle(tab)
     if not ui.frame:IsShown() then C.DockToAH() end
     ui.frame:Show(); if C.RaiseKina then C.RaiseKina() end; C.Refresh()
   end
+end
+
+-- 1.1.1: open one farm's Ledger details (from the widget's Pay / Ask button)
+function C.OpenLedgerFarm(s)
+  if not ui.frame then build() end
+  ui.bookOf = s; ui.offset = 0
+  C.Toggle("Ledger")
 end
 
 C.OnMarket(function() C.Refresh() end)

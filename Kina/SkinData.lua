@@ -9,6 +9,8 @@ C.SkinData = {
   frame = { tw = 512, th = 512, w = 512, h = 512, inset = { 64, 64, 64, 64 } },
   header = { tw = 512, th = 128, w = 512, h = 82, inset = { 13, 13, 0, 0 } },
   row = { tw = 512, th = 64, w = 512, h = 52, inset = { 8, 8, 0, 0 } },
+  scroll_knob = { tw = 32, th = 32, w = 32, h = 32, inset = nil },
+  scroll_track = { tw = 32, th = 512, w = 32, h = 273, inset = { 0, 0, 24, 26 }, mid = { 0.10, 0.42 } },
   tab = { tw = 256, th = 256, w = 256, h = 154, inset = { 41, 41, 41, 0 } },
   tab_active = { tw = 256, th = 256, w = 256, h = 154, inset = { 41, 41, 41, 0 } },
   tab_dim = { tw = 256, th = 256, w = 256, h = 154, inset = { 41, 41, 41, 0 } },

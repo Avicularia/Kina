@@ -129,7 +129,7 @@ function R.Unqualified(f)
   local minL, maxL, net, players = tonumber(f[11]), tonumber(f[12]), tonumber(f[13]), tonumber(f[14])
   if not minL then return nil end
   if minL > 0 and minL < (C.PROG_MIN_LEVEL or 10) then return "under10" end
-  if (tonumber(f[7]) or 0) >= FARM_MIN_SECS and net and net < R.FarmNeeds(maxL, players) then return "gold" end
+  -- (1.1.1: the gold target is gone, Taylor's call after the first long farm; 15 minutes is the rule)
   return nil
 end
 

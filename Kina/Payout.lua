@@ -373,7 +373,7 @@ end
 local function farmRef(s) return (s and s.sync and s.sync.sid) or ("t" .. tostring(s and s.start or 0)) end
 local function fdb() C.db.forgive = C.db.forgive or { pending = {} }; C.db.forgive.pending = C.db.forgive.pending or {}; return C.db.forgive end
 local function sendForgive(p)
-  if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, p.who, p.amt, p.ref) end
+  if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, p.who, p.amt, p.ref, p.kind) end
 end
 function C.Forgive(d)
   if not (d and d.dir == "owed" and d.s and d.s.split) then return false end
@@ -408,10 +408,80 @@ function C.OnForgiven(from, amt, ref)
   if C.RefreshWidget then C.RefreshWidget() end
   return hit
 end
-function C.OnForgiveAck(from, ref)
+function C.OnForgiveAck(from, ref, kind)
   local keep = {}
-  for _, p in ipairs(fdb().pending) do if not (p.who == first(from) and p.ref == ref) then keep[#keep + 1] = p end end
+  for _, p in ipairs(fdb().pending) do if not (p.who == first(from) and p.ref == ref and (p.kind or "fgv") == (kind or "fgv")) then keep[#keep + 1] = p end end
   fdb().pending = keep
+end
+
+------------------------------------------------------------------ due dates, more time (1.1.1)
+-- A debt is due 7 days after its farm; the debtor can ask once for more time, and the
+-- person owed can give 3 more days (or forgive). Nothing happens automatically when a
+-- debt is overdue yet: it just says so (standing comes later).
+C.DEBT_DAYS, C.EXTEND_DAYS = 7, 3
+function C.DebtDue(d)
+  if not (d and d.s) then return nil end
+  local sp = d.s.split or {}
+  local ext = sp.ext and tonumber(sp.ext[d.key]) or 0
+  return (d.s.stop or d.s.start or 0) + (C.DEBT_DAYS + ext) * 86400
+end
+function C.DueText(d)
+  local due = C.DebtDue(d)
+  if not due then return "" end
+  local left = due - C.Now()
+  if left < 0 then return "|cffff8040overdue|r" end
+  local days = math.floor(left / 86400)
+  return days >= 1 and ("due in " .. days .. (days == 1 and " day" or " days")) or ("due in " .. math.max(1, math.floor(left / 3600)) .. " h")
+end
+local function queue(kind, who, amt, ref)
+  local p = { kind = kind, who = first(who), amt = math.floor(amt or 0), ref = ref, t = C.Now() }
+  table.insert(fdb().pending, p)
+  sendForgive(p)
+end
+-- the debtor asks for more time (once per debt)
+function C.AskForTime(d)
+  if not (d and d.dir == "owe" and d.s and d.s.split) then return false end
+  local sp = d.s.split
+  sp.plea = sp.plea or {}
+  if sp.plea[d.key] then C.Print("you already asked " .. C.Books.Name(d.who) .. " for more time on this one."); return false end
+  sp.plea[d.key] = true
+  if C.Log then C.Log("plea", "asked", d.who, math.floor(d.amt), farmRef(d.s)) end
+  queue("plea", d.who, d.amt, farmRef(d.s))
+  C.Print(string.format("asked %s for more time to pay %s (%s). They can give you %d more days or forgive it.", C.Books.Name(d.who), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_DAYS))
+  if C.Refresh then C.Refresh() end
+  return true
+end
+-- the person owed gives the debtor more time
+function C.ExtendDebt(d)
+  if not (d and d.dir == "owed" and d.s and d.s.split) then return false end
+  local sp = d.s.split
+  sp.ext = sp.ext or {}; sp.ext[d.key] = (tonumber(sp.ext[d.key]) or 0) + C.EXTEND_DAYS
+  if sp.pleaFrom then sp.pleaFrom[d.key] = nil end
+  if C.Log then C.Log("extend", "gave", d.who, C.EXTEND_DAYS, farmRef(d.s)) end
+  queue("ext", d.who, C.EXTEND_DAYS, farmRef(d.s))
+  C.Print(string.format("gave %s %d more days to pay %s.", C.Books.Name(d.who), C.EXTEND_DAYS, C.Money(math.floor(d.amt))))
+  if C.Refresh then C.Refresh() end
+  return true
+end
+-- from their Kina: a plea (we're owed) or an extension (we owe)
+function C.OnDebtNote(kind, from, amt, ref)
+  from = first(from)
+  for _, d in ipairs(C.Debts()) do
+    if not d.topup and first(d.who) == from and d.s and farmRef(d.s) == ref then
+      local sp = d.s.split
+      if kind == "plea" and d.dir == "owed" then
+        sp.pleaFrom = sp.pleaFrom or {}; sp.pleaFrom[d.key] = true
+        C.Print(string.format("|cffffd100%s asks for more time|r to pay the %s from %s. Open Kina > Ledger > that farm to give %d more days or forgive it.",
+          C.Books.Name(from), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_DAYS))
+      elseif kind == "ext" and d.dir == "owe" then
+        sp.ext = sp.ext or {}; sp.ext[d.key] = (tonumber(sp.ext[d.key]) or 0) + (tonumber(amt) or C.EXTEND_DAYS)
+        C.Print(string.format("|cff7CFC00%s gave you %d more days|r to pay the %s from %s.", C.Books.Name(from), tonumber(amt) or C.EXTEND_DAYS, C.Money(math.floor(d.amt)), d.farm or "farm"))
+      end
+      break
+    end
+  end
+  if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, ref, kind) end
+  if C.Refresh then C.Refresh() end
 end
 -- re-send what hasn't been answered (they were offline or out of the group)
 function C.ResendForgive()

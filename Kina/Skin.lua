@@ -59,8 +59,12 @@ end
 
 -- a run of tiles along an edge: copies of the source's middle 30-70%, the last one cut short
 function Nine:run(horiz, from, to, fixedPos, thick, a0, a1, b0, b1, k)
-  local srcLen = (a1 - a0) * 0.4
-  local s0 = a0 + (a1 - a0) * 0.3
+  -- the tiled part: the middle 30-70% of the edge, or the piece's own clean range (mid)
+  local d = C.SkinData[self.piece]
+  local m0, m1 = 0.3, 0.7
+  if d and d.mid then m0, m1 = d.mid[1], d.mid[2] end
+  local srcLen = (a1 - a0) * (m1 - m0)
+  local s0 = a0 + (a1 - a0) * m0
   local seg = srcLen * k
   if seg < 1 then return end
   local pos = from
@@ -93,24 +97,33 @@ function Nine:Layout()
     else
       local l, r, t, b = d.inset[1], d.inset[2], d.inset[3], d.inset[4]
       local k
-      if t == 0 and b == 0 then k = H / d.h else k = self.border / math.max(t, b) end
+      if t == 0 and b == 0 then k = H / d.h
+      elseif l == 0 and r == 0 then k = W / d.w
+      else k = self.border / math.max(t, b) end
       local cl, cr, ct, cb = l * k, r * k, t * k, b * k
       -- never let the corners overlap on a small frame
       if cl + cr > W then local f = W / (cl + cr); cl, cr = cl * f, cr * f end
       if ct + cb > H then local f = H / (ct + cb); ct, cb = ct * f, cb * f end
       local x1, x2, y1, y2 = l, d.w - r, t, d.h - b
       local midW, midH = W - cl - cr, H - ct - cb
-      if t > 0 then
+      if l == 0 and r == 0 then
+        -- a vertical strip (the scrollbar track): end caps whole, middle tiled
+        self:place(0, 0, W, ct, 0, d.w, 0, y1)
+        self:place(0, H - cb, W, cb, 0, d.w, y2, d.h)
+        self:run(false, ct, H - cb, 0, W, y1, y2, 0, d.w, k)
+      elseif t > 0 then
         self:place(0, 0, cl, ct, 0, x1, 0, y1)
         self:place(W - cr, 0, cr, ct, x2, d.w, 0, y1)
         self:run(true, cl, W - cr, 0, ct, x1, x2, 0, y1, k)
       end
-      if b > 0 then
+      if b > 0 and not (l == 0 and r == 0) then
         self:place(0, H - cb, cl, cb, 0, x1, y2, d.h)
         self:place(W - cr, H - cb, cr, cb, x2, d.w, y2, d.h)
         self:run(true, cl, W - cr, H - cb, cb, x1, x2, y2, d.h, k)
       end
-      if t == 0 and b == 0 then
+      if l == 0 and r == 0 then
+        -- (vertical strip: done above)
+      elseif t == 0 and b == 0 then
         -- a horizontal strip: end caps whole, middle tiled
         self:place(0, 0, cl, H, 0, x1, 0, d.h)
         self:place(W - cr, 0, cr, H, x2, d.w, 0, d.h)
@@ -246,4 +259,73 @@ function S.HideTemplate(f)
     if r then if r.Hide then r:Hide() end end
   end
   if f.Inset then f.Inset:Hide() end
+end
+
+-- 1.1.1: the corner resize grip as an iron knob (A-37), no gold box
+function S.Grip(grip)
+  if not S.On() then return false end
+  grip:SetSize(18, 18)
+  -- inside the frame's corner, above the frame (which is drawn over the window's edge)
+  local p = grip:GetParent()
+  if p then
+    grip:ClearAllPoints(); grip:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -9, 9)
+    grip:SetFrameLevel(p:GetFrameLevel() + 40)
+  end
+  local t = grip:CreateTexture(nil, "ARTWORK")
+  t:SetAllPoints(); t:SetTexture(PATH .. "scroll_knob")
+  local d = C.SkinData.scroll_knob
+  t:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th)
+  t:SetAlpha(0.75)
+  grip.kinaKnob = t
+  grip:HookScript("OnEnter", function() t:SetAlpha(1) end)
+  grip:HookScript("OnLeave", function() t:SetAlpha(0.75) end)
+  return true
+end
+
+-- 1.1.1: a vertical scrollbar (A-37 track and knob). onScroll(value) gets whole steps.
+function S.Scrollbar(parent, onScroll)
+  local sb = CreateFrame("Slider", nil, parent)
+  sb:SetWidth(16)
+  if sb.SetOrientation then sb:SetOrientation("VERTICAL") end
+  sb:SetMinMaxValues(0, 0); sb:SetValue(0)
+  if sb.SetValueStep then sb:SetValueStep(1) end
+  if sb.SetObeyStepOnDrag then sb:SetObeyStepOnDrag(true) end
+  local thumb = sb:CreateTexture(nil, "OVERLAY")
+  thumb:SetSize(18, 18)
+  if S.On() then
+    sb.track = S.Nine(sb, "scroll_track", 16, { layer = "BACKGROUND" })
+    thumb:SetTexture(PATH .. "scroll_knob")
+    local d = C.SkinData.scroll_knob
+    thumb:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th)
+  else
+    local bg = sb:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.45)
+    thumb:SetColorTexture(0.96, 0.78, 0.30, 0.85); thumb:SetSize(12, 24)
+  end
+  if sb.SetThumbTexture then sb:SetThumbTexture(thumb) end
+  sb:SetScript("OnValueChanged", function(self, v)
+    if self.kinaQuiet then return end
+    onScroll(math.floor((v or 0) + 0.5))
+  end)
+  -- set range and position without calling back
+  function sb:KinaSet(maxV, v)
+    self.kinaQuiet = true
+    self:SetMinMaxValues(0, math.max(0, maxV))
+    self:SetValue(math.max(0, math.min(maxV, v)))
+    self.kinaQuiet = false
+    if maxV > 0 then self:Show() else self:Hide() end
+  end
+  return sb
+end
+
+-- 1.1.1: strip a Blizzard window template down to nothing: every texture it made and
+-- every child frame except the close button (called before Kina adds its own parts)
+function S.StripTemplate(f)
+  if not S.On() then return end
+  for _, r in ipairs({ f:GetRegions() }) do
+    if r.GetObjectType and r:GetObjectType() == "Texture" then r:Hide() end
+  end
+  for _, ch in ipairs({ f:GetChildren() }) do
+    if ch ~= f.CloseButton then ch:Hide() end
+  end
+  if f.TitleText then f.TitleText:Hide() end
 end

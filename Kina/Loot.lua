@@ -787,6 +787,24 @@ function C.StopSession(at, why, silent, fromParty)
   if not s then return end
   -- shared farm: ask the leader to close the log; everyone's farm ends when it does
   if s.sync and not s.sync.closed and not fromParty and C.FarmSync and C.FarmSync.Active() then
+    -- 1.1.1: apart most of the farm (different zones)? ask before splitting
+    local apart, together = s.apartTicks or 0, s.togetherTicks or 0
+    local noSplitYet = not (C.FarmSync.Totals(s.sync) or {}).noSplit
+    if not s.apartAsked and noSplitYet and apart > together and apart >= 6 and StaticPopupDialogs and StaticPopup_Show then
+      StaticPopupDialogs["KINA_APART"] = StaticPopupDialogs["KINA_APART"] or {
+        text = "You and your group were in different zones for most of this farm.\n\nSplit the loot anyway?",
+        button1 = "Split it", button2 = "Don't split", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
+        OnAccept = function() local x = C.session; if x then x.apartAsked = true; C.StopSession() end end,
+        OnCancel = function(_, _, why)
+          local x = C.session
+          if not x or why == "override" then return end
+          x.apartAsked = true
+          if C.FarmSync then C.FarmSync.Observe("N", "1") end
+          C.StopSession()
+        end }
+      StaticPopup_Show("KINA_APART")
+      return
+    end
     if C.FlushUse then pcall(C.FlushUse, true) end
     C.FarmSync.Observe("S")
     C.Print("stopping the group farm: filing the last loot (about 8 seconds)...")
@@ -889,6 +907,16 @@ function C.TrackLevels(s)
     end
   end
   s.groupN = math.max(s.groupN or 1, (IsInGroup and IsInGroup()) and math.max(1, n) or 1)
+  -- 1.1.1: were you in the same zone as your group? (asked about at Stop when mostly apart)
+  if IsInGroup and IsInGroup() and GetRaidRosterInfo and not s.paused then
+    local mine = GetRealZoneText and GetRealZoneText() or (GetZoneText and GetZoneText())
+    local apart = false
+    for i = 1, n do
+      local ok, name, _, _, _, _, _, zone, online = pcall(GetRaidRosterInfo, i)
+      if ok and name and zone and online ~= false and mine and zone ~= "" and zone ~= mine then apart = true end
+    end
+    if apart then s.apartTicks = (s.apartTicks or 0) + 1 else s.togetherTicks = (s.togetherTicks or 0) + 1 end
+  end
   if s.minLvl and s.minLvl < C.PROG_MIN_LEVEL and not s.lowNoted then
     s.lowNoted = true
     local key = (UnitName and UnitName("player") or "?")
