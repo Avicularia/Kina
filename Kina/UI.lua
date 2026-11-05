@@ -1074,6 +1074,30 @@ if C.PUBLIC then
         else row("", d.who .. " pays you " .. C.Money(math.floor(left)), "", GREEN .. "+" .. C.Rep.RECV_XP .. "|r") end
       end
     end
+    -- 1.2.5: what was looted (everyone's, at the prices the split used) + the full log
+    local agg, list = {}, {}
+    for _, e in ipairs(s.sync and s.sync.chain or {}) do
+      if e.kind == "L" and type(e.data) == "string" then
+        local id, q, v = e.data:match("^(%d+):(%d+):[^:]*:?(%-?%d*)")
+        id = tonumber(id)
+        if id then
+          local k = (e.origin or "?") .. "|" .. id
+          local a = agg[k]
+          if not a then a = { who = e.origin or "?", id = id, n = 0, val = 0 }; agg[k] = a; list[#list + 1] = a end
+          a.n = a.n + (tonumber(q) or 1); a.val = a.val + (tonumber(q) or 1) * (tonumber(v) or 0)
+        end
+      end
+    end
+    table.sort(list, function(x, y) return x.val > y.val end)
+    if #list > 0 then
+      row(GOLDC .. "Loot|r", string.format("%d different drops, best first", #list), "", "")
+      for i, a in ipairs(list) do
+        local it = C.Item and C.Item(a.id)
+        local name = (it and it.name) or ("item " .. a.id)
+        row(i <= 5 and (GOLDC .. "#" .. i .. "|r") or "", string.format("%s x%d  %s(%s)|r", name, a.n, GREY, C.Books.Name and C.Books.Name(a.who) or a.who), money(a.val), "")
+      end
+    end
+    out[#out + 1] = { slog = s, toSession = true, cols = { "", "|cff7CFC00open the full farm log (every kill, loot and coin)|r", "", "" }, sort = { #out, 0, 0, 0 } }
     return string.format("%sFarm details: %s|r   %s(click here to go back)|r", GOLDC, r.label, GREY),
       { "", "What", "Amount", "Status / XP" }, { 0, 110, 430, 610 }, out, { headClick = back }
   end
@@ -3064,6 +3088,7 @@ local function build()
         end
         showMenu(list)
       elseif d.slog then
+        if d.toSession then ui.tab = "Session" end
         ui.logOf = d.slog; ui.offset = 0; ui.sort.Session = nil; C.Refresh()
       elseif d.debtAct then
         local kind, od = d.debtAct[1], d.debtAct[2]

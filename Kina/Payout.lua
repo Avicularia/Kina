@@ -31,9 +31,21 @@ function C.SplitValue(id, suffix)
   local v, route = C.FarmValue(id, suffix)
   v = v or 0
   if route == "BOUND" then return 0, route end -- Bind on Pickup: nobody can sell it to you
+  -- 1.2.5 (Taylor): enchanting material prices are crashing faster than scans keep up,
+  -- so a looted green priced at its disenchant value charged the looter for dust worth
+  -- half that by the time it sold. Until the "actual outcome" rule ships, the split never
+  -- counts a disenchant guess: gear counts at its vendor or AH value, and what the
+  -- enchanter does with it is theirs.
+  if route == "DISENCHANT" then
+    local _, _, det = C.BestRoute(id, 1)
+    local vend = C.VendorPrice(id) or 0
+    local ah = det and det.ah or 0
+    if ah > vend then return math.floor(ah), "AH" end
+    return math.floor(vend), "VENDOR"
+  end
   if C.IsThinCheap(id) then
     local _, _, det = C.BestRoute(id, 1)
-    local floor = math.max(C.VendorPrice(id) or 0, det and det.de and det.de.ev or 0)
+    local floor = C.VendorPrice(id) or 0
     v = (v > 0) and math.min(v, floor) or floor
     return math.floor(v), "floor"
   end
