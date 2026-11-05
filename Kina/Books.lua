@@ -136,11 +136,14 @@ function B.Waiting()
   if not R then return out end
   local sharing = not C.ShareData or C.ShareData()
   for _, d in ipairs(C.Debts and C.Debts() or {}) do
+    -- 1.2.3: XP follows the whole debt; what's left earns its share of it
+    local total = math.max((d.tr and tonumber(d.tr.amt)) or d.amt, d.amt)
+    local part = total >= 1 and d.amt / total or 1
     if d.dir == "owe" then
-      out[#out + 1] = { xp = R.PayXP(d.amt), what = string.format("Pay %s %s", B.Name(d.who), C.Money(math.floor(d.amt))),
+      out[#out + 1] = { xp = math.floor(R.PayXP(total) * part), what = string.format("Pay %s %s", B.Name(d.who), C.Money(math.floor(d.amt))),
         why = d.topup and "AH sale top-up" or (d.farm or "farm"), kind = "pay", who = d.who, amt = d.amt }
     else
-      out[#out + 1] = { xp = R.RECV_XP, what = string.format("%s pays you %s", B.Name(d.who), C.Money(math.floor(d.amt))),
+      out[#out + 1] = { xp = math.floor(R.RECV_XP * part), what = string.format("%s pays you %s", B.Name(d.who), C.Money(math.floor(d.amt))),
         why = d.farm or "farm", kind = "receipt", who = d.who, amt = d.amt }
     end
   end

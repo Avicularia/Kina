@@ -174,6 +174,13 @@ end
 
 ------------------------------------------------------------------ Debts: people on the left, one card on the right
 builders.debts = function(p)
+  -- 1.2.3: keep the page live (due dates, payments and answers arriving while it's open)
+  local tick = 0
+  p:SetScript("OnUpdate", function(_, el)
+    tick = tick + el; if tick < 2 then return end; tick = 0
+    if InCombatLockdown and InCombatLockdown() then return end
+    if p.refresh then pcall(p.refresh) end
+  end)
   local left = box(p); left:SetPoint("TOPLEFT", 0, 0); left:SetPoint("BOTTOMLEFT", 0, 0); left:SetWidth(250)
   local lh = heading(left, "People"); lh:SetPoint("TOPLEFT", 16, -14)
   local people = {}

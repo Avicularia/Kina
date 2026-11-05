@@ -175,7 +175,12 @@ C.On("TRADE_SHOW", function()
   local function put()
     if pendingPay ~= p then return end
     tries = tries + 1
-    if MoneyInputFrame_SetCopper and TradePlayerInputMoneyFrame then pcall(MoneyInputFrame_SetCopper, TradePlayerInputMoneyFrame, amt) end
+    local mf = TradePlayerInputMoneyFrame
+    if MoneyInputFrame_SetCopper and mf then pcall(MoneyInputFrame_SetCopper, mf, amt) end
+    -- 1.2.3: filling the boxes alone doesn't commit the money on Forever (the game only
+    -- sends it when the box reports a change), so tell the trade window it changed
+    if mf and mf.onValueChangedFunc then pcall(mf.onValueChangedFunc, mf) end
+    if C_TradeInfo and C_TradeInfo.SetTradeMoney then pcall(C_TradeInfo.SetTradeMoney, amt) end
     if SetTradeMoney then pcall(SetTradeMoney, amt) end
     local now = GetPlayerTradeMoney and GetPlayerTradeMoney() or nil
     if now == amt then
@@ -510,7 +515,8 @@ function C.SettleMoved(who, gave, got, via)
       elseif d.dir == "owed" and got - usedGot >= 1 then
         k = math.min(d.amt, got - usedGot); markPaid(d, k); usedGot = usedGot + k
       end
-      if k > 0 then covers[#covers + 1] = { start = d.s and d.s.start, label = d.farm, amt = math.floor(k), dir = d.dir, topup = d.topup or nil } end
+      if k > 0 then covers[#covers + 1] = { start = d.s and d.s.start, label = d.farm, amt = math.floor(k), dir = d.dir, topup = d.topup or nil,
+        total = math.floor((d.tr and tonumber(d.tr.amt)) or (d.amt + 0)) } end
     end
   end
   C.db.settles = C.db.settles or {}
@@ -551,7 +557,18 @@ function C._matchConf(r, theirGave, label)
       for _, s in ipairs(C.db.sessions or {}) do if cv.start and s.start == cv.start then farm = s; break end end
       if not (farm and farm.minLvl and farm.minLvl > 0 and farm.minLvl < (C.PROG_MIN_LEVEL or 10)) then nx = false end
     end
-    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "") end
+    -- 1.2.3: XP is set by the whole debt's size; a part payment earns its share of
+    -- that, rounded down (paying 1c of a 23s debt earns 0)
+    local payXP, recvXP = 0, 0
+    for _, cv in ipairs(r.covers or {}) do
+      local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
+      if total >= 1 then
+        local part = (cv.amt or 0) / total
+        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part
+        else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part end
+      end
+    end
+    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "", math.floor(payXP), math.floor(recvXP)) end
     return true
   end
 end

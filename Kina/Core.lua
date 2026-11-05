@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.2.2" -- Public Kina
+C.version = "1.2.3" -- Public Kina
 C.PUBLIC = true
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).
@@ -221,12 +221,17 @@ local function blocked(event, addon, func)
   -- 1.2.2: what Kina was doing, to find the cause of an UNKNOWN() block
   if InCombatLockdown then rec.combat = InCombatLockdown() and true or false end
   if C.lastSend then rec.lastSend = C.lastSend.k; rec.sendAgo = (GetTime and GetTime() or 0) - C.lastSend.t end
+  if C.lastEvent then rec.lastEvent = C.lastEvent end
   if C.lastAction then rec.lastAction = C.lastAction.what; rec.actAgo = (GetTime and GetTime() or 0) - C.lastAction.t end
   if not C.db then table.insert(early, rec); return end
   C.db.blocked = C.db.blocked or {}
   table.insert(C.db.blocked, 1, rec)
   while #C.db.blocked > 20 do table.remove(C.db.blocked) end
-  C.Print("blocked call recorded: " .. rec.func .. " at " .. rec.stage .. " (please tell Claude)")
+  -- 1.2.3: once per session in chat; every block is still saved for Claude
+  if not C.blockSaid then
+    C.blockSaid = true
+    C.Print("the game blocked one of Kina's actions (saved for Claude; you won't see this again until /reload)")
+  end
 end
 C.FlushBlocked = function() for _, r in ipairs(early) do C.db.blocked = C.db.blocked or {}; table.insert(C.db.blocked, 1, r) end; early = {} end
 frame:RegisterEvent("ADDON_ACTION_BLOCKED")
@@ -277,6 +282,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
   if not C.ready then return end
   local list = handlers[event]
   if not list then return end
+  C.lastEvent = event
   for _, fn in ipairs(list) do
     local ok, err = pcall(fn, event, ...)
     if not ok then C.LogError(event, err) end

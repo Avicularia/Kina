@@ -3351,7 +3351,15 @@ C.OnMarket(function() C.Refresh() end)
 function C.OnTextScale()
   if ui.frame and ui.frame:IsShown() then C.Refresh() end
 end
-C.On("BAG_UPDATE_DELAYED", function() if ui.tab == "Bags" or ui.tab == nil then C.Refresh() end end)
+-- 1.2.3: only while the window is open, and never in combat (a hunter's arrows fire this
+-- every shot; rebuilding the hidden window in combat was the suspect for UNKNOWN() blocks)
+local bagDirty = false
+C.On("BAG_UPDATE_DELAYED", function()
+  if not (ui.frame and ui.frame:IsShown() and ui.tab == "Bags") then return end
+  if InCombatLockdown and InCombatLockdown() then bagDirty = true return end
+  C.Refresh()
+end)
+C.On("PLAYER_REGEN_ENABLED", function() if bagDirty then bagDirty = false; if ui.frame and ui.frame:IsShown() then C.Refresh() end end end)
 -- open beside the auction house (turn off with /kina auto)
 C.On("AUCTION_HOUSE_SHOW", function()
   if not C.PUBLIC and C.settings.autoOpen ~= false then

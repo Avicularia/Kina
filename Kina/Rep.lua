@@ -81,8 +81,13 @@ function R.Replay(lines, st, gains)
       -- t|confirmed|via|who|gave|got|paidOff|cameIn
       local who, paidOff, cameIn = f[4] or "?", tonumber(f[7]) or 0, tonumber(f[8]) or 0
       local want = 0
-      if paidOff >= 1 then want = math.min(PAY_MAX, PAY_BASE + math.floor(paidOff / 10000) * PAY_PER_GOLD) end
-      if cameIn >= 1 then want = want + RECV_XP end
+      if f[10] and f[10] ~= "" then
+        -- 1.2.3: the XP was worked out from the whole debt when it was confirmed
+        want = (tonumber(f[10]) or 0) + (tonumber(f[11]) or 0)
+      else
+        if paidOff >= 1 then want = math.min(PAY_MAX, PAY_BASE + math.floor(paidOff / 10000) * PAY_PER_GOLD) end
+        if cameIn >= 1 then want = want + RECV_XP end
+      end
       local got = 0
       if want > 0 and st.share then got = capped(who .. ":" .. day(t), PARTNER_DAY_CAP, want); st.xp = st.xp + got end
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who,

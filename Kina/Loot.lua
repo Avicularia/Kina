@@ -1048,6 +1048,10 @@ C.On("CHAT_MSG_LOOT", function(_, text, player)
     end
   end
   if s and s.sync and type(text) == "string" then
+    -- a disenchant result: the gear was already counted when it was looted, so the
+    -- materials must not be counted for the group a second time
+    local nowDE = GetTime and GetTime() or 0
+    if nowDE - (castAt.de or -99) < 5 then return end
     for _, p in ipairs(lootPatterns()) do
       if p[1] and p.self then
         local a, b = text:match(p[1])
