@@ -605,6 +605,7 @@ function C.StartSession(label, fromParty, campKey)
   seenLoot = {}
   C.PlayCue("start")
   C.SessionLog("start", lastMoney)
+  pcall(C.TrackLevels, C.session)
   C.session.g = { coin = 0, loot = {} }
   C.session.camp = campKey
   C.session.byParty = fromParty and true or nil
@@ -733,6 +734,14 @@ local function myUsedValue(s)
   end
   return v
 end
+-- 1.0.10: a running shared farm's kills live in the shared log (s.kills fills in at Stop)
+local function farmKills(s)
+  if s.sync and not s.stop and C.FarmSync then
+    local ok, t = pcall(C.FarmSync.Totals, s.sync)
+    if ok and t then return math.max(s.kills or 0, t.kills or 0) end
+  end
+  return s.kills
+end
 function C.SessionSummary(s)
   s = s or C.session
   if not s then return nil end
@@ -740,26 +749,26 @@ function C.SessionSummary(s)
   if s.income or not s.stop then
     if s.income and s.endWorth then
       return { secs = secs0, cash = s.endGold, items = s.endItems, used = s.endUsed or 0, total = s.endWorth, perHour = s.endWorth * 3600 / secs0,
-        coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = s.money.spent or 0, kills = s.kills, net = true, income = true }
+        coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = s.money.spent or 0, kills = farmKills(s), net = true, income = true }
     end
     local coin = (s.money.coin or 0) + (s.money.pickpocket or 0)
     local items = C.SessionItemValue(s)
     local used = myUsedValue(s)
     local total = coin + items - used
     return { secs = secs0, cash = coin, items = items, used = used, total = total, perHour = total * 3600 / secs0,
-      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = s.money.spent or 0, kills = s.kills, net = true, income = true }
+      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = s.money.spent or 0, kills = farmKills(s), net = true, income = true }
   end
   local secs = secs0
   local cash = (s.money.coin or 0) + (s.money.pickpocket or 0) + (s.money.vendor or 0) + (s.money.mail or 0) + (s.money.other or 0)
   local spent = s.money.spent or 0 -- negative
   if s.endGold then
     return { secs = secs, cash = s.endGold, items = s.endItems, total = s.endWorth, perHour = s.endWorth * 3600 / secs,
-      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = spent, kills = s.kills, net = true }
+      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = spent, kills = farmKills(s), net = true }
   elseif s.startCounts and s.startMoney and GetMoney then
     local gold = GetMoney() - s.startMoney - (s.excl and s.excl.coin or 0) - (s.money.mail or 0)
     local items = changeValue(s.startCounts, C.Holdings()) - C.ExcludedItemValue(s)
     return { secs = secs, cash = gold, items = items, total = gold + items, perHour = (gold + items) * 3600 / secs,
-      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = spent, kills = s.kills, net = true }
+      coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0, spent = spent, kills = farmKills(s), net = true }
   end
   local items = C.SessionItemValue(s)
   local total
@@ -769,7 +778,7 @@ function C.SessionSummary(s)
   else total = cash + spent + items end
   return { secs = secs, cash = cash + spent, items = total - (cash + spent), total = total, perHour = total * 3600 / secs,
     coin = s.money.coin or 0, pickpocket = s.money.pickpocket or 0, vendor = s.money.vendor or 0,
-    spent = spent, kills = s.kills, net = s.startBag ~= nil }
+    spent = spent, kills = farmKills(s), net = s.startBag ~= nil }
 end
 
 -- at: when it really ended (idle and timer stops end it in the past); why: shown in history
@@ -778,6 +787,7 @@ function C.StopSession(at, why, silent, fromParty)
   if not s then return end
   -- shared farm: ask the leader to close the log; everyone's farm ends when it does
   if s.sync and not s.sync.closed and not fromParty and C.FarmSync and C.FarmSync.Active() then
+    if C.FlushUse then pcall(C.FlushUse, true) end
     C.FarmSync.Observe("S")
     C.Print("stopping the group farm: filing the last loot (about 8 seconds)...")
     return
@@ -789,6 +799,7 @@ function C.StopSession(at, why, silent, fromParty)
     local by = {}
     for who, v in pairs(t.byLooter) do by[who] = math.floor(v + 0.5) end
     local total, each, transfers = C.FarmSync.Split(by)
+    if t.noSplit then transfers = {}; s.noSplit = true end
     s.split = { total = total, each = each, incomes = by, transfers = transfers, loot = true }
     s.settled, s.gsplitShown = true, true
     s.kills = math.max(s.kills or 0, t.kills)
@@ -857,9 +868,42 @@ function C.StopSession(at, why, silent, fromParty)
 end
 
 -- Timer and idle limits, checked every few seconds by the farm widget's clock.
+-- 1.0.10: the lowest and highest character level seen in the farm's group (you and
+-- everyone grouped with you, Kina or not). Anyone under 10 at any point: the farm gives
+-- no Kina progression (money still works). The highest level sets the gold a farm needs.
+C.PROG_MIN_LEVEL = 10
+function C.TrackLevels(s)
+  s = s or C.session
+  if not (s and UnitLevel) then return end
+  local units = { "player" }
+  local n = GetNumGroupMembers and GetNumGroupMembers() or 0
+  if IsInGroup and IsInGroup() then
+    local raid = IsInRaid and IsInRaid()
+    for i = 1, raid and n or (n - 1) do units[#units + 1] = raid and ("raid" .. i) or ("party" .. i) end
+  end
+  for _, u in ipairs(units) do
+    local ok, lv = pcall(UnitLevel, u)
+    if ok and type(lv) == "number" and lv > 0 then
+      if not s.minLvl or lv < s.minLvl then s.minLvl = lv end
+      if not s.maxLvl or lv > s.maxLvl then s.maxLvl = lv end
+    end
+  end
+  s.groupN = math.max(s.groupN or 1, (IsInGroup and IsInGroup()) and math.max(1, n) or 1)
+  if s.minLvl and s.minLvl < C.PROG_MIN_LEVEL and not s.lowNoted then
+    s.lowNoted = true
+    local key = (UnitName and UnitName("player") or "?")
+    C.settings.lowLevelSeen = C.settings.lowLevelSeen or {}
+    if not C.settings.lowLevelSeen[key] then
+      C.settings.lowLevelSeen[key] = true
+      C.Print("|cffffd100Note:|r someone in this farm is under level 10, so it won't give Kina XP or standing. The gold tracking and the split still work. (Shown once per character.)")
+    end
+  end
+end
 function C.SessionTick()
   local s = C.session
   if not s then return end
+  pcall(C.TrackLevels, s)
+  if s.sync and C.FlushUse then pcall(C.FlushUse) end
   local now = C.Now()
   if s.limit and C.SessionSecs(s) >= s.limit then
     C.StopSession(nil, "timer done"); return
@@ -1084,9 +1128,30 @@ local function consumables()
   return out
 end
 C.Consumables = consumables
+-- 1.0.10: uses in a shared farm are batched (a hunter's every arrow was one log entry
+-- and one addon message: 550 in an evening). Sent every 30 s out of combat, and
+-- straight away when the farm stops.
+function C.FlushUse(force)
+  local s = C.session
+  if not (s and s.sync and s.pendUse and next(s.pendUse)) then return end
+  if not force then
+    if InCombatLockdown and InCombatLockdown() then return end
+    if C.Now() - (s.useFlushAt or 0) < 30 then return end
+  end
+  s.useFlushAt = C.Now()
+  local list = s.pendUse
+  s.pendUse = {}
+  for id, n in pairs(list) do
+    if n > 0 and C.FarmSync then C.FarmSync.Observe("U", id .. ":" .. n) end
+  end
+end
 function C.RecordUse(s, who, id, n, fromParty)
   if s.sync then
-    if not fromParty and C.FarmSync then C.FarmSync.Observe("U", id .. ":" .. n) end
+    if not fromParty then
+      s.pendUse = s.pendUse or {}
+      s.pendUse[id] = (s.pendUse[id] or 0) + n
+      if not s.useFlushAt then s.useFlushAt = C.Now() end
+    end
     C.SessionLog("used", id, n, who)
     return
   end

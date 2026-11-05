@@ -42,12 +42,29 @@ local function presetText(sec) return (sec and sec > 0) and (floor(sec / 3600) .
 -- best single drop this session by value
 local function bestDrop(s)
   local bestID, bestV, bestN = nil, 0, 0
+  -- 1.0.10: a shared farm's best drop comes from the shared log (priced by the leader),
+  -- so every widget shows the same one
+  if s.sync and s.sync.chain then
+    local ex = C.FarmSync and C.FarmSync.Excluded and C.FarmSync.Excluded(s.sync) or {}
+    local cnt, val = {}, {}
+    for _, ev in ipairs(s.sync.chain) do
+      if ev.kind == "L" and not ex[ev.seq] then
+        local id, n, _, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+        id, n, v = tonumber(id), tonumber(n) or 1, tonumber(v) or 0
+        if id then cnt[id] = (cnt[id] or 0) + n; val[id] = (val[id] or 0) + n * v end
+      end
+    end
+    for id, v in pairs(val) do if v > bestV then bestID, bestV, bestN = id, v, cnt[id] end end
+    return bestID, bestV, bestN
+  end
   for id, n in pairs(s.items or {}) do
     local v = (C.FarmValue and C.FarmValue(id) or 0) * n
     if v > bestV then bestID, bestV, bestN = id, v, n end
   end
   return bestID, bestV, bestN
 end
+C.Widget = C.Widget or {}
+C.Widget.BestDrop = function(s) return (bestDrop(s)) end
 local function itemIcon(id)
   if not id then return nil end
   if C_Item and C_Item.GetItemIconByID then local ok, t = pcall(C_Item.GetItemIconByID, id); if ok and t then return t end end
@@ -126,12 +143,15 @@ function C.RefreshWidget()
         end
         w.clock:SetText((v.paused and "|cffffd100" or "|cffffffff") .. clock(secs) .. "|r")
         w.rate:SetText(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r")
-        w.rateSub:SetText("per hour, group  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 16)) .. "|r")
+        w.rateSub:SetText("per hour, group" .. (v.noSplit and " |cffffd100no split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
         setTile(w.tNet, signed(v.net), "same for all")
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
         setTile(w.tKills, tostring(v.kills or 0), secs >= 60 and string.format("%d / hour", (v.kills or 0) * 3600 / secs) or "")
-        w.status:SetText("|cff9d9d9dcounted by " .. tostring(leader) .. "|r")
+        if s.sync then w.status:SetText("|cff9d9d9dcounted by " .. tostring(leader) .. "|r")
+        -- 1.0.10: the farm started before Kina saw your partner's Kina: it isn't shared, and
+        -- their loot only counts when they loot near you
+        else w.status:SetText("|cffff8040not shared: Stop, then Start again to share|r") end
       else
         chip("WAITING", 0.45, 0.35, 0.05)
         w.clock:SetText("|cff9d9d9d" .. clock(C.SessionSecs(s)) .. "|r")

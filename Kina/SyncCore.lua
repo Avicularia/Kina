@@ -547,6 +547,7 @@ function Core.Totals(s)
     if k == "J" then out.members[ev.origin] = true; out.byLooter[ev.origin] = out.byLooter[ev.origin] or 0
     elseif k == "Q" then out.members[ev.origin] = nil
     elseif k == "P" then paused = ev.data == "1"
+    elseif k == "N" then out.noSplit = true -- 1.0.10: a "don't split" farm (set by whoever started it)
     elseif not paused and not excluded[ev.seq] then
       if k == "L" then
         local _, n, _, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
@@ -571,6 +572,7 @@ function Core.Totals(s)
   end
   out.net = out.coin + out.items - out.used
   out.paused, out.closed = paused, s.closed
+  out.noSplit = out.noSplit or nil
   return out
 end
 

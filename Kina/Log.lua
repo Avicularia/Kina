@@ -103,8 +103,11 @@ local function logEnd(s)
   if not s or s.logged then return end
   local sync = s.sync
   local r = s.result or {}
+  -- 1.0.10 adds: lowest level, highest level, the group's NET, players in the group
+  local net = (s.gview and s.gview.net) or r.total or 0
   C.Log("farmend", s.label, sync and sync.sid or "", sync and sync.head or 0, sync and sync.hash or "",
-    s.stop and s.start and (s.stop - s.start - (s.pausedSecs or 0)) or 0, r.total or 0, r.kills or s.kills or 0, #(s.party or {}))
+    s.stop and s.start and (s.stop - s.start - (s.pausedSecs or 0)) or 0, r.total or 0, r.kills or s.kills or 0, #(s.party or {}),
+    s.minLvl or 0, s.maxLvl or 0, math.floor(net), math.max(s.groupN or 1, #(s.party or {}) + 1))
   s.logged = true
 end
 local function logSplit(s)

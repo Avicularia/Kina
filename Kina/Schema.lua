@@ -14,15 +14,19 @@ local function ok(v, spec)
 end
 
 local clean
-local function cleanTable(t, spec)
+-- 1.0.10: what was dropped, by path ("sessions.3.sync.chain.12.data"), so the
+-- "saved data was cleaned up" note can be traced to its cause
+local dropped
+local function note(path, k) if dropped and #dropped < 20 then dropped[#dropped + 1] = (path or "") .. "." .. tostring(k) end end
+local function cleanTable(t, spec, path)
   if spec.f then
     for k, sub in pairs(spec.f) do
       local v = t[k]
       if v ~= nil then
-        if not ok(v, sub) then t[k] = nil
+        if not ok(v, sub) then note(path, k .. "(" .. type(v) .. ")"); t[k] = nil
         elseif type(sub) == "table" and sub.t == T then
-          clean(v, sub)
-          for _, r in ipairs(sub.req or {}) do if v[r] == nil then t[k] = nil; break end end
+          clean(v, sub, (path or "") .. "." .. tostring(k))
+          for _, r in ipairs(sub.req or {}) do if v[r] == nil then note(path, k .. " missing " .. r); t[k] = nil; break end end
         end
       end
     end
@@ -34,12 +38,12 @@ local function cleanTable(t, spec)
       if spec.f and spec.f[k] then -- a named field, already checked
       elseif ok(v, spec.each) and (function()
           -- clean the entry first: a required field of the wrong type is removed there
-          if type(spec.each) == "table" and spec.each.t == T then clean(v, spec.each) end
-          for _, r in ipairs(type(spec.each) == "table" and spec.each.req or {}) do if v[r] == nil then return false end end
+          if type(spec.each) == "table" and spec.each.t == T then clean(v, spec.each, (path or "") .. "." .. tostring(k)) end
+          for _, r in ipairs(type(spec.each) == "table" and spec.each.req or {}) do if v[r] == nil then note(path, tostring(k) .. " missing " .. r); return false end end
           return true end)() then
         if list and type(k) == "number" then keep[#keep + 1] = { k, v } end
-      elseif list and type(k) == "number" then -- dropped from the list
-      else t[k] = nil end
+      elseif list and type(k) == "number" then note(path, tostring(k) .. "(" .. type(v) .. ")") -- dropped from the list
+      else note(path, tostring(k) .. "(" .. type(v) .. ")"); t[k] = nil end
     end
     if list then
       -- lists are rebuilt in order without the bad entries
@@ -49,7 +53,7 @@ local function cleanTable(t, spec)
     end
   end
 end
-clean = function(t, spec) if type(t) == T and type(spec) == T and spec.t == T then cleanTable(t, spec) end end
+clean = function(t, spec, path) if type(t) == T and type(spec) == T and spec.t == T then cleanTable(t, spec, path) end end
 
 local NUMS = { N = true }
 local function map(each) return { t = T, each = each } end
@@ -58,7 +62,7 @@ local NUMMAP = map(N)
 
 local transfer = { t = T, f = { from = S, to = S, amt = N }, req = { "from", "to", "amt" } }
 local split = { t = T, f = { total = N, each = N, transfers = list(transfer), paid = map({ number = true, boolean = true }),
-  received = map({ number = true, boolean = true }), incomes = NUMMAP } }
+  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP } }
 local chainEv = { t = T, f = { seq = N, origin = S, oseq = N, kind = S, t = N, hash = S, data = S }, req = { "seq", "origin", "kind", "hash" } }
 local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, closed = B, chain = map(chainEv),
   outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }) },
@@ -69,7 +73,8 @@ local session = { t = T, f = { start = N, stop = N, last = N, label = S, kills =
   result = { t = T, f = { secs = N, cash = N, items = N, used = N, total = N, perHour = N, coin = N, pickpocket = N, vendor = N,
     spent = N, kills = N, net = B, income = B } },
   gview = { t = T, f = { secs = N, net = N, coin = N, items = N, used = N, kills = N, paused = B } }, why = S, zone = S, skins = N, nodes = N,
-  skinItems = NUMMAP, gather = NUMMAP, excl = { t = T, f = { coin = N, items = NUMMAP } }, sx = map(NUMMAP), byParty = B, camp = S, startBag = N },
+  skinItems = NUMMAP, gather = NUMMAP, excl = { t = T, f = { coin = N, items = NUMMAP } }, sx = map(NUMMAP), byParty = B, camp = S, startBag = N,
+  minLvl = N, maxLvl = N, groupN = N, noSplit = B },
   req = { "start" } }
 local SETTINGS = {}
 for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "launchTime", "minDealProfit", "farmPreset", "widgetAlpha",
@@ -77,8 +82,8 @@ for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "l
   "minConfidence", "minProfit", "minimapAngle", "partnerLevel", "postDuration", "priorKills", "rareRate", "tripMinutes", "widgetScale",
   "kinaScale", "dataNoticeSeen", "welcomed" }) do SETTINGS[k] = N end
 for _, k in ipairs({ "hudShown", "autoScan", "farmSound", "tooltip", "worthOnly", "assumeSkinning", "autoOpen", "deMine", "hotAlerts",
-  "matLowest", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
-for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots" }) do SETTINGS[k] = T end
+  "matLowest", "farmNoSplit", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
+for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots", "lowLevelSeen", "forgiven" }) do SETTINGS[k] = T end
 SETTINGS.partnerClass = S
 
 local DB = { t = T, f = {
@@ -102,7 +107,7 @@ local DB = { t = T, f = {
   ledger = { t = T, f = { seen = T, seenN = NUMMAP, entries = list(T), transfers = T } },
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N,
-  selftest = T,
+  selftest = T, repairs = list(T), forgive = { t = T, f = { pending = list({ t = T, f = { who = S, amt = N, ref = S, t = N }, req = { "who", "ref" } }) } },
   tradeStats = { t = T, f = { complete = N, missed = N, cancelled = N, lastMissed = N, msgs = list(S) } },
 } }
 
@@ -117,7 +122,10 @@ function C.Sanitize(db)
     for _, v in pairs(t) do before = before + 1; if type(v) == T then count(v, seen) end end
   end
   count(db)
-  local ok2, err = pcall(clean, db, DB)
+  dropped = {}
+  local ok2, err = pcall(clean, db, DB, "")
+  C.repairPaths = dropped
+  dropped = nil
   local after = 0
   before, after = before, (function() local n = 0; local seen = {}
     local function c(t) if seen[t] then return end; seen[t] = true; for _, v in pairs(t) do n = n + 1; if type(v) == T then c(v) end end end

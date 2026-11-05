@@ -66,6 +66,7 @@ local help = {
   "/kina roi [percent] - hide rows under this ROI on every tab (same as the Min ROI box)",
   "/kina share [on | off | guild | now | verbose | forget] - pool AH, loot and vendor data with other Kina users in your group",
   "/kina reset - put every Kina window back in its default place",
+  "/kina forgive [name] - forgive what someone owes you (the oldest debt first)",
   "/kina pp - pickpocketing (badges, pocket data, sharing): /kina pp help for more",
   "/kina pph [number] - picks per hour used for pick-only estimates",
 }
@@ -89,6 +90,13 @@ SlashCmdList.KINA = function(msg)
     C.Print("open with the auction house: " .. (C.settings.autoOpen and "on" or "off"))
   elseif cmd == "scan" then C.StartScanLoop()
   elseif cmd == "selftest" or cmd == "test" then if C.SelfTest then C.SelfTest.Run() end
+  elseif cmd == "forgive" then
+    local want = rest ~= "" and rest:lower() or nil
+    local hit
+    for _, d in ipairs(C.Debts()) do
+      if d.dir == "owed" and not d.topup and (not want or tostring(d.who):lower():find(want, 1, true) == 1) then hit = d; break end
+    end
+    if hit then C.Forgive(hit) else C.Print(want and ("nobody called " .. rest .. " owes you anything.") or "nobody owes you anything.") end
   elseif cmd == "start" then C.StartSession(rest ~= "" and rest or nil)
   elseif cmd == "stop" then C.StopSession()
   elseif cmd == "kph" then

@@ -137,6 +137,7 @@ sender:SetScript("OnUpdate", function(self, dt)
   if k == "E" and what then S.dumping[what] = nil end
   S.sent = (S.sent or 0) + 1
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+  C.lastSend = { k = it.msg:sub(1, 1) .. (it.msg:match("^S|[^|]*|[^|]*|(%u)") or ""), t = GetTime and GetTime() or 0 }
   local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, it.msg, it.channel, it.target)
   if ok and THROTTLED and result == THROTTLED then table.insert(queue, 1, it); tokens = 0 end
 end)
@@ -738,6 +739,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnSettleRequest(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "cnf" and C.FirstName and C.FirstName(to) == mine and C.OnSettleConfirm then
           C.OnSettleConfirm(from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "fgv" and C.FirstName and C.FirstName(to) == mine and C.OnForgiven then
+          C.OnForgiven(from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "fga" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
+          C.OnForgiveAck(from, label)
         end
       elseif kind == "S" then
         local uid, payload_to, payload = rest:match("^(%x+)|([^|]*)|(.*)$")
@@ -933,6 +938,19 @@ function S.SendSettle(action, to, amt, label)
   local ch = groupChannel()
   if not ch or not db().opts.enabled then return end
   enqueue(table.concat({ "T", db().uid, to or "", action, tostring(math.floor(amt or 0)), ((tostring(label or "")):gsub("|", "")) }, "|"), ch, nil, true)
+end
+-- 1.0.10 forgive: "T|uid|to|fgv|amount|farmref" and its answer "fga" (group channel)
+function S.SendForgive(to, amt, ref)
+  if not db().opts.enabled then return end
+  local ch = groupChannel()
+  local msg = table.concat({ "T", db().uid, to or "", "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
+  if ch then enqueue(msg, ch, nil, true) end -- not grouped: re-sent when you group up again
+end
+function S.SendForgiveAck(to, ref)
+  if not db().opts.enabled then return end
+  local ch = groupChannel()
+  local msg = table.concat({ "T", db().uid, to or "", "fga", "0", ((tostring(ref or "")):gsub("|", "")) }, "|")
+  if ch then enqueue(msg, ch, nil, true) end
 end
 -- a consumable you used during the group farm
 function S.SendUse(id, n)

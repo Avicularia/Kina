@@ -367,6 +367,63 @@ local function markPaid(d, amt)
     map[d.key] = (full and done >= full - 0.5) and true or done
   end
 end
+------------------------------------------------------------------ forgive (1.0.10)
+-- The person owed can forgive what's left of a debt at any time. Their Kina tells the
+-- debtor's Kina (re-sent until it answers), and the debt closes on both sides.
+local function farmRef(s) return (s and s.sync and s.sync.sid) or ("t" .. tostring(s and s.start or 0)) end
+local function fdb() C.db.forgive = C.db.forgive or { pending = {} }; C.db.forgive.pending = C.db.forgive.pending or {}; return C.db.forgive end
+local function sendForgive(p)
+  if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, p.who, p.amt, p.ref) end
+end
+function C.Forgive(d)
+  if not (d and d.dir == "owed" and d.s and d.s.split) then return false end
+  local sp = d.s.split
+  sp.received = sp.received or {}
+  sp.received[d.key] = true
+  sp.forgiven = sp.forgiven or {}; sp.forgiven[d.key] = math.floor(d.amt)
+  if C.Log then C.Log("forgive", "gave", d.who, math.floor(d.amt), farmRef(d.s)) end
+  local p = { who = first(d.who), amt = math.floor(d.amt), ref = farmRef(d.s), t = C.Now() }
+  table.insert(fdb().pending, p)
+  sendForgive(p)
+  C.Print(string.format("|cff7CFC00You forgave %s %s|r (%s). Their Kina closes it too.", C.Books and C.Books.Name(d.who) or d.who, C.Money(math.floor(d.amt)), d.farm or "farm"))
+  if C.RefreshWidget then C.RefreshWidget() end
+  if C.Refresh then C.Refresh() end
+  return true
+end
+-- the debtor's side: someone forgave what we owed them on one farm
+function C.OnForgiven(from, amt, ref)
+  from = first(from)
+  local hit = false
+  for _, d in ipairs(C.Debts()) do
+    if d.dir == "owe" and not d.topup and first(d.who) == from and d.s and (farmRef(d.s) == ref or (not hit and ref:sub(1, 1) == "t" and math.abs(d.amt - (amt or 0)) < 1)) then
+      local sp = d.s.split
+      sp.paid = sp.paid or {}; sp.paid[d.key] = true
+      sp.forgiven = sp.forgiven or {}; sp.forgiven[d.key] = math.floor(d.amt)
+      if C.Log then C.Log("forgive", "got", from, math.floor(d.amt), ref) end
+      C.Print(string.format("|cff7CFC00%s forgave the %s you owed them|r (%s). Nothing to pay.", C.Books and C.Books.Name(from) or from, C.Money(math.floor(d.amt)), d.farm or "farm"))
+      hit = true
+    end
+  end
+  if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, ref) end
+  if C.RefreshWidget then C.RefreshWidget() end
+  return hit
+end
+function C.OnForgiveAck(from, ref)
+  local keep = {}
+  for _, p in ipairs(fdb().pending) do if not (p.who == first(from) and p.ref == ref) then keep[#keep + 1] = p end end
+  fdb().pending = keep
+end
+-- re-send what hasn't been answered (they were offline or out of the group)
+function C.ResendForgive()
+  local keep = {}
+  for _, p in ipairs(fdb().pending) do
+    if C.Now() - (p.t or 0) < 30 * 86400 then keep[#keep + 1] = p; sendForgive(p) end
+  end
+  fdb().pending = keep
+end
+C.On("GROUP_ROSTER_UPDATE", function() if C.db and C.db.forgive and #C.db.forgive.pending > 0 then C.After(5, C.ResendForgive) end end)
+C.On("INIT", function() C.After(20, function() if C.db.forgive and #C.db.forgive.pending > 0 then C.ResendForgive() end end) end)
+
 -- money really moved between you and who (trade or mail): pay down what you owe them
 -- with what you gave, and what they owe you with what you got. Logged, and confirmed
 -- with their Kina.
@@ -417,7 +474,14 @@ function C._matchConf(r, theirGave, label)
   theirGot = tonumber(theirGot) or 0
   if r.via == via and r.got == theirGave and r.gave == theirGot then
     r.conf = C.Now()
-    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn) end
+    -- 1.0.10: a payment that only covered farms with someone under level 10 gives no XP
+    local nx = (#(r.covers or {}) > 0)
+    for _, cv in ipairs(r.covers or {}) do
+      local farm
+      for _, s in ipairs(C.db.sessions or {}) do if cv.start and s.start == cv.start then farm = s; break end end
+      if not (farm and farm.minLvl and farm.minLvl > 0 and farm.minLvl < (C.PROG_MIN_LEVEL or 10)) then nx = false end
+    end
+    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "") end
     return true
   end
 end

@@ -131,7 +131,9 @@ function F.Begin(s, label, camp)
   n:Start(label or s.label, camp)
   s.sync = n.s
   s.g = nil -- the shared log replaces the old group numbers
-  C.Print("group farm started: Kina users in your group get an invite to join.")
+  -- 1.0.10: "don't split" goes into the log, so every widget and every split agrees
+  if C.settings.farmNoSplit then n:Observe("N", "1") end
+  C.Print("group farm started: Kina users in your group get an invite to join." .. (C.settings.farmNoSplit and " |cffffd100No split:|r numbers are shared, nobody owes anything." or ""))
   return true
 end
 
@@ -173,6 +175,8 @@ end
 function F.Active() local s = C.session; return s and s.sync and node and node.s == s.sync and true or false end
 
 function F.Receive(from, payload)
+  -- the leader is stopping: our batched uses go out first
+  if type(payload) == "string" and payload:sub(1, 2) == "T|" and C.FlushUse then pcall(C.FlushUse, true) end
   F.Node():Receive(first(from) or from, payload)
 end
 
@@ -206,7 +210,7 @@ function F.View()
   if not (s and node and node.s == s) then return nil end
   local t = Core.Totals(s)
   return { secs = node:Elapsed(), net = t.net, coin = t.coin, items = t.items, used = t.used, kills = t.kills,
-    paused = t.paused, byLooter = t.byLooter, members = t.members,
+    paused = t.paused, byLooter = t.byLooter, members = t.members, noSplit = t.noSplit,
     behind = (s.leaderHead or 0) > s.head or next(s.outbox) ~= nil }, s.leader
 end
 function F.Totals(s) return Core.Totals(s) end

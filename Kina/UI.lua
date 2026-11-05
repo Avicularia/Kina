@@ -850,7 +850,9 @@ local function farmLog(s, live)
     -- the leader's numbers when we have them (final at Stop, running while farming)
     local live = not gf.synced and not s.gsplit and not s.stop and C.groupLive and C.Now and (GetTime and GetTime() or 0) - C.groupLive.t < 60 and C.groupLive
     local by = s.gsplit and s.gsplit.by or (live and live.by) or gf.byLooter
-    if C.Settle and next(by) then
+    if gf.synced and s.sync and C.FarmSync and C.FarmSync.Totals(s.sync).noSplit then
+      row("", "|cffffd100Split|r", "no split: this farm only shares its numbers (chosen at Start)", "", "")
+    elseif C.Settle and next(by) then
       local total, each, transfers = C.Settle(by)
       local lead = C.FarmLeader and select(1, C.FarmLeader()) or "the leader"
       row("", "|cffffd100Split|r", s.gsplit and ("what each looted, " .. tostring(s.gsplit.from) .. "'s prices (coin is already split by the game)")
@@ -1007,7 +1009,9 @@ if C.PUBLIC then
     row("", "items you looted (at the farm's prices)", money(res.items))
     if (res.used or 0) > 0 then row("", "consumables used", money(-(res.used or 0))) end
     row("", "your farm total", money(res.total))
-    if s.split and s.split.transfers then
+    if r.unshared then
+      row(GOLDC .. "Split|r", "not a shared farm: your partner's loot wasn't counted, so there was no split", "", GREY .. "nothing owed|r")
+    elseif s.split and s.split.transfers then
       row(GOLDC .. "Split|r", "the group farmed (net: coin + loot - consumables)", money(r.farmed))
       if r.groupCoin then
         row("", "coin, split evenly by the game", money(r.groupCoin))
@@ -1019,13 +1023,24 @@ if C.PUBLIC then
       for _, who in ipairs(names) do row("", who .. " looted", money(s.split.incomes[who])) end
       if r.coinShare then row("", "your share: coin from the game + loot share", money(r.coinShare) .. " + " .. money(r.lootShare) .. " = " .. money(r.share))
       else row("", "fair share each", money(r.share)) end
-      if #s.split.transfers == 0 then row("", "everyone was even", "", GREEN .. "nothing owed|r") end
+      if s.noSplit then row("", "no split (chosen at Start)", "", GREEN .. "nothing owed|r")
+      elseif #s.split.transfers == 0 then row("", "everyone was even", "", GREEN .. "nothing owed|r") end
       for _, t in ipairs(s.split.transfers) do row("", t.from .. " pays " .. t.to, money(t.amt)) end
       row(GOLDC .. "Debts|r", "", "", "")
       for _, d in ipairs(r.debts) do
         local left = d.amt - d.done
         local st = left < 1 and (GREEN .. "paid|r") or (d.done > 0 and (ORANGE .. money(left) .. " left|r") or (ORANGE .. "unpaid|r"))
+        local forgiven = s.split.forgiven and s.split.forgiven[d.who]
+        if forgiven then st = GREEN .. "forgiven|r" end
         row("", (d.dir == "owe" and "you owe " or "owes you: ") .. d.who, money(d.amt), st)
+        -- 1.0.10: whoever is owed can forgive the rest
+        if d.dir == "owed" and left >= 1 and not forgiven then
+          for _, od in ipairs(C.Debts()) do
+            if od.dir == "owed" and od.s == s and od.key == d.who then
+              out[#out + 1] = { cols = { "", "   |cff4fc3f7click here to forgive " .. C.Books.Name(d.who) .. " the " .. C.Money(math.floor(od.amt)) .. "|r", "", "" }, sort = { #out, 0, 0, 0 }, forgive = od }
+            end
+          end
+        end
       end
       if #r.debts == 0 then row("", "nothing between you and the group", "", "") end
     end
@@ -1041,6 +1056,8 @@ if C.PUBLIC then
     if r.farmGain then
       local g = r.farmGain
       row("", string.format("shared farm, %d min", math.floor((g.secs or 0) / 60)), "", g.paused and (ORANGE .. "0 (sharing was off)|r") or ("+" .. g.xp .. (g.xp < g.want and (GREY .. " (daily cap)|r") or "")))
+    elseif s.minLvl and s.minLvl > 0 and s.minLvl < (C.PROG_MIN_LEVEL or 10) then row("", "someone in the farm was under level 10", "", GREY .. "no Kina XP or standing|r")
+    elseif s.sync and r.shortWhy == "gold" then row("", "the farm made less than its gold target (" .. C.Money(C.Rep.FarmNeeds(s.maxLvl, s.groupN)) .. ")", "", GREY .. "no farm XP|r")
     elseif s.sync then row("", "shared farm under 15 minutes", "", GREY .. "no farm XP|r")
     else row("", "solo farm", "", GREY .. "no XP (farm with Kina users)|r") end
     for _, p in ipairs(r.payments) do
@@ -1095,7 +1112,9 @@ if C.PUBLIC then
         if not ui.ledgerDays or C.Now() - g.t <= ui.ledgerDays * 86400 then
           local what
           if g.kind == "farm" then what = string.format("shared farm %s, %d min", g.label or "", math.floor((g.secs or 0) / 60))
-          elseif g.kind == "short" then what = string.format("shared farm %s, %d min (needs 15)", g.label or "", math.floor((g.secs or 0) / 60))
+          elseif g.kind == "short" then
+            local why = g.why == "under10" and "someone under level 10" or (g.why == "gold" and "made less than its gold target" or "needs 15")
+            what = string.format("shared farm %s, %d min (%s)", g.label or "", math.floor((g.secs or 0) / 60), why)
           elseif g.kind == "pay" then what = string.format("paid %s %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.paidOff), g.via)
           else what = string.format("%s paid you %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.cameIn), g.via) end
           local note = g.paused and (ORANGE .. "sharing off|r") or (g.xp < g.want and (GREY .. "daily cap|r") or "")
@@ -2449,6 +2468,8 @@ local function buildSettings(f)
   end
   toggle("Count kills from nameplates", function() return st.plateKills ~= false end, function(v) st.plateKills = v end,
     "Counts mobs that died near you without being your target (AoE, pets) so drop rates are not too good. In a group they count for the farm only. Needs the dead mob's nameplate to be visible.")
+  toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
+    "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
   toggle("Start/stop fanfares", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end end)
   box("Farm timer (hours, 0 = none)", function() return tostring((st.farmPreset or 0) / 3600) end,
     function(t) local h = num(t, 0, 24); if h then st.farmPreset = math.floor(h * 3600) end; if C.RefreshWidget then C.RefreshWidget() end end, 50)
@@ -2991,6 +3012,13 @@ local function build()
         showMenu(list)
       elseif d.slog then
         ui.logOf = d.slog; ui.offset = 0; ui.sort.Session = nil; C.Refresh()
+      elseif d.forgive then
+        local od = d.forgive
+        StaticPopupDialogs["KINA_FORGIVE"] = StaticPopupDialogs["KINA_FORGIVE"] or {
+          text = "Forgive %s?\n\nThe debt closes for both of you and can't be reopened.",
+          button1 = "Forgive", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+          OnAccept = function(_, x) if x and C.Forgive then C.Forgive(x) end end }
+        StaticPopup_Show("KINA_FORGIVE", C.Books.Name(od.who) .. " the " .. C.Money(math.floor(od.amt)), nil, od)
       elseif d.book then
         ui.bookOf = d.book; ui.offset = 0; C.Refresh()
       elseif d.flip and not (IsShiftKeyDown and IsShiftKeyDown()) then

@@ -73,6 +73,10 @@ function R.Replay(lines, st, gains)
     local f = fields(line.e)
     local t, kind = tonumber(f[1]) or 0, f[2]
     if kind == "share" then st.share = (f[3] ~= "off")
+    elseif kind == "confirmed" and f[9] == "nx" then
+      -- a payment that only covered under-level-10 farms: no XP (1.0.10)
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = (tonumber(f[7]) or 0) >= 1 and "pay" or "receipt", who = f[4] or "?",
+        paidOff = tonumber(f[7]) or 0, cameIn = tonumber(f[8]) or 0, via = f[3], noProg = true } end
     elseif kind == "confirmed" then
       -- t|confirmed|via|who|gave|got|paidOff|cameIn
       local who, paidOff, cameIn = f[4] or "?", tonumber(f[7]) or 0, tonumber(f[8]) or 0
@@ -84,9 +88,15 @@ function R.Replay(lines, st, gains)
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end
     elseif kind == "farmend" then
-      -- t|farmend|label|sid|head|hash|secs|total|kills|mates
+      -- t|farmend|label|sid|head|hash|secs|total|kills|mates[|minLvl|maxLvl|net|players] (1.0.10)
       local sid, secs, mates = f[4] or "", tonumber(f[7]) or 0, tonumber(f[10]) or 0
-      if sid ~= "" and mates >= 1 and secs >= FARM_MIN_SECS then
+      local why = R.Unqualified(f)
+      if why then
+        if sid ~= "" then st.noProg = st.noProg or {}; st.noProg[sid] = true end
+        if gains and sid ~= "" and mates >= 1 then
+          gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", why = why, sid = sid, label = f[3], secs = secs }
+        end
+      elseif sid ~= "" and mates >= 1 and secs >= FARM_MIN_SECS then
         local want = math.min(FARM_MAX, math.floor(secs / 60))
         local got = 0
         if st.share then got = capped("farm:" .. day(t), FARM_DAY_CAP, want); st.xp = st.xp + got end
@@ -103,6 +113,24 @@ function R.Replay(lines, st, gains)
     if d and today - d > 2 then st.cap[k] = nil end
   end
   return st
+end
+
+-- 1.0.10: the gold a farm needs for Kina progression, in copper.
+-- base(L) = 20 ^ ((L - 10) / 50) gold for the highest level L in the group (L10 1g, L30 3g30s,
+-- L60 20g), times (1 + 0.5 x (players - 1)), counting players who don't run Kina.
+function R.FarmNeeds(maxLvl, players)
+  local L = math.max(10, tonumber(maxLvl) or 10)
+  local base = 10000 * 20 ^ ((L - 10) / 50)
+  return math.floor(base * (1 + 0.5 * (math.max(1, tonumber(players) or 1) - 1)) + 0.5)
+end
+-- why a finished farm gives no progression ("under10", "gold"), or nil. Farms logged
+-- before 1.0.10 (no level fields) keep the old rule.
+function R.Unqualified(f)
+  local minL, maxL, net, players = tonumber(f[11]), tonumber(f[12]), tonumber(f[13]), tonumber(f[14])
+  if not minL then return nil end
+  if minL > 0 and minL < (C.PROG_MIN_LEVEL or 10) then return "under10" end
+  if (tonumber(f[7]) or 0) >= FARM_MIN_SECS and net and net < R.FarmNeeds(maxL, players) then return "gold" end
+  return nil
 end
 
 -- every XP gain still in the log (older ones were rolled up), oldest first

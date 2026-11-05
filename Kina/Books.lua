@@ -28,7 +28,7 @@ local function inPeriod(t, days) return not days or (t and C.Now() - t <= days *
 local function xpIndex()
   local gains = C.Rep and C.Rep.History and C.Rep.History() or {}
   local bySid = {}
-  for _, g in ipairs(gains) do if g.sid and g.kind == "farm" then bySid[g.sid] = g end end
+  for _, g in ipairs(gains) do if g.sid and (g.kind == "farm" or (g.kind == "short" and g.why)) then bySid[g.sid] = g end end
   return gains, bySid
 end
 -- the XP gain that a payment record earned (matched on who, how and how much)
@@ -60,6 +60,10 @@ function B.Farm(s, gains, bySid)
       r.farmed, r.groupCoin, r.groupItems, r.groupUsed = gv.net, gv.coin or 0, gv.items or 0, gv.used or 0
       r.coinShare = (gv.coin or 0) / r.players
       r.share = r.coinShare + r.lootShare
+    elseif (r.lootSplit or 0) == 0 and s.result and (s.result.total or 0) ~= 0 then
+      -- 1.0.10: a group farm that was never shared (the partner's numbers never came):
+      -- show what you farmed instead of a row of dashes
+      r.farmed, r.share, r.unshared = s.result.total, s.result.total, true
     else
       r.farmed, r.share = r.lootSplit, r.lootShare -- an old farm saved without the group's totals
     end
@@ -87,6 +91,7 @@ function B.Farm(s, gains, bySid)
   -- XP: the farm itself, plus the payments that paid this farm's debts
   r.payments = {}
   local g = s.sync and s.sync.sid and bySid[s.sync.sid]
+  if g and g.kind == "short" then r.shortWhy = g.why; g = nil end
   if g then r.farmXP = g.xp; r.farmGain = g; r.xp = r.xp + (g.xp or 0) end
   for _, rec in ipairs(C.db.settles or {}) do
     for _, cv in ipairs(rec.covers or {}) do
@@ -109,7 +114,9 @@ function B.Farms(days)
   for _, s in ipairs(C.db.sessions or {}) do
     if type(s) == "table" and s.start and inPeriod(s.stop or s.start, days) then
       local r = B.Farm(s, gains, bySid)
-      rows[#rows + 1] = r
+      -- 1.0.10: a farm where nothing happened (started and stopped at once) is left out
+      local empty = (r.farmed or 0) == 0 and #r.debts == 0 and (r.xp or 0) == 0 and #r.payments == 0
+      if not empty then rows[#rows + 1] = r end
       for _, k in ipairs({ "farmed", "mine", "collected", "toCollect", "paid", "owe", "xp" }) do tot[k] = tot[k] + (r[k] or 0) end
       tot.n = tot.n + 1
     end
