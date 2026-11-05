@@ -8,6 +8,7 @@
 local _, C = ...
 local floor = math.floor
 local W, H = 300, 212
+local function ironOn() return C.Skin and C.Skin.On() end
 local w -- the widget frame
 
 local GOLD = { 0.96, 0.78, 0.30 }
@@ -260,8 +261,9 @@ local function makeTile(parent, label, x, y, width)
 end
 
 local function build()
-  w = CreateFrame("Frame", "KinaWidget", UIParent)
   local ironLook = C.Skin and C.Skin.On()
+  if ironLook then W = 324 end -- 1.2.0: wider, so the 115% text fits the tiles
+  w = CreateFrame("Frame", "KinaWidget", UIParent)
   local DY = ironLook and 8 or 0 -- 1.1.1: taller tiles in the iron look
   w:SetSize(W, H + DY); w:SetFrameStrata("MEDIUM")
   C.RestorePos(w, "widget", "TOP", UIParent, "TOP", 0, -120)
@@ -352,7 +354,7 @@ local function build()
   tip(w.timer, "Timer", "Click to cycle a farm timer (1 to 4 hours). The farm stops itself when it runs out.")
 
   -- stat tiles
-  local tw, gap, x0 = 68, 4, 8
+  local tw, gap, x0 = ironLook and 74 or 68, 4, 8
   w.tNet = makeTile(w, "NET", x0, -72, tw)
   w.tCoin = makeTile(w, "COIN", x0 + (tw + gap), -72, tw)
   w.tLoot = makeTile(w, "LOOT", x0 + (tw + gap) * 2, -72, tw)
@@ -366,19 +368,19 @@ local function build()
 
   -- buttons
   w.go = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
-  w.go:SetSize(96, 26); w.go:SetPoint("BOTTOMLEFT", 8, 8)
+  w.go:SetSize(ironLook and 100 or 96, 26); w.go:SetPoint("BOTTOMLEFT", 8, 8)
   if C.Skin then C.Skin.Button(w.go) end
   w.go:SetScript("OnClick", function()
     if C.session then C.StopSession() else C.StartSession() end
   end)
   tip(w.go, "Start / Stop", "Start a farm here (your duo partner gets a Join popup). Stop ends it for everyone in the shared farm and works out the split.")
-  w.pause = smallButton(w, "Pause", 60, function() if C.session then C.PauseSession() end; C.RefreshWidget() end, 26)
+  w.pause = smallButton(w, "Pause", ironLook and 64 or 60, function() if C.session then C.PauseSession() end; C.RefreshWidget() end, 26)
   w.pause:SetPoint("LEFT", w.go, "RIGHT", 4, 0)
   tip(w.pause, "Pause", "Stops the clock and leaves out anything looted until you resume (a trip to town, a break). Pauses your partner's widget too.")
-  local runs = smallButton(w, "Log", 56, function() if C.OpenFarmLog then C.OpenFarmLog() else C.Toggle("Session") end end, 26)
+  local runs = smallButton(w, "Log", ironLook and 60 or 56, function() if C.OpenFarmLog then C.OpenFarmLog() else C.Toggle("Session") end end, 26)
   runs:SetPoint("LEFT", w.pause, "RIGHT", 4, 0)
   tip(runs, "Farm log", "Every kill, drop and coin this farm counted, newest first. Right-click a line to leave it out.")
-  local hide = smallButton(w, "Kina", 64, function() C.Toggle() end, 26)
+  local hide = smallButton(w, "Kina", ironLook and 68 or 64, function() C.Toggle() end, 26)
   hide:SetPoint("LEFT", runs, "RIGHT", 4, 0)
   tip(hide, "Kina", "Opens the main Kina window: dungeons, farms, Hot and skill-up plans.")
   -- pay what the split says you owe: opens the trade and puts the money in
@@ -409,7 +411,7 @@ local function build()
   end)
   w.scan:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   w.pay:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.\n\nRight-click: the farm's details, to forgive the debt or ask for (or give) more time.")
+  tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.\n\nRight-click: the Debts page (Pay, more time, Forgive).")
 
   local acc, tick = 0, 0
   w:SetScript("OnUpdate", function(_, el)

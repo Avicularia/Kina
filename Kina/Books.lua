@@ -188,3 +188,42 @@ function B.Flow(days)
   end
   return inn, out
 end
+
+-- 1.2.0: the You tab's record: farms, shares, payments, forgiveness, who you farmed with
+function C.YouRecord()
+  local me = UnitName and UnitName("player")
+  local mine = me and (me:match("^([^%-]+)") or me)
+  local function isMe(n) return n and mine and (tostring(n):match("^([^%-]+)") or n) == mine end
+  local r = { farms = 0, hours = 0, share = 0, paid = 0, paidAmt = 0, recv = 0, recvAmt = 0, forgaveN = 0, forgivenN = 0, oweNow = 0, owedNow = 0 }
+  local who, whoList = {}, {}
+  local gains, bySid = C.Rep and C.Rep.History and C.Rep.History() or {}, {}
+  for _, s in ipairs(C.db.sessions or {}) do
+    if type(s) == "table" and s.start and s.sync then
+      r.farms = r.farms + 1
+      r.hours = r.hours + ((s.stop or s.start) - s.start - (s.pausedSecs or 0)) / 3600
+      local ok, f = pcall(B.Farm, s, gains, bySid)
+      if ok and f then r.share = r.share + (f.share or 0) end
+      local sp = s.split or {}
+      for _, t in ipairs(sp.transfers or {}) do
+        if sp.forgiven and sp.forgiven[t.to] and isMe(t.from) then r.forgivenN = r.forgivenN + 1 end
+        if sp.forgiven and sp.forgiven[t.from] and isMe(t.to) then r.forgaveN = r.forgaveN + 1 end
+      end
+      for n in pairs(sp.incomes or {}) do
+        local nm = B.Name(n)
+        if not isMe(n) and not who[nm] then who[nm] = true; whoList[#whoList + 1] = nm end
+      end
+    end
+  end
+  for _, rec in ipairs(C.db.settles or {}) do
+    if rec.conf then
+      if (rec.paidOff or 0) >= 1 then r.paid = r.paid + 1; r.paidAmt = r.paidAmt + rec.paidOff end
+      if (rec.cameIn or 0) >= 1 then r.recv = r.recv + 1; r.recvAmt = r.recvAmt + rec.cameIn end
+    end
+  end
+  for _, d in ipairs(C.Debts and C.Debts() or {}) do
+    if d.dir == "owe" then r.oweNow = r.oweNow + d.amt else r.owedNow = r.owedNow + d.amt end
+  end
+  table.sort(whoList)
+  if #whoList > 0 then r.partners = table.concat(whoList, ", ", 1, math.min(4, #whoList)) .. (#whoList > 4 and (" +" .. (#whoList - 4)) or "") end
+  return r
+end

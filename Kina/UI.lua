@@ -7,6 +7,7 @@ local ROWS, ROW_H = 19, 18   -- ROWS = rows at the default size; more appear whe
 local MAX_ROWS = 50
 local W, H = 900, 520        -- default size; drag the bottom-right corner to resize
 local ui = { sort = {}, search = {}, w = W, h = H, visible = ROWS }
+C.UI = ui -- 1.2.0: Sheets.lua (You tab, Debts page) works inside this window
 local fitWidths -- defined with the layout code below
 C.ui = ui
 
@@ -50,7 +51,7 @@ local tabs = {}
 local tabOrder = { "Dungeons", "Farms", "Hot", "Skill up", "Session", "Settings" }
 -- Public Kina: the farm log with debts and payments, the ledger, and settings. The
 -- advice tabs (and the data behind them) come back in a later public version.
-if C.PUBLIC then tabOrder = { "Session", "Ledger", "Settings" } end
+if C.PUBLIC then tabOrder = { "Session", "Ledger", "You", "Settings" } end -- 1.2.0: You (character sheet)
 local HOME = tabOrder[1] == "Session" and "Session" or "Hot"
 local TAB_OK = {}
 for _, t in ipairs(tabOrder) do TAB_OK[t] = true end
@@ -989,8 +990,9 @@ if C.PUBLIC then
   local function money(v) return (v and v ~= 0) and C.Money(math.floor(v + 0.5)) or (GREY .. "-|r") end
   local function day(t) return t and date("%m/%d", t) or "" end
   local function period() return ui.ledgerDays and (ui.ledgerDays .. " days") or "all time" end
-  local VIEWS = { "farms", "flow", "xp" }
-  local VIEWNAME = { farms = "Farms", flow = "Gold flow", xp = "XP" }
+  local VIEWS = { "farms", "debts", "flow", "xp" }
+  local VIEWNAME = { farms = "Farms", debts = "Debts", flow = "Gold flow", xp = "XP" }
+  ui.LEDGER_VIEWS, ui.LEDGER_VIEWNAME = VIEWS, VIEWNAME
   C.LedgerViewName = function() return VIEWNAME[ui.ledgerView or "farms"] end
   C.NextLedgerView = function()
     local v = ui.ledgerView or "farms"
@@ -1037,23 +1039,9 @@ if C.PUBLIC then
         for _, x in ipairs(C.Debts()) do if x.s == s and x.key == d.who and x.dir == d.dir then od = x end end
         if od and not forgiven and C.DueText then st = st .. "  " .. GREY .. C.DueText(od) .. "|r" end
         row("", (d.dir == "owe" and "you owe " or "owes you: ") .. d.who, money(d.amt), st)
-        local LINK = "   |cff4fc3f7"
+        -- 1.2.0: the buttons (Pay, more time, Forgive) are on the Ledger's Debts page
         if od and left >= 1 and not forgiven then
-          local sp = s.split
-          if d.dir == "owed" then
-            -- the person owed: forgive, and give more time when asked (1.1.1)
-            if sp.pleaFrom and sp.pleaFrom[d.who] then
-              out[#out + 1] = { cols = { "", LINK .. C.Books.Name(d.who) .. " asked for more time: click here to give " .. C.EXTEND_DAYS .. " more days|r", "", "" }, sort = { #out, 0, 0, 0 }, debtAct = { "ext", od } }
-            end
-            out[#out + 1] = { cols = { "", LINK .. "click here to forgive " .. C.Books.Name(d.who) .. " the " .. C.Money(math.floor(od.amt)) .. "|r", "", "" }, sort = { #out, 0, 0, 0 }, forgive = od }
-          else
-            -- the debtor: pay (the widget's Pay button), or ask once for more time
-            if not (sp.plea and sp.plea[d.who]) then
-              out[#out + 1] = { cols = { "", LINK .. "can't pay yet? click here to ask " .. C.Books.Name(d.who) .. " for more time|r", "", "" }, sort = { #out, 0, 0, 0 }, debtAct = { "plea", od } }
-            else
-              out[#out + 1] = { cols = { "", GREY .. "   you asked " .. C.Books.Name(d.who) .. " for more time|r", "", "" }, sort = { #out, 0, 0, 0 } }
-            end
-          end
+          out[#out + 1] = { cols = { "", GREY .. "   Pay, more time or Forgive: the Debts button above|r", "", "" }, sort = { #out, 0, 0, 0 } }
         end
       end
       if #r.debts == 0 then row("", "nothing between you and the group", "", "") end
@@ -1087,7 +1075,7 @@ if C.PUBLIC then
       end
     end
     return string.format("%sFarm details: %s|r   %s(click here to go back)|r", GOLDC, r.label, GREY),
-      { "", "What", "Amount", "Status / XP" }, { 0, 110, 470, 580 }, out, { headClick = back }
+      { "", "What", "Amount", "Status / XP" }, { 0, 110, 430, 610 }, out, { headClick = back }
   end
 
   tabs.Ledger = function()
@@ -1095,6 +1083,10 @@ if C.PUBLIC then
     ui.bookOf = nil
     local view = ui.ledgerView or "farms"
     local out = {}
+    if view == "debts" then
+      -- 1.2.0: a page of its own: people on the left, one person's debts with buttons on the right
+      return GOLDC .. "Debts|r " .. GREY .. "between you and the people you farmed with|r", {}, {}, {}, { panel = "debts" }
+    end
     if view == "flow" then
       local inn, outg = C.Books.Flow(ui.ledgerDays)
       local tin, tout = 0, 0
@@ -1113,8 +1105,8 @@ if C.PUBLIC then
       row("", "auction house cut", outg.ahCut, 0)
       row("", "postage for settle mail", outg.postage, -1)
       row(GOLDC .. "Net|r", "in minus out", tin - tout, 0)
-      return string.format("%sGold flow, %s|r (as seen by Kina)   %s(click here: XP)|r", GOLDC, period(), GREY),
-        { "", "What", "Amount" }, { 0, 110, 470 }, out, { headClick = function() C.NextLedgerView(); C.Refresh() end }
+      return string.format("%sGold flow, %s|r (as seen by Kina)   %s|r", GOLDC, period(), GREY),
+        { "", "What", "Amount" }, { 0, 110, 470 }, out, {}
     elseif view == "xp" then
       local gains, rolled = C.Rep.History()
       local m = C.Rep.Mine()
@@ -1136,8 +1128,8 @@ if C.PUBLIC then
         end
       end
       if rolled > 0 then out[#out + 1] = { cols = { GREY .. "older|r", "rolled up after 90 days", "", "+" .. rolled }, sort = { 0, "", "", rolled } } end
-      return string.format("%sXP:|r Kina level %s, %d XP %s(unverified)|r   %s(click here: Farms)|r", GOLDC, C.Rep.Roman(m.level), m.xp, GREY, GREY),
-        { "When", "What", "Note", "XP" }, { 0, 70, 560, 700 }, out, { headClick = function() C.NextLedgerView(); C.Refresh() end }
+      return string.format("%sXP:|r Kina level %s, %d XP %s(unverified)|r%s", GOLDC, C.Rep.Roman(m.level), m.xp, GREY, ""),
+        { "When", "What", "Note", "XP" }, { 0, 70, 560, 700 }, out, {}
     end
     local rows, tot = C.Books.Farms(ui.ledgerDays)
     for _, r in ipairs(rows) do
@@ -1147,12 +1139,11 @@ if C.PUBLIC then
         r.xp > 0 and ("+" .. r.xp) or (GREY .. "-|r") },
         sort = { r.t or 0, r.label, r.players, r.farmed, r.share, r.collected, r.toCollect, r.paid, r.owe, r.xp } }
     end
-    local head = string.format("%sFarms, %s:|r farmed %s, collected %s, %sto collect %s|r, paid %s, %syou owe %s|r, XP +%d (%d waiting)   %s(click a farm for details; here: Gold flow)|r",
+    local head = string.format("%sFarms, %s:|r farmed %s, collected %s, %sto collect %s|r, paid %s, %syou owe %s|r, XP +%d (%d waiting)   %s(click a farm for its details)|r",
       GOLDC, period(), money(tot.farmed), money(tot.collected), ORANGE, money(tot.toCollect), money(tot.paid), ORANGE, money(tot.owe), tot.xp, tot.waiting, GREY)
     return head, { "Date", "Farm", "Players", "Farmed", "Your share", "Collected", "To collect", "Paid", "You owe", "XP" },
       { 0, 46, 210, 260, 345, 430, 515, 600, 680, 760 }, out,
-      { headClick = function() C.NextLedgerView(); C.Refresh() end,
-        empty = "No farms yet. Press Start on the Kina widget when you farm; every farm shows up here with its gold, debts and XP." }
+      { empty = "No farms yet. Press Start on the Kina widget when you farm; every farm shows up here with its gold, debts and XP." }
   end
 end
 
@@ -1317,9 +1308,11 @@ C.ColTip = colTip
 local function button(parent, text, w, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(w, 22); b:SetText(text); b:SetScript("OnClick", onClick)
+  if b.GetFontString and b:GetFontString() and C.Font then b:GetFontString():SetFontObject(C.Font("GameFontNormal")) end
   if C.Skin then C.Skin.Button(b) end
   return b
 end
+C.UIButton = button
 
 -- tiny right-click menu
 local menu
@@ -2216,7 +2209,7 @@ end
 
 local function buildScanBar(f)
   local bar = CreateFrame("StatusBar", nil, f)
-  bar:SetSize(340, 16); bar:SetPoint("BOTTOMLEFT", 16, 14)
+  bar:SetSize(430, 16); bar:SetPoint("BOTTOMLEFT", 16, 14)
   bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
   bar:SetMinMaxValues(0, 1); bar:SetValue(0)
   local bg = bar:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.6)
@@ -2230,7 +2223,7 @@ local function buildScanBar(f)
   -- a bright block that sweeps back and forth while waiting for the server
   bar.sweep = bar:CreateTexture(nil, "ARTWORK"); bar.sweep:SetSize(60, 14); bar.sweep:SetColorTexture(0.3, 0.76, 0.97, 0.8)
   bar.text = C.Text(bar, "OVERLAY", "GameFontHighlightSmall")
-  bar.text:SetPoint("CENTER"); bar.text:SetWidth(332); if bar.text.SetWordWrap then bar.text:SetWordWrap(false) end
+  bar.text:SetPoint("CENTER"); bar.text:SetWidth(422); if bar.text.SetWordWrap then bar.text:SetWordWrap(false) end
   bar:EnableMouse(true)
   bar:SetScript("OnMouseUp", function() if C.ahOpen then C.StartScanLoop() end end)
   bar:SetScript("OnEnter", function(self)
@@ -2255,7 +2248,7 @@ local function buildScanBar(f)
     local p = sc.phase
     if p == "request" then
       self:SetStatusBarColor(0.3, 0.76, 0.97); self:SetValue(0)
-      local x = (math.sin(since * 2.4) + 1) / 2 * (340 - 62)
+      local x = (math.sin(since * 2.4) + 1) / 2 * (430 - 62)
       self.sweep:ClearAllPoints(); self.sweep:SetPoint("LEFT", self, "LEFT", 1 + x, 0); self.sweep:Show()
       self.text:SetText(string.format("%s... %ds", PHASE_TEXT.request, since))
     elseif p == "read" or p == "items" then
@@ -2325,6 +2318,8 @@ end
 
 ------------------------------------------------------------------ settings tab
 -- Every option that used to need a slash command, as switches, boxes and buttons.
+tabs.You = function() return "", {}, {}, {}, { panel = "you" } end
+
 tabs.Settings = function()
   return "Settings: click a switch to flip it, type in a box and press Enter. Everything is saved per account.",
     {}, {}, {}, { settings = true }
@@ -2340,8 +2335,8 @@ local function buildSettings(f)
   ui.settingsContent = outer
   local controls = {}
   -- "You" box (read-only): what Kina believes about you, so a wrong profile is obvious
-  local YOU_H = 64
-  do
+  local YOU_H = C.PUBLIC and 0 or 64 -- 1.2.0: public Kina shows you on the You tab instead
+  if not C.PUBLIC then
     local box = CreateFrame("Frame", nil, outer)
     box:SetPoint("TOPLEFT", 4, -4); box:SetPoint("TOPRIGHT", -4, -4); box:SetHeight(YOU_H - 8)
     local t = box:CreateTexture(nil, "BACKGROUND"); t:SetAllPoints(); t:SetColorTexture(0.3, 0.76, 0.97, 0.08)
@@ -2963,6 +2958,21 @@ local function build()
   ui.headButton:SetScript("OnClick", function() if ui.headClick then ui.headClick() end end)
   ui.head = C.Text(f, "OVERLAY", "GameFontHighlightSmall")
   ui.head:SetPoint("TOPLEFT", 14, -56); ui.head:SetWidth(W - 28); ui.head:SetJustifyH("LEFT")
+  -- 1.2.0: the Ledger's views (Farms, Debts, Gold flow, XP) as real buttons
+  if C.PUBLIC and ui.LEDGER_VIEWS then
+    local vb = CreateFrame("Frame", nil, f); vb:SetSize(420, 24); vb.btns = {}
+    local prev
+    for i = #ui.LEDGER_VIEWS, 1, -1 do
+      local v = ui.LEDGER_VIEWS[i]
+      local b = button(vb, ui.LEDGER_VIEWNAME[v], v == "flow" and 96 or 76, function()
+        ui.ledgerView = v; ui.bookOf = nil; ui.offset = 0; ui.sort.Ledger = nil; C.Refresh() end)
+      b:SetHeight(24)
+      if prev then b:SetPoint("RIGHT", prev, "LEFT", -6, 0) else b:SetPoint("RIGHT", vb, "RIGHT", 0, 0) end
+      prev = b; vb.btns[v] = b
+    end
+    vb:SetFrameLevel(f:GetFrameLevel() + 12)
+    vb:Hide(); ui.viewBar = vb
+  end
   if ui.head.SetWordWrap then ui.head:SetWordWrap(false) end
   -- sortable column headers
   ui.headers = {}
@@ -3086,7 +3096,7 @@ local function build()
     ui.scroll = C.Skin.Scrollbar(f, function(v)
       if v ~= (ui.offset or 0) then ui.offset = v; C.Draw() end
     end)
-    ui.scroll:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -94)
+    ui.scroll:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -104)
     ui.scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 70)
     ui.scroll:Hide()
   end
@@ -3203,6 +3213,25 @@ function C.Refresh()
     head, cols, colX, data = "error: " .. tostring(head), {}, { 0 }, {}
   end
   opts = opts or {}
+  -- 1.2.0: breathing room under the tab shelf in the iron look
+  if C.Skin and C.Skin.On() then opts.top = (opts.top or 0) + 10 end
+  ui.panelTop = 82 + (opts.top or 0)
+  if C.ShowPanel then pcall(C.ShowPanel, opts.panel) end
+  -- the Ledger's views as buttons
+  if ui.viewBar then
+    if tab == "Ledger" then
+      ui.viewBar:Show()
+      for v, b in pairs(ui.viewBar.btns) do
+        local on = (ui.ledgerView or "farms") == v and not ui.bookOf
+        if on then b:LockHighlight() else b:UnlockHighlight() end
+        local fs = b.GetFontString and b:GetFontString()
+        if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
+      end
+      ui.viewBar:ClearAllPoints(); ui.viewBar:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (opts.top or 0))
+    else ui.viewBar:Hide() end
+  end
+  -- the header line leaves room for the view buttons on the Ledger
+  if ui.head then ui.head:SetWidth(math.max(200, ui.w - ((tab == "Ledger" and ui.viewBar) and 470 or 28))) end
   layout(colX, opts.top or 0)
   ui.head:ClearAllPoints(); ui.head:SetPoint("TOPLEFT", 14, -56 - (opts.top or 0))
   if ui.headButton then ui.headButton:ClearAllPoints(); ui.headButton:SetPoint("TOPLEFT", 12, -54 - (opts.top or 0)) end
@@ -3312,7 +3341,8 @@ end
 -- 1.1.1: open one farm's Ledger details (from the widget's Pay / Ask button)
 function C.OpenLedgerFarm(s)
   if not ui.frame then build() end
-  ui.bookOf = s; ui.offset = 0
+  -- 1.2.0: debts are handled on the Debts page (its buttons), not in the farm details
+  ui.bookOf = nil; ui.ledgerView = "debts"; ui.offset = 0
   C.Toggle("Ledger")
 end
 

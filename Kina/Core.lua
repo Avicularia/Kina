@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.1.1" -- Public Kina
+C.version = "1.2.0" -- Public Kina
 C.PUBLIC = true
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).
@@ -143,7 +143,7 @@ local defaults = {
     widgetAlpha = 0.80,
     pos = {},                -- saved window positions
     picksPerHour = 120,      -- pick-only circuits: picks per hour for the estimate
-    textScale = 1.15,        -- Kina text size (Settings > Window > Text size); 1.1.1: 115% by default
+    textScale = 1.15,        -- Kina text size (Settings > Window > Text size); 1.2.0: 115% by default
     tooltip = true,          -- vendor / AH / disenchant lines on item tooltips
     minROI = 0,              -- hide rows under this ROI % (0 = show all)
     worthOnly = false,       -- hide trades that don't pay for your time
@@ -185,14 +185,14 @@ function C.InitDB()
     local n = C.Sanitize(KinaDB)
     if n and n > 0 then
       C.dataRepaired = n
-      -- 1.1.1: keep what was dropped, for Claude
+      -- 1.2.0: keep what was dropped, for Claude
       KinaDB.repairs = type(KinaDB.repairs) == "table" and KinaDB.repairs or {}
       table.insert(KinaDB.repairs, 1, { t = (GetServerTime and GetServerTime()) or 0, v = C.version, n = n, paths = C.repairPaths or {} })
       while #KinaDB.repairs > 10 do table.remove(KinaDB.repairs) end
     end
   end
   fill(KinaDB, defaults)
-  -- 1.1.1: Kina's text is 15% bigger by default; anyone still on the old 100% moves up once
+  -- 1.2.0: Kina's text is 15% bigger by default; anyone still on the old 100% moves up once
   if KinaDB.settings and not KinaDB.settings.text115 then
     if KinaDB.settings.textScale == 1 then KinaDB.settings.textScale = 1.15 end
     KinaDB.settings.text115 = true
@@ -218,7 +218,7 @@ local early = {}
 local function blocked(event, addon, func)
   if addon ~= ADDON then return end
   local rec = { event = event, func = tostring(func), t = C.Now(), stage = C.stage or "?" }
-  -- 1.1.1: what Kina was doing, to find the cause of an UNKNOWN() block
+  -- 1.2.0: what Kina was doing, to find the cause of an UNKNOWN() block
   if InCombatLockdown then rec.combat = InCombatLockdown() and true or false end
   if C.lastSend then rec.lastSend = C.lastSend.k; rec.sendAgo = (GetTime and GetTime() or 0) - C.lastSend.t end
   if C.lastAction then rec.lastAction = C.lastAction.what; rec.actAgo = (GetTime and GetTime() or 0) - C.lastAction.t end
@@ -339,7 +339,7 @@ function C.MakeDraggable(f, key, handle, onMoved)
     C.SavePos(f, key)
     if onMoved then onMoved(f) end
   end
-  -- 1.1.1: with the iron look a window with a title band moves only by that band
+  -- 1.2.0: with the iron look a window with a title band moves only by that band
   -- (grabbing anywhere else did nothing useful and felt broken)
   if handle and C.Skin and C.Skin.On() then
     f:RegisterForDrag(); f:SetScript("OnDragStart", nil); f:SetScript("OnDragStop", nil)

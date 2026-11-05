@@ -161,7 +161,7 @@ function S.Frame(f, border, bg)
   if bg ~= false then
     local fill = f:CreateTexture(nil, "BACKGROUND", nil, -7)
     fill:SetPoint("TOPLEFT", 2, -2); fill:SetPoint("BOTTOMRIGHT", -2, 2)
-    fill:SetColorTexture(0.055, 0.055, 0.06, 0.94)
+    fill:SetColorTexture(0.055, 0.055, 0.06, 1) -- 1.2.0: solid (the world showed through)
     f.kinaFill = fill
   end
   local holder = CreateFrame("Frame", nil, f)
@@ -204,6 +204,16 @@ function S.Button(b, border)
   -- the template puts its textures back on some updates
   b:HookScript("OnShow", function() hideRegions(b); state() end)
   state()
+end
+
+-- 1.2.0: a big panel: the tray's iron border (A-32) on a flat dark fill (its recessed
+-- centre only works small; stretched to a panel it looked like a pit)
+function S.Panel(f, border)
+  if not S.On() or f.kinaSkin then return end
+  local fill = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+  fill:SetPoint("TOPLEFT", 4, -4); fill:SetPoint("BOTTOMRIGHT", -4, 4)
+  fill:SetColorTexture(0.085, 0.085, 0.095, 1)
+  f.kinaSkin = S.Nine(f, "tile", border or 6, { layer = "BORDER", noCenter = true })
 end
 
 -- a stat tile (the recessed tray)
@@ -268,7 +278,8 @@ function S.Grip(grip)
   -- inside the frame's corner, above the frame (which is drawn over the window's edge)
   local p = grip:GetParent()
   if p then
-    grip:ClearAllPoints(); grip:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -9, 9)
+    -- 1.2.0: on the frame's bottom-right rivet (grab the rivet to resize), clear of the buttons
+    grip:ClearAllPoints(); grip:SetPoint("CENTER", p, "BOTTOMRIGHT", 3, -3)
     grip:SetFrameLevel(p:GetFrameLevel() + 40)
   end
   local t = grip:CreateTexture(nil, "ARTWORK")

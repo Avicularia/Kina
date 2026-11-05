@@ -113,6 +113,14 @@ local function profList(profs)
   table.sort(ps)
   return ps
 end
+-- 1.2.0: for the You tab (character sheet)
+function C.YouProfile()
+  local me = myProfile()
+  me.className = (UnitClass and UnitClass("player")) or niceClass(me.class)
+  return me
+end
+function C.TradeSkill(n) return TRADE[n] ~= nil end
+
 function C.YouLines()
   local me = myProfile()
   local ps = profList(me.profs)
