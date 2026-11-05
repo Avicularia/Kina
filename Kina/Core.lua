@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.2.3" -- Public Kina
+C.version = "1.2.4" -- Public Kina
 C.PUBLIC = true
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).

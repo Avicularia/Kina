@@ -74,7 +74,7 @@ function T.Run()
     for _, m in ipairs(missing) do
       -- 1.0.10: Forever removed SetTradeMoney; Kina fills the trade's gold box instead
       if m:find("^SetTradeMoney") and MoneyInputFrame_SetCopper then
-        add("WARN", "SetTradeMoney is gone on this client: the Pay button fills the trade's gold box instead (type it yourself if it stays empty)")
+        add("WARN", "SetTradeMoney is gone on this client: Pay opens the trade and tells you the exact amount to type; Kina offers Accept once it matches")
       else add("FAIL", "missing: " .. m) end
     end
   end

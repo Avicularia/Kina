@@ -175,18 +175,17 @@ C.On("TRADE_SHOW", function()
   local function put()
     if pendingPay ~= p then return end
     tries = tries + 1
-    local mf = TradePlayerInputMoneyFrame
-    if MoneyInputFrame_SetCopper and mf then pcall(MoneyInputFrame_SetCopper, mf, amt) end
-    -- 1.2.3: filling the boxes alone doesn't commit the money on Forever (the game only
-    -- sends it when the box reports a change), so tell the trade window it changed
-    if mf and mf.onValueChangedFunc then pcall(mf.onValueChangedFunc, mf) end
-    if C_TradeInfo and C_TradeInfo.SetTradeMoney then pcall(C_TradeInfo.SetTradeMoney, amt) end
-    if SetTradeMoney then pcall(SetTradeMoney, amt) end
+    -- 1.2.4: on Forever only Blizzard's own UI may put money in a trade (Kina trying it
+    -- pops "blocked from an action"), so Kina never touches the gold box: it says the
+    -- exact amount to type and offers Accept once it's right
+    if SetTradeMoney and not C.tradeMoneyProtected then pcall(SetTradeMoney, amt) end
     local now = GetPlayerTradeMoney and GetPlayerTradeMoney() or nil
     if now == amt then
       p.set = amt
       C.Print(string.format("Kina put %s in the trade for %s.", C.Money(amt), p.to))
       C.AskAcceptTrade(string.format("Kina put %s in the trade for %s. Accept?", C.Money(amt), p.to))
+    elseif not SetTradeMoney or C.tradeMoneyProtected then
+      C.Print(string.format("|cffffd100Type %s in the trade window's gold box|r; Kina offers Accept once it's there.", C.Money(amt)))
     elseif tries < 10 then C.After(0.3, put)
     else
       C.Print(string.format("|cffff8040Kina couldn't put the money in. Type %s in the trade window yourself|r; Kina will offer Accept once it's there.", C.Money(amt)))

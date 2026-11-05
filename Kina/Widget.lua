@@ -517,8 +517,9 @@ local function build()
     end
     acc = acc + el; if acc < 1 then return end
     tick = tick + acc; acc = 0
-    if tick >= 5 then tick = 0; C.SessionTick() end
-    C.RefreshWidget()
+    -- 1.2.4: name the step, so a blocked call says which part of Kina was running
+    if tick >= 5 then tick = 0; C.stage = "session tick"; C.SessionTick() end
+    C.stage = "widget refresh"; C.RefreshWidget(); C.stage = "running"
   end)
 end
 
