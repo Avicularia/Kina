@@ -1,5 +1,5 @@
 ## Interface: 16001
 ## Title: Kina Scout C (old, now Kina)
 ## Notes: Kina Scout C is now called Kina. This stub only loads your old saved data so Kina can move it over. Delete this folder after logging in once with Kina.
-## Version: 1.0.10
+## Version: 1.1.0
 ## SavedVariables: KinaScoutCDB

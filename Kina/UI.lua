@@ -1303,6 +1303,7 @@ C.ColTip = colTip
 local function button(parent, text, w, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(w, 22); b:SetText(text); b:SetScript("OnClick", onClick)
+  if C.Skin then C.Skin.Button(b) end
   return b
 end
 
@@ -2468,6 +2469,9 @@ local function buildSettings(f)
   end
   toggle("Count kills from nameplates", function() return st.plateKills ~= false end, function(v) st.plateKills = v end,
     "Counts mobs that died near you without being your target (AoE, pets) so drop rates are not too good. In a group they count for the farm only. Needs the dead mob's nameplate to be visible.")
+  toggle("Kina iron look (after /reload)", function() return st.look ~= "classic" end, function(v) st.look = (not v) and "classic" or nil
+    C.Print("the " .. (v and "iron" or "classic") .. " look applies after a /reload.") end,
+    "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
   toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
   toggle("Start/stop fanfares", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end end)
@@ -2716,6 +2720,13 @@ local function build()
   end)
   C.MakeDraggable(f, "main", titleStrip(f), rememberDock)
   f:SetFrameStrata("DIALOG")
+  -- 1.1.0 iron look: the template's art hidden, the A-30 frame (24 px, Rev 59), the A-33 header
+  if C.Skin and C.Skin.On() then
+    C.Skin.HideTemplate(f)
+    C.Skin.Frame(f, 24)
+    local hb = C.Skin.Strip(f, "header", 24)
+    if hb then hb:SetPoint("TOPLEFT", 3, -1); hb:SetPoint("TOPRIGHT", -3, -1) end
+  end
   if f.TitleText then f.TitleText:SetText("Kina " .. C.version) end
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaFrame") end
   ui.frame = f
@@ -2724,6 +2735,12 @@ local function build()
   for _, name in ipairs(tabOrder) do
     local b = button(f, name, 54, function() ui.tab = name; ui.offset = 0; C.Refresh() end)
     b:SetPoint("TOPLEFT", x, -28); x = x + 56
+    if C.Skin and C.Skin.On() then
+      -- iron tabs instead of buttons: wider, so the name sits inside the 9 px border
+      if b.kinaSkin then b.kinaSkin:Show(false); b.kinaSkin.Layout = function() end end
+      b:SetSize(70, 24); x = x + 18
+      C.Skin.Tab(b)
+    end
     ui.tabButtons[name] = b
   end
   -- search box (filters the current tab)
@@ -2755,9 +2772,9 @@ local function build()
   -- Public Kina: no scan button, scan bar or farm-advice buttons (those tabs are hidden);
   -- prices from auction scans other addons make are still read in the background
   if C.PUBLIC then
-    for _, b in ipairs({ scan, kindB, nextB, prevB }) do b:Hide() end
-    if ui.scanBar then ui.scanBar:Hide() end
-    sess:ClearAllPoints(); sess:SetPoint("BOTTOMRIGHT", -32, 10)
+    -- 1.1.0: the Scan AH button and the scan bar are back (who scanned, when, what it's doing)
+    for _, b in ipairs({ kindB, nextB, prevB }) do b:Hide() end
+    sess:ClearAllPoints(); sess:SetPoint("RIGHT", scan, "LEFT", -6, 0)
   end
   buildSettings(f)
   -- ROI filter row (every tab): rows below the typed ROI %, and with the switch on,
@@ -3235,7 +3252,10 @@ function C.Refresh()
     if msg then ui.empty:SetWidth(math.max(300, ui.w - 160)); ui.empty:SetText(msg); ui.empty:Show() else ui.empty:Hide() end
   end
   if ui.searchBox and ui.searchBox:GetText() ~= (ui.search[tab] or "") then ui.searchBox:SetText(ui.search[tab] or "") end
-  for name, b in pairs(ui.tabButtons) do if name == tab then b:LockHighlight() else b:UnlockHighlight() end end
+  for name, b in pairs(ui.tabButtons) do
+    if name == tab then b:LockHighlight() else b:UnlockHighlight() end
+    if C.Skin then C.Skin.TabActive(b, name == tab) end
+  end
   C.Draw()
 end
 

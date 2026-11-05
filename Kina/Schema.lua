@@ -85,6 +85,7 @@ for _, k in ipairs({ "hudShown", "autoScan", "farmSound", "tooltip", "worthOnly"
   "matLowest", "farmNoSplit", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
 for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots", "lowLevelSeen", "forgiven" }) do SETTINGS[k] = T end
 SETTINGS.partnerClass = S
+SETTINGS.look = S
 
 local DB = { t = T, f = {
   settings = { t = T, f = SETTINGS },

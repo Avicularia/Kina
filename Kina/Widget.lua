@@ -33,6 +33,7 @@ local function smallButton(parent, label, width, onClick, height)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(width, height or 18); b:SetText(label); b:SetScript("OnClick", onClick)
   if b.GetFontString and b:GetFontString() then b:GetFontString():SetFontObject("GameFontHighlightSmall") end
+  if C.Skin then C.Skin.Button(b) end
   return b
 end
 
@@ -72,7 +73,8 @@ local function itemIcon(id)
 end
 
 local function applyAlpha()
-  if w and w.bg then w.bg:SetColorTexture(BG[1], BG[2], BG[3], C.settings.widgetAlpha or 0.85) end
+  local c = (C.Skin and C.Skin.On()) and { 0.055, 0.055, 0.06 } or BG -- iron look: neutral near-black, no navy
+  if w and w.bg then w.bg:SetColorTexture(c[1], c[2], c[3], C.settings.widgetAlpha or 0.85) end
 end
 
 -- the four stat tiles
@@ -120,13 +122,28 @@ end
 
 local function chip(textv, r, g, b)
   w.chip.text:SetText(textv)
-  w.chip.bg:SetColorTexture(r, g, b, 0.9)
-  w.chip:SetWidth(math.max(40, (w.chip.text:GetStringWidth() or 30) + 12))
+  local iron = C.Skin and C.Skin.ChipColor(w.chip, r, g, b)
+  if not iron then w.chip.bg:SetColorTexture(r, g, b, 0.9) end
+  w.chip:SetWidth(math.max(40, (w.chip.text:GetStringWidth() or 30) + (iron and 20 or 12)))
 end
 
 function C.RefreshWidget()
   if not (w and w:IsShown()) then return end
   pcall(refreshPay)
+  -- 1.1.0: the Scan AH button and what it's doing
+  if w.scan then
+    if C.ahOpen and not w.pay:IsShown() then
+      local sc = C.scan or {}
+      local left = C.ScanCooldown and C.ScanCooldown() or 0
+      local txt
+      if sc.phase == "request" then txt = "Scan AH: asking the auction house..."
+      elseif sc.phase == "read" or sc.phase == "items" then txt = string.format("Scan AH: reading %d%%", math.floor(100 * (sc.done or 0) / math.max(1, sc.total or 1)))
+      elseif sc.phase == "done" then txt = string.format("|cff7CFC00Scan done: %d listings|r", sc.rows or 0)
+      elseif left > 0 then txt = string.format("%s  |cff9d9d9d(next in %d:%02d)|r", C.scanLoop and "Auto-scanning" or "Scan AH", math.floor(left / 60), left % 60)
+      else txt = C.scanLoop and "Auto-scanning: scanning now" or "Scan AH" end
+      w.scan:SetText(txt); w.scan:Show()
+    else w.scan:Hide() end
+  end
   local s = C.session
   w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND")
   if w.rep and C.RepLine then pcall(function() w.rep.text:SetText(C.RepLine() .. (C.ShareData() and "" or " |cff888888paused|r")) end) end
@@ -229,9 +246,12 @@ local function makeTile(parent, label, x, y, width)
   local bg = t:CreateTexture(nil, "BACKGROUND", nil, 1); bg:SetAllPoints(); bg:SetColorTexture(TILE[1], TILE[2], TILE[3], 0.9)
   local top = t:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1)
   top:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.35)
-  t.label = text(t, "GameFontDisableSmall", "CENTER"); t.label:SetPoint("TOP", 0, -3); t.label:SetText(label)
-  t.value = text(t, "GameFontHighlight", "CENTER"); t.value:SetPoint("CENTER", 0, -1); t.value:SetWidth(width - 4)
-  t.sub = text(t, "GameFontDisableSmall", "CENTER"); t.sub:SetPoint("BOTTOM", 0, 2); t.sub:SetWidth(width - 4)
+  -- 1.1.0 iron look: the recessed tray, text pulled in clear of its 5 px border
+  local iron = C.Skin and C.Skin.On()
+  if iron then bg:Hide(); top:Hide(); C.Skin.Tile(t, 5) end
+  t.label = text(t, "GameFontDisableSmall", "CENTER"); t.label:SetPoint("TOP", 0, iron and -5 or -3); t.label:SetText(label)
+  t.value = text(t, "GameFontHighlight", "CENTER"); t.value:SetPoint("CENTER", 0, -1); t.value:SetWidth(width - (iron and 10 or 4))
+  t.sub = text(t, "GameFontDisableSmall", "CENTER"); t.sub:SetPoint("BOTTOM", 0, iron and 5 or 2); t.sub:SetWidth(width - (iron and 10 or 4))
   if t.sub.SetFont then local f, _, fl = t.sub:GetFont(); if f then t.sub:SetFont(f, 8, fl) end end
   -- one line each: a long text is cut short instead of wrapping over the value
   for _, fs in ipairs({ t.label, t.value, t.sub }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
@@ -245,19 +265,28 @@ local function build()
   C.MakeDraggable(w, "widget")
   if C.ScaleGrip then C.ScaleGrip(w, "widgetScale") end
   w.bg = w:CreateTexture(nil, "BACKGROUND"); w.bg:SetAllPoints()
+  local iron = C.Skin and C.Skin.On()
   local function edge(p1, p2, horiz, a)
+    if iron then return end
     local t = w:CreateTexture(nil, "BORDER"); t:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], a or 0.85)
     t:SetPoint(p1); t:SetPoint(p2)
     if horiz then t:SetHeight(1) else t:SetWidth(1) end
   end
   edge("TOPLEFT", "TOPRIGHT", true); edge("BOTTOMLEFT", "BOTTOMRIGHT", true)
   edge("TOPLEFT", "BOTTOMLEFT", false); edge("TOPRIGHT", "BOTTOMRIGHT", false)
+  -- 1.1.0 iron look: the A-30 frame (20 px, Rev 59) and the A-33 header bar
+  if iron then
+    C.Skin.Frame(w, 20, false)
+    local hb = C.Skin.Strip(w, "header", 24)
+    if hb then hb:SetPoint("TOPLEFT", 1, -1); hb:SetPoint("TOPRIGHT", -1, -1) end
+  end
   -- header band with a soft gradient
   local bar = w:CreateTexture(nil, "ARTWORK"); bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1); bar:SetHeight(22)
   bar:SetColorTexture(0.09, 0.15, 0.36, 0.95)
   if bar.SetGradient and CreateColor then pcall(bar.SetGradient, bar, "VERTICAL", CreateColor(0.05, 0.08, 0.20, 0.95), CreateColor(0.12, 0.20, 0.45, 0.95)) end
   local rule = w:CreateTexture(nil, "ARTWORK"); rule:SetPoint("TOPLEFT", 1, -23); rule:SetPoint("TOPRIGHT", -1, -23)
   rule:SetHeight(1); rule:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.8)
+  if iron then bar:Hide(); rule:Hide() end
   applyAlpha()
 
   local icon = w:CreateTexture(nil, "OVERLAY"); icon:SetSize(18, 18); icon:SetPoint("TOPLEFT", 4, -3)
@@ -265,9 +294,10 @@ local function build()
   local title = w:CreateFontString(nil, "OVERLAY", "GameFontNormal"); title:SetPoint("LEFT", icon, "RIGHT", 4, 0)
   title:SetText("KINA")
   -- mode chip
-  w.chip = CreateFrame("Frame", nil, w); w.chip:SetSize(44, 14); w.chip:SetPoint("LEFT", title, "RIGHT", 6, 0)
+  w.chip = CreateFrame("Frame", nil, w); w.chip:SetSize(44, iron and 18 or 14); w.chip:SetPoint("LEFT", title, "RIGHT", 6, 0)
   w.chip.bg = w.chip:CreateTexture(nil, "ARTWORK"); w.chip.bg:SetAllPoints()
   w.chip.text = text(w.chip, "GameFontHighlightSmall", "CENTER"); w.chip.text:SetPoint("CENTER", 0, 0)
+  if iron then C.Skin.Chip(w.chip) end
   -- your Kina level (hover for details)
   w.rep = CreateFrame("Button", nil, w); w.rep:SetSize(70, 16); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 6, 0)
   w.rep.text = text(w.rep, "GameFontHighlightSmall", "LEFT"); w.rep.text:SetPoint("LEFT", 0, 0)
@@ -326,6 +356,7 @@ local function build()
   -- buttons
   w.go = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
   w.go:SetSize(96, 26); w.go:SetPoint("BOTTOMLEFT", 8, 8)
+  if C.Skin then C.Skin.Button(w.go) end
   w.go:SetScript("OnClick", function()
     if C.session then C.StopSession() else C.StartSession() end
   end)
@@ -343,8 +374,23 @@ local function build()
   w.pay = smallButton(w, "Pay", W - 16, function()
     if w.pay.rcv then if C.RequestSettle then C.RequestSettle(w.pay.rcv) end
     elseif C.PayStart then C.PayStart(C.PayDue and C.PayDue()) end
-  end, 20)
+  end, (C.Skin and C.Skin.On()) and 24 or 20)
   w.pay:SetPoint("BOTTOMLEFT", 8, 38); w.pay:Hide()
+  -- 1.1.0: at the auction house the same spot is a Scan AH button (when nothing is owed)
+  w.scan = smallButton(w, "Scan AH", W - 16, function() if C.StartScanLoop then C.StartScanLoop() end; C.RefreshWidget() end,
+    (C.Skin and C.Skin.On()) and 24 or 20)
+  w.scan:SetPoint("BOTTOMLEFT", 8, 38); w.scan:Hide()
+  w.scan:SetScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    if C.TipOwner then C.TipOwner(self) else GameTooltip:SetOwner(self, "ANCHOR_BOTTOM") end
+    GameTooltip:AddLine("Auction house scan", 1, 0.82, 0)
+    GameTooltip:AddLine("Kina prices your loot from auction scans: yours, or a groupmate's shared scan, whichever is newest.", 1, 1, 1, true)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(C.ScanSourceText and C.ScanSourceText() or "no scan yet", 0.31, 0.76, 0.97, true)
+    GameTooltip:AddLine("Click to scan now; Kina then rescans every 15 minutes (the game's limit) while the auction house is open.", 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  w.scan:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.")
 
   local acc, tick = 0, 0

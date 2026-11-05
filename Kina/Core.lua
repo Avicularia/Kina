@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.0.10" -- Public Kina
+C.version = "1.1.0" -- Public Kina
 C.PUBLIC = true
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).
@@ -185,7 +185,7 @@ function C.InitDB()
     local n = C.Sanitize(KinaDB)
     if n and n > 0 then
       C.dataRepaired = n
-      -- 1.0.10: keep what was dropped, for Claude
+      -- 1.1.0: keep what was dropped, for Claude
       KinaDB.repairs = type(KinaDB.repairs) == "table" and KinaDB.repairs or {}
       table.insert(KinaDB.repairs, 1, { t = (GetServerTime and GetServerTime()) or 0, v = C.version, n = n, paths = C.repairPaths or {} })
       while #KinaDB.repairs > 10 do table.remove(KinaDB.repairs) end
@@ -213,7 +213,7 @@ local early = {}
 local function blocked(event, addon, func)
   if addon ~= ADDON then return end
   local rec = { event = event, func = tostring(func), t = C.Now(), stage = C.stage or "?" }
-  -- 1.0.10: what Kina was doing, to find the cause of an UNKNOWN() block
+  -- 1.1.0: what Kina was doing, to find the cause of an UNKNOWN() block
   if InCombatLockdown then rec.combat = InCombatLockdown() and true or false end
   if C.lastSend then rec.lastSend = C.lastSend.k; rec.sendAgo = (GetTime and GetTime() or 0) - C.lastSend.t end
   if C.lastAction then rec.lastAction = C.lastAction.what; rec.actAgo = (GetTime and GetTime() or 0) - C.lastAction.t end
