@@ -124,9 +124,15 @@ end
 
 local function chip(textv, r, g, b)
   w.chip.text:SetText(textv)
-  local iron = C.Skin and C.Skin.ChipColor(w.chip, r, g, b)
-  if not iron then w.chip.bg:SetColorTexture(r, g, b, 0.9) end
-  w.chip:SetWidth(math.max(40, (w.chip.text:GetStringWidth() or 30) + (iron and 20 or 12)))
+  if w.chip.iron then
+    -- 1.2.1: just the word, in the state's colour, lightened to read on iron
+    local function up(v) return math.min(1, 0.35 + v * 1.6) end
+    w.chip.text:SetTextColor(up(r), up(g), up(b))
+    w.chip:SetWidth(math.max(24, (w.chip.text:GetStringWidth() or 30) + 2))
+    return
+  end
+  w.chip.bg:SetColorTexture(r, g, b, 0.9)
+  w.chip:SetWidth(math.max(40, (w.chip.text:GetStringWidth() or 30) + 12))
 end
 
 function C.RefreshWidget()
@@ -147,7 +153,8 @@ function C.RefreshWidget()
     else w.scan:Hide() end
   end
   local s = C.session
-  w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND")
+  if w.chip and w.chip.iron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
+  else w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND") end
   if w.rep and C.RepLine then pcall(function() w.rep.text:SetText(C.RepLine() .. (C.ShareData() and "" or " |cff888888paused|r")) end) end
   w.timer:SetText(presetText(C.settings.farmPreset))
   if s and C.FarmView then
@@ -309,7 +316,7 @@ local function build()
   w.chip = CreateFrame("Frame", nil, w); w.chip:SetSize(44, iron and 18 or 14); w.chip:SetPoint("LEFT", title, "RIGHT", 6, 0)
   w.chip.bg = w.chip:CreateTexture(nil, "ARTWORK"); w.chip.bg:SetAllPoints()
   w.chip.text = text(w.chip, "GameFontHighlightSmall", "CENTER"); w.chip.text:SetPoint("CENTER", 0, 0)
-  if iron then C.Skin.Chip(w.chip) end
+  if iron then w.chip.bg:Hide(); w.chip.iron = true end
   -- your Kina level (hover for details)
   w.rep = CreateFrame("Button", nil, w); w.rep:SetSize(70, 16); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 6, 0)
   w.rep:SetFrameLevel(w:GetFrameLevel() + 5)
@@ -412,6 +419,76 @@ local function build()
   w.scan:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   w.pay:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.\n\nRight-click: the Debts page (Pay, more time, Forgive).")
+
+  -- 1.2.1 iron look: a clean layout with fixed, chosen text sizes. Scaling the game's
+  -- small fonts up made text sit on the tile borders and crowd the header; the whole
+  -- widget can still be made bigger with its corner grip.
+  if ironLook then
+    local FONT = STANDARD_TEXT_FONT or (GameFontNormal and GameFontNormal:GetFont()) or "Fonts\\FRIZQT__.TTF"
+    local function fx(fs, size, justify)
+      if not (fs and fs.SetFont) then return end
+      fs:SetFont(FONT, size, "")
+      if fs.SetShadowOffset then fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 1) end
+      if justify then fs:SetJustifyH(justify) end
+    end
+    local function place(f, point, x, y) f:ClearAllPoints(); f:SetPoint(point, w, point, x, y) end
+    local IH = 256
+    w:SetSize(W, IH)
+    -- header: logo, KINA, mode, level ... Sound, close
+    icon:ClearAllPoints(); icon:SetPoint("TOPLEFT", 9, -4); icon:SetSize(18, 18)
+    fx(title, 13); title:SetTextColor(1, 0.82, 0.25)
+    w.chip:ClearAllPoints(); w.chip:SetPoint("LEFT", title, "RIGHT", 10, 0); w.chip:SetHeight(16)
+    fx(w.chip.text, 11, "LEFT"); w.chip.text:ClearAllPoints(); w.chip.text:SetPoint("LEFT", 0, 0)
+    w.rep:ClearAllPoints(); w.rep:SetPoint("LEFT", w.chip, "RIGHT", 10, 0)
+    fx(w.rep.text, 11, "LEFT")
+    alpha:Hide() -- (background: Settings, or right-click the title)
+    close:Hide()
+    local x = CreateFrame("Button", nil, w, "UIPanelCloseButton")
+    x:SetSize(24, 24); x:SetPoint("TOPRIGHT", w, "TOPRIGHT", 1, 1); x:SetFrameLevel(w:GetFrameLevel() + 40)
+    x:SetScript("OnClick", function() C.ShowWidget(false) end)
+    tip(x, "Hide", "Hides the widget. /kina widget (or the minimap button) brings it back; a running farm keeps going.")
+    w.snd:SetSize(56, 18); w.snd:ClearAllPoints(); w.snd:SetPoint("RIGHT", x, "LEFT", -2, 0)
+    if w.snd:GetFontString() then fx(w.snd:GetFontString(), 10) end
+    if handle then
+      handle:EnableMouse(true)
+      handle:HookScript("OnMouseUp", function(_, btn)
+        if btn == "RightButton" then
+          local a = (C.settings.widgetAlpha or 0.85) + 0.15
+          if a > 1.0 then a = 0.35 end
+          C.settings.widgetAlpha = a; applyAlpha()
+        end
+      end)
+    end
+    -- hero row: gold per hour on the left, the clock and timer on the right
+    place(w.rate, "TOPLEFT", 14, -34); fx(w.rate, 24); w.rate:SetWidth(190)
+    place(w.rateSub, "TOPLEFT", 15, -62); fx(w.rateSub, 11); w.rateSub:SetWidth(200)
+    place(w.clock, "TOPRIGHT", -14, -35); fx(w.clock, 19, "RIGHT"); w.clock:SetWidth(110)
+    w.timer:ClearAllPoints(); w.timer:SetPoint("TOPRIGHT", w, "TOPRIGHT", -12, -58); w.timer:SetSize(86, 20)
+    if w.timer:GetFontString() then fx(w.timer:GetFontString(), 10) end
+    -- tiles: 74 x 54, label / value / note each clear of the 5 px border
+    local tw, gap, x0, ty = 74, 4, 10, -86
+    for i, tl in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do
+      tl:ClearAllPoints(); tl:SetPoint("TOPLEFT", w, "TOPLEFT", x0 + (i - 1) * (tw + gap), ty); tl:SetSize(tw, 54)
+      fx(tl.label, 9, "CENTER"); tl.label:ClearAllPoints(); tl.label:SetPoint("TOP", tl, "TOP", 0, -9)
+      tl.label:SetTextColor(0.62, 0.62, 0.62)
+      fx(tl.value, 14, "CENTER"); tl.value:ClearAllPoints(); tl.value:SetPoint("CENTER", tl, "CENTER", 0, -1); tl.value:SetWidth(tw - 12)
+      fx(tl.sub, 8, "CENTER"); tl.sub:ClearAllPoints(); tl.sub:SetPoint("BOTTOM", tl, "BOTTOM", 0, 9); tl.sub:SetWidth(tw - 12)
+      tl.sub:SetTextColor(0.55, 0.55, 0.55)
+    end
+    -- best drop and status
+    w.bestIcon:ClearAllPoints(); w.bestIcon:SetPoint("TOPLEFT", w, "TOPLEFT", 14, -150); w.bestIcon:SetSize(18, 18)
+    fx(w.best, 11); w.best:SetWidth(W - 50)
+    place(w.status, "TOPLEFT", 15, -174); fx(w.status, 11); w.status:SetWidth(W - 30)
+    -- buttons
+    for _, b in ipairs({ w.go, w.pause, runs, hide, w.pay, w.scan }) do
+      if b and b.GetFontString and b:GetFontString() then fx(b:GetFontString(), 12) end
+    end
+    w.pay:ClearAllPoints(); w.pay:SetPoint("BOTTOMLEFT", 10, 40); w.pay:SetWidth(W - 20)
+    w.scan:ClearAllPoints(); w.scan:SetPoint("BOTTOMLEFT", 10, 40); w.scan:SetWidth(W - 20)
+    w.go:ClearAllPoints(); w.go:SetPoint("BOTTOMLEFT", 10, 10)
+    local bw = math.floor((W - 20 - 3 * 4) / 4)
+    for _, b in ipairs({ w.go, w.pause, runs, hide }) do b:SetSize(bw, 26) end
+  end
 
   local acc, tick = 0, 0
   w:SetScript("OnUpdate", function(_, el)
