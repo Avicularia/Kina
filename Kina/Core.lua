@@ -3,7 +3,17 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.2.5" -- Public Kina
+C.version = "1.2.6"
+-- is version a newer than b? ("1.2.10" > "1.2.9")
+function C.VersionNewer(a, b)
+  local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
+  local x, y = parts(a), parts(b)
+  for i = 1, math.max(#x, #y) do
+    local p, q = x[i] or 0, y[i] or 0
+    if p ~= q then return p > q end
+  end
+  return false
+end -- Public Kina
 C.PUBLIC = true
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).
@@ -358,6 +368,25 @@ function C.MakeDraggable(f, key, handle, onMoved)
     handle:SetScript("OnMouseDown", function(_, btn) if btn == "LeftButton" then start() end end)
     handle:SetScript("OnMouseUp", function(_, btn) if btn == "LeftButton" and C.dragging == f then stop() end end)
     handle:SetScript("OnHide", function() if C.dragging == f then stop() end end)
+  end
+  -- 1.2.6: with the iron look the whole iron border moves the window too (four thin
+  -- strips along the edges; the bottom-right corner stays the resize grip)
+  if handle and C.Skin and C.Skin.On() then
+    local T, GRIP = 8, 26
+    local function strip(p1, p2, x1, y1, x2, y2, w, h)
+      local e = CreateFrame("Frame", nil, f)
+      e:SetFrameLevel((f:GetFrameLevel() or 1) + 30)
+      e:SetPoint(p1, f, p1, x1, y1); e:SetPoint(p2, f, p2, x2, y2)
+      if w then e:SetWidth(w) end; if h then e:SetHeight(h) end
+      e:EnableMouse(true)
+      e:SetScript("OnMouseDown", function(_, btn) if btn == "LeftButton" then start() end end)
+      e:SetScript("OnMouseUp", function(_, btn) if btn == "LeftButton" and C.dragging == f then stop() end end)
+      e:SetScript("OnHide", function() if C.dragging == f then stop() end end)
+    end
+    strip("TOPLEFT", "TOPRIGHT", 0, 0, -36, 0, nil, T)          -- top (the close button keeps its corner)
+    strip("TOPLEFT", "BOTTOMLEFT", 0, -T, 0, 0, T, nil)          -- left
+    strip("TOPRIGHT", "BOTTOMRIGHT", 0, -36, 0, GRIP, T, nil)    -- right (stops above the grip)
+    strip("BOTTOMLEFT", "BOTTOMRIGHT", T, 0, -GRIP, 0, nil, T)   -- bottom (stops left of the grip)
   end
 end
 

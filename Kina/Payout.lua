@@ -132,10 +132,19 @@ end
 
 ------------------------------------------------------------------ pay button
 -- What you owe next (oldest first): farm splits from the last 14 days, then sale top-ups.
+-- 1.2.6: the whole amount owed to one person (every open farm with them), so the widget's
+-- line and button agree and one payment settles them all (payments spread over the debts)
+local function firstOf(n) return n and (n:match("^([^%-]+)") or n) end
 function C.PayDue()
+  local due
   for _, d in ipairs(C.Debts()) do
-    if d.dir == "owe" and d.amt >= 1 then return { to = d.who, amt = math.floor(d.amt), kind = d.topup and "owed" or "split", s = d.s } end
+    if d.dir == "owe" and d.amt >= 1 then
+      if not due then due = { to = d.who, amt = 0, kind = d.topup and "owed" or "split", s = d.s, n = 0 } end
+      if firstOf(d.who) == firstOf(due.to) then due.amt = due.amt + d.amt; due.n = due.n + 1 end
+    end
   end
+  if due then due.amt = math.floor(due.amt) end
+  return due
 end
 
 local function unitFor(name)
@@ -236,9 +245,15 @@ C.AskAcceptTrade = popupAccept
 -- money you are owed (oldest first), not yet received
 function C.ReceiveDue()
   if C.session then return nil end
+  local due
   for _, d in ipairs(C.Debts()) do
-    if d.dir == "owed" and d.amt >= 1 then return { from = d.who, amt = math.floor(d.amt), s = d.s } end
+    if d.dir == "owed" and d.amt >= 1 then
+      if not due then due = { from = d.who, amt = 0, s = d.s, n = 0 } end
+      if firstOf(d.who) == firstOf(due.from) then due.amt = due.amt + d.amt; due.n = due.n + 1 end
+    end
   end
+  if due then due.amt = math.floor(due.amt) end
+  return due
 end
 local expecting -- { from, amt, s, t }
 function C.RequestSettle(due)
@@ -434,20 +449,33 @@ end
 -- A debt is due 7 days after its farm; the debtor can ask once for more time, and the
 -- person owed can give 3 more days (or forgive). Nothing happens automatically when a
 -- debt is overdue yet: it just says so (standing comes later).
-C.DEBT_DAYS, C.EXTEND_DAYS = 7, 3
+-- 1.2.6 (Taylor, Nov 5): parties with randoms settle fast. A debt is due 2 hours after
+-- its farm ends; one extension adds 2 hours (4 hours at most). The clock never pauses.
+-- (EXTEND_DAYS keeps its old name for older callers; it now counts HOURS.)
+C.DEBT_HOURS, C.EXTEND_HOURS, C.MAX_HOURS = 2, 2, 4
+C.DEBT_DAYS, C.EXTEND_DAYS = C.DEBT_HOURS, C.EXTEND_HOURS
 function C.DebtDue(d)
   if not (d and d.s) then return nil end
   local sp = d.s.split or {}
   local ext = sp.ext and tonumber(sp.ext[d.key]) or 0
-  return (d.s.stop or d.s.start or 0) + (C.DEBT_DAYS + ext) * 86400
+  local hours = math.min(C.MAX_HOURS, C.DEBT_HOURS + math.max(0, ext))
+  return (d.s.stop or d.s.start or 0) + hours * 3600
 end
 function C.DueText(d)
   local due = C.DebtDue(d)
   if not due then return "" end
   local left = due - C.Now()
-  if left < 0 then return "|cffff8040overdue|r" end
-  local days = math.floor(left / 86400)
-  return days >= 1 and ("due in " .. days .. (days == 1 and " day" or " days")) or ("due in " .. math.max(1, math.floor(left / 3600)) .. " h")
+  if left < 0 then return "|cffff4040past due|r" end
+  local h, m = math.floor(left / 3600), math.floor((left % 3600) / 60)
+  return "due in " .. (h > 0 and (h .. " h " .. m .. " min") or (math.max(1, m) .. " min"))
+end
+-- how much of the payment XP a payment earns by how soon it came after the farm:
+-- full within 5 minutes, falling evenly to half at 1 hour, half after that
+function C.PaySpeed(stop, at)
+  local t = (at or C.Now()) - (stop or at or 0)
+  if t <= 300 then return 1 end
+  if t >= 3600 then return 0.5 end
+  return 1 - 0.5 * (t - 300) / 3300
 end
 local function queue(kind, who, amt, ref)
   local p = { kind = kind, who = first(who), amt = math.floor(amt or 0), ref = ref, t = C.Now() }
@@ -463,7 +491,7 @@ function C.AskForTime(d)
   sp.plea[d.key] = true
   if C.Log then C.Log("plea", "asked", d.who, math.floor(d.amt), farmRef(d.s)) end
   queue("plea", d.who, d.amt, farmRef(d.s))
-  C.Print(string.format("asked %s for more time to pay %s (%s). They can give you %d more days or forgive it.", C.Books.Name(d.who), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_DAYS))
+  C.Print(string.format("asked %s for more time to pay %s (%s). They can give you %d more hours or forgive it.", C.Books.Name(d.who), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_HOURS))
   if C.Refresh then C.Refresh() end
   return true
 end
@@ -471,11 +499,13 @@ end
 function C.ExtendDebt(d)
   if not (d and d.dir == "owed" and d.s and d.s.split) then return false end
   local sp = d.s.split
-  sp.ext = sp.ext or {}; sp.ext[d.key] = (tonumber(sp.ext[d.key]) or 0) + C.EXTEND_DAYS
+  sp.ext = sp.ext or {}
+  if (tonumber(sp.ext[d.key]) or 0) >= C.MAX_HOURS - C.DEBT_HOURS then C.Print("this debt already has the most time it can get (" .. C.MAX_HOURS .. " hours)."); return false end
+  sp.ext[d.key] = (tonumber(sp.ext[d.key]) or 0) + C.EXTEND_HOURS
   if sp.pleaFrom then sp.pleaFrom[d.key] = nil end
   if C.Log then C.Log("extend", "gave", d.who, C.EXTEND_DAYS, farmRef(d.s)) end
   queue("ext", d.who, C.EXTEND_DAYS, farmRef(d.s))
-  C.Print(string.format("gave %s %d more days to pay %s.", C.Books.Name(d.who), C.EXTEND_DAYS, C.Money(math.floor(d.amt))))
+  C.Print(string.format("gave %s %d more hours to pay %s.", C.Books.Name(d.who), C.EXTEND_HOURS, C.Money(math.floor(d.amt))))
   if C.Refresh then C.Refresh() end
   return true
 end
@@ -487,11 +517,11 @@ function C.OnDebtNote(kind, from, amt, ref)
       local sp = d.s.split
       if kind == "plea" and d.dir == "owed" then
         sp.pleaFrom = sp.pleaFrom or {}; sp.pleaFrom[d.key] = true
-        C.Print(string.format("|cffffd100%s asks for more time|r to pay the %s from %s. Open Kina > Ledger > that farm to give %d more days or forgive it.",
+        C.Print(string.format("|cffffd100%s asks for more time|r to pay the %s from %s. Open Kina > Ledger > Debts to give %d more hours or forgive it.",
           C.Books.Name(from), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_DAYS))
       elseif kind == "ext" and d.dir == "owe" then
-        sp.ext = sp.ext or {}; sp.ext[d.key] = (tonumber(sp.ext[d.key]) or 0) + (tonumber(amt) or C.EXTEND_DAYS)
-        C.Print(string.format("|cff7CFC00%s gave you %d more days|r to pay the %s from %s.", C.Books.Name(from), tonumber(amt) or C.EXTEND_DAYS, C.Money(math.floor(d.amt)), d.farm or "farm"))
+        sp.ext = sp.ext or {}; sp.ext[d.key] = math.min(C.MAX_HOURS - C.DEBT_HOURS, (tonumber(sp.ext[d.key]) or 0) + math.min(C.EXTEND_HOURS, tonumber(amt) or C.EXTEND_HOURS))
+        C.Print(string.format("|cff7CFC00%s gave you %d more hours|r to pay the %s from %s.", C.Books.Name(from), tonumber(amt) or C.EXTEND_DAYS, C.Money(math.floor(d.amt)), d.farm or "farm"))
       end
       break
     end
@@ -527,7 +557,7 @@ function C.SettleMoved(who, gave, got, via)
         k = math.min(d.amt, got - usedGot); markPaid(d, k); usedGot = usedGot + k
       end
       if k > 0 then covers[#covers + 1] = { start = d.s and d.s.start, label = d.farm, amt = math.floor(k), dir = d.dir, topup = d.topup or nil,
-        total = math.floor((d.tr and tonumber(d.tr.amt)) or (d.amt + 0)) } end
+        total = math.floor((d.tr and tonumber(d.tr.amt)) or (d.amt + 0)), stop = d.s and d.s.stop or nil } end
     end
   end
   C.db.settles = C.db.settles or {}
@@ -575,7 +605,8 @@ function C._matchConf(r, theirGave, label)
       local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
       if total >= 1 then
         local part = (cv.amt or 0) / total
-        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part
+        -- 1.2.6: paid soon after the farm earns more (full in 5 min, half after an hour)
+        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
         else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part end
       end
     end

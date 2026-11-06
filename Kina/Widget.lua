@@ -49,16 +49,22 @@ local function bestDrop(s)
   -- so every widget shows the same one
   if s.sync and s.sync.chain then
     local ex = C.FarmSync and C.FarmSync.Excluded and C.FarmSync.Excluded(s.sync) or {}
-    local cnt, val = {}, {}
+    local cnt, val, who = {}, {}, {}
     for _, ev in ipairs(s.sync.chain) do
       if ev.kind == "L" and not ex[ev.seq] then
         local id, n, _, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
         id, n, v = tonumber(id), tonumber(n) or 1, tonumber(v) or 0
-        if id then cnt[id] = (cnt[id] or 0) + n; val[id] = (val[id] or 0) + n * v end
+        if id then
+          cnt[id] = (cnt[id] or 0) + n; val[id] = (val[id] or 0) + n * v
+          who[id] = who[id] or {}; who[id][ev.origin or "?"] = true
+        end
       end
     end
     for id, v in pairs(val) do if v > bestV then bestID, bestV, bestN = id, v, cnt[id] end end
-    return bestID, bestV, bestN
+    -- 1.2.6: whose drop it was (not whose Kina priced it)
+    local names, k = {}, 0
+    for nm in pairs(bestID and who[bestID] or {}) do k = k + 1; names[#names + 1] = C.Books.Name(nm) end
+    return bestID, bestV, bestN, (k == 1 and names[1]) or (k > 1 and "the group") or nil
   end
   for id, n in pairs(s.items or {}) do
     local v = (C.FarmValue and C.FarmValue(id) or 0) * n
@@ -108,8 +114,8 @@ end
 
 local lastBest -- flash the best-drop line when a new top drop lands
 local function showBest(s)
-  local id, v, n = nil, 0, 0
-  if s then id, v, n = bestDrop(s) end
+  local id, v, n, looter = nil, 0, 0, nil
+  if s then id, v, n, looter = bestDrop(s) end
   if id then
     local r = C.Item(id)
     w.bestIcon:SetTexture(itemIcon(id) or "Interface\\Icons\\INV_Misc_QuestionMark"); w.bestIcon:Show()
@@ -187,7 +193,9 @@ function C.RefreshWidget()
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
         setTile(w.tKills, tostring(v.kills or 0), secs >= 60 and string.format("%d / hour", (v.kills or 0) * 3600 / secs) or "")
-        if s.sync then w.status:SetText("|cff9d9d9dcounted by " .. tostring(leader) .. "|r")
+        if s.sync then
+          local bw = select(4, bestDrop(s))
+          w.status:SetText(bw and ("|cff9d9d9dbest drop: " .. (bw == "the group" and "the group's" or (bw .. "'s")) .. "|r") or "|cff9d9d9dshared with the group|r")
         -- 1.0.10: the farm started before Kina saw your partner's Kina: it isn't shared, and
         -- their loot only counts when they loot near you
         else w.status:SetText("|cffff8040not shared: Stop, then Start again to share|r") end
@@ -248,7 +256,15 @@ function C.RefreshWidget()
       local tgt = C.PayDue and C.PayDue(); tgt = tgt and tgt.to or (C.ReceiveDue and C.ReceiveDue() or {}).from
       local d = open[1]
       for _, o in ipairs(open) do if tgt and C.Books.Name(o.who) == C.Books.Name(tgt) then d = o; break end end
-      if d then
+      local tot = C.PayDue and C.PayDue()
+      if not tot then tot = C.ReceiveDue and C.ReceiveDue(); if tot then tot.to = tot.from end end
+      if tot and tot.n and tot.n > 1 then
+        -- 1.2.6: the total with that person across every open farm, same as the button
+        local nm = C.Books.Name(tot.to)
+        local farms = string.format(" |cff9d9d9d(%d farms)|r", tot.n)
+        w.status:SetText(C.PayDue() and ("|cffff8040you owe " .. nm .. " " .. C.Money(tot.amt) .. "|r" .. farms)
+          or ("|cffffd100" .. nm .. " owes you " .. C.Money(tot.amt) .. "|r" .. farms))
+      elseif d then
         local left = C.Money(math.floor(d.amt - d.done))
         local more = #open > 1 and string.format(" |cff9d9d9d(+%d more)|r", #open - 1) or ""
         w.status:SetText(d.dir == "owe" and ("|cffff8040you owe " .. C.Books.Name(d.who) .. " " .. left .. "|r" .. more)

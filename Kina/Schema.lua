@@ -99,7 +99,7 @@ local DB = { t = T, f = {
   log = { t = T, f = { lines = list({ t = T, f = { e = S, h = S }, req = { "e", "h" } }), base = S, summary = NUMMAP,
     repState = { t = T, f = { xp = N, share = B, cap = NUMMAP } } } },
   settles = list({ t = T, f = { t = N, who = S, gave = N, got = N, via = S, paidOff = N, cameIn = N, conf = N,
-    covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N }, req = { "amt", "dir" } }) },
+    covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N }, req = { "amt", "dir" } }) },
     req = { "t", "who", "gave", "got", "via" } }),
   payout = { t = T, f = { floors = list({ t = T, f = { id = N, n = N, v = N, members = N, partners = list(S), label = S, t = N },
     req = { "id", "n", "v", "members", "partners" } }), owed = NUMMAP } },

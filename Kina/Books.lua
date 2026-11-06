@@ -140,7 +140,7 @@ function B.Waiting()
     local total = math.max((d.tr and tonumber(d.tr.amt)) or d.amt, d.amt)
     local part = total >= 1 and d.amt / total or 1
     if d.dir == "owe" then
-      out[#out + 1] = { xp = math.floor(R.PayXP(total) * part), what = string.format("Pay %s %s", B.Name(d.who), C.Money(math.floor(d.amt))),
+      out[#out + 1] = { xp = math.floor(R.PayXP(total) * part * (C.PaySpeed and C.PaySpeed(d.s and d.s.stop) or 1)), what = string.format("Pay %s %s", B.Name(d.who), C.Money(math.floor(d.amt))),
         why = d.topup and "AH sale top-up" or (d.farm or "farm"), kind = "pay", who = d.who, amt = d.amt }
     else
       out[#out + 1] = { xp = math.floor(R.RECV_XP * part), what = string.format("%s pays you %s", B.Name(d.who), C.Money(math.floor(d.amt))),

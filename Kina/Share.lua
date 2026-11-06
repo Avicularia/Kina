@@ -115,6 +115,27 @@ local function enqueue(msg, channel, target, urgent)
   if S.sender then S.sender:Show() end
 end
 S._queue = queue
+-- 1.2.6: how a scan transfer is going, for the scan bar ("sending your scan 40%",
+-- "getting Tri's scan 40%")
+local peakQ = 0
+function S.Progress()
+  local now = GetTime and GetTime() or 0
+  local best
+  for _, b in pairs(S._incoming or {}) do
+    if b.what == "M" and now - (b.last or b.time or 0) < 60 then
+      local n = 0; for _ in pairs(b.rows or {}) do n = n + 1 end
+      local exp = (b.expect and b.expect > 0) and b.expect or nil
+      best = { dir = "in", who = b.from, pct = exp and math.min(99, math.floor(n * 100 / exp)) or nil, n = n }
+    end
+  end
+  if best then return best end
+  local q = #queue
+  if q == 0 then peakQ = 0; return nil end
+  if S.dumping and S.dumping.M then
+    if q > peakQ then peakQ = q end
+    return { dir = "out", pct = peakQ > 0 and math.floor((peakQ - q) * 100 / peakQ) or 0 }
+  end
+end
 
 local sender = CreateFrame("Frame")
 S.sender = sender
@@ -217,7 +238,7 @@ local function hello(channel, target, force)
   local msg = table.concat({ "H", d.uid, b36(PROTO), clean(myName()), clean(C.MarketKey()),
     b36(share and C.market.scanTime or 0), b36(share and S.StampLoot() or 0), b36(share and vendorTime() or 0), b36(share and offerTime() or 0),
     (cls:gsub("%A", "")), b36((UnitLevel and UnitLevel("player")) or 0), table.concat(profs, ","), b36(S.CommStamp()),
-    rep >= 0 and b36(rep) or "x" }, "|")
+    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")) }, "|")
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -411,6 +432,15 @@ local function onHello(from, rest, channel)
   if not (uid and uid:match("^%x+$") and scanT and lootV and vendT) or uid == d.uid or n36(proto) ~= PROTO then return end
   local a = authorOf(uid, true)
   a.name, a.seen = name, C.Now()
+  if S.syncHeard then S.syncHeard[from] = true end
+  -- 1.2.6: someone in my group runs a newer Kina: say so once per session
+  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and C.VersionNewer and C.VersionNewer(f[14], C.version) then
+    S.newerSeen = S.newerSeen or {}
+    if not S.newerSeen[f[14]] then
+      S.newerSeen[f[14]] = true
+      C.Print(string.format("|cffffd100%s is on Kina %s, you're on %s: update Kina|r (download the new zip, replace the Kina folder, /reload).", C.Books and C.Books.Name and C.Books.Name(from) or from, f[14], tostring(C.version)))
+    end
+  end
   if C.FarmSync and C.FarmSync.Upgrade and inMyGroup(from) then pcall(C.FarmSync.Upgrade) end
   -- their character: class, level, professions (for duo farming and profession plans)
   if f[9] and f[9]:match("^%u+$") then
@@ -444,6 +474,7 @@ end
 
 ------------------------------------------------------------------ dumps (incoming)
 incoming = {}   -- [from..uid..what] = buffer
+S._incoming = incoming
 local function buf(from, uid, what)
   local b = incoming[from .. uid .. what]
   if b then b.last = GetTime and GetTime() or 0 end -- still arriving
@@ -562,6 +593,7 @@ local function onEnd(from, rest)
     if count > 0 and ver > ((a.market and a.market.t) or 0) then
       a.market = { mkey = C.MarketKey(), t = ver, items = b.rows }
       S.InvalidateMarket()
+      C.Print(string.format("share: got %s's scan (%d prices). Kina uses the newest scan in your group.", C.Books and C.Books.Name and C.Books.Name(from) or from, count))
     end
   elseif what == "L" then
     a.loot = a.loot or { ver = 0, npcs = {} }
@@ -1034,6 +1066,20 @@ function S.Command(rest)
     local used = S.Announce(true)
     C.Print(#used == 0 and "share: not in a group" .. (d.opts.guild and " or guild" or "") .. ", nobody to sync with."
       or ("share: asking " .. table.concat(used, " and ") .. " for new data."))
+    -- 1.2.6: say who answered, so you know it did something
+    if #used > 0 then
+      S.syncHeard = {}
+      C.After(15, function()
+        local names = {}
+        for nm in pairs(S.syncHeard or {}) do names[#names + 1] = C.Books and C.Books.Name and C.Books.Name(nm) or nm end
+        S.syncHeard = nil
+        if #names == 0 then C.Print("share: nobody answered. Is data sharing on for them (Kina > Settings)?")
+        else
+          local p = S.Progress and S.Progress()
+          C.Print("share: " .. table.concat(names, ", ") .. " answered." .. (p and (p.dir == "in" and " Getting a newer scan now, watch the scan bar." or " Sending your scan now, watch the scan bar.") or " Prices are already up to date."))
+        end
+      end)
+    end
   elseif cmd == "forget" then
     d.authors = {}; S.InvalidateMarket()
     C.Print("share: forgot all data received from other players.")

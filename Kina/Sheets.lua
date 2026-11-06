@@ -298,7 +298,7 @@ builders.debts = function(p)
               StaticPopup_Show("KINA_FORGIVE", x.who .. " the " .. C.Money(math.floor(d.amt)), nil, d)
             else C.Forgive(d) end
           end, 100)
-          setBtn(l.btns[2], (sp.pleaFrom and sp.pleaFrom[d.key]) and ("Give " .. C.EXTEND_DAYS .. " more days") or nil, function() C.ExtendDebt(d); p.refresh() end, 150)
+          setBtn(l.btns[2], (sp.pleaFrom and sp.pleaFrom[d.key]) and ("Give " .. C.EXTEND_HOURS .. " more hours") or nil, function() C.ExtendDebt(d); p.refresh() end, 150)
           setBtn(l.btns[3], "Ask to pay", function()
             if C.RequestSettle then C.RequestSettle({ from = d.who, amt = math.floor(d.amt), s = d.s }) end end, 110)
         end

@@ -1305,3 +1305,38 @@ function C.OnFarmEdit(kind, id, n, who, on, from)
   C.SessionLog("edit", id, on and 1 or 0, kind, from)
   if C.RefreshWidget then C.RefreshWidget() end
 end
+
+-- 1.2.6: walking into a dungeon or raid offers to start a farm there (or to swap the
+-- running farm for one in the instance). Only the group's leader (or a solo player) is
+-- asked; everyone else gets the usual farm invite when the leader starts it.
+do
+  local askedFor
+  local function leaderOrSolo()
+    if not (IsInGroup and IsInGroup()) then return true end
+    return UnitIsGroupLeader and UnitIsGroupLeader("player") and true or false
+  end
+  if StaticPopupDialogs then StaticPopupDialogs["KINA_INSTANCE_FARM"] = {
+    text = "%s", button1 = "Start farm", button2 = "Not now",
+    OnAccept = function(_, data)
+      if not data then return end
+      if C.session and C.StopSession then C.StopSession(nil, "stopped") end
+      if C.StartSession then C.StartSession(data) end
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  } end
+  local function check()
+    if not (StaticPopup_Show and StaticPopupDialogs) then return end
+    if not (IsInInstance) then return end
+    local inside, kind = IsInInstance()
+    if not inside or (kind ~= "party" and kind ~= "raid") then askedFor = nil; return end
+    local name = GetInstanceInfo and GetInstanceInfo() or (GetRealZoneText and GetRealZoneText()) or "dungeon"
+    if askedFor == name or not leaderOrSolo() then return end
+    if C.session and C.session.label == name then return end
+    askedFor = name
+    local text = C.session and string.format("Kina: stop the farm \"%s\" and start one in %s?", tostring(C.session.label or "farm"), name)
+      or string.format("Kina: start a farm in %s?", name)
+    StaticPopup_Show("KINA_INSTANCE_FARM", text, nil, name)
+  end
+  C.On("PLAYER_ENTERING_WORLD", function() C.After(3, check) end)
+  C.On("ZONE_CHANGED_NEW_AREA", function() C.After(2, check) end)
+end

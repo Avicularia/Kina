@@ -1070,7 +1070,9 @@ if C.PUBLIC then
       local left = d.amt - d.done
       if left >= 1 then
         if not waiting then row(GOLDC .. "XP waiting|r", "", "", ""); waiting = true end
-        if d.dir == "owe" then row("", "pay " .. d.who .. " " .. C.Money(math.floor(left)), "", GREEN .. "+" .. C.Rep.PayXP(left) .. "|r")
+        if d.dir == "owe" then
+          local tot = math.max(d.amt, 1)
+          row("", "pay " .. d.who .. " " .. C.Money(math.floor(left)), "", GREEN .. "+" .. math.floor(C.Rep.PayXP(tot) * left / tot * (C.PaySpeed and C.PaySpeed(s.stop) or 1)) .. "|r" .. GREY .. " (sooner = more)|r")
         else row("", d.who .. " pays you " .. C.Money(math.floor(left)), "", GREEN .. "+" .. C.Rep.RECV_XP .. "|r") end
       end
     end
@@ -2224,6 +2226,13 @@ function C.ScanSourceText()
   if not list[1] then return "no scan yet" end
   local function ago(t) local m = math.floor((C.Now() - (t or 0)) / 60); return m < 1 and "just now" or (m < 60 and (m .. "m ago") or (math.floor(m / 60) .. "h ago")) end
   local top = list[1]
+  -- 1.2.6: a scan on its way in or out shows first
+  local pr = C.Share and C.Share.Progress and C.Share.Progress()
+  if pr then
+    local pct = pr.pct and (" " .. pr.pct .. "%") or ""
+    if pr.dir == "in" then return "getting " .. (C.Books and C.Books.Name and C.Books.Name(pr.who or "?") or "?") .. "'s scan" .. pct .. (pr.pct and "" or (" (" .. pr.n .. " prices)")) end
+    return "sending your scan to the group" .. pct
+  end
   local text = "prices: " .. (top.name and ((Ambiguate and Ambiguate(top.name, "short") or top.name) .. "'s") or "your") .. " scan " .. ago(top.t)
   if top.name then
     for _, s in ipairs(list) do if not s.name then text = text .. " (yours " .. ago(s.t) .. ")"; break end end
@@ -2437,6 +2446,9 @@ local function buildSettings(f)
   note(function() return C.ShareData() and "on: your Kina level can grow" or "|cffff8040off: your Kina level is paused|r" end)
   toggle("Also share with my guild", function() return C.Share.DB().opts.guild end, function(v) C.Share.DB().opts.guild = v end,
     "Guild members who run Kina also see your Kina level and get your shared data.")
+  -- 1.2.6: a visible Sync button; progress shows on the scan bar, answers in chat
+  action("Sync prices with my group now", function() if C.Share and C.Share.Command then C.Share.Command("now") end end)
+  note(function() return C.ScanSourceText and C.ScanSourceText() or "" end)
   y = y + 4
   header("Check Kina")
   action("Run self-test", function() if C.SelfTest then C.SelfTest.Run() end end)
