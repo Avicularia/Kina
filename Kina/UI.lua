@@ -1057,7 +1057,7 @@ if C.PUBLIC then
     row(GOLDC .. "XP|r", "", "", "")
     if r.farmGain then
       local g = r.farmGain
-      row("", string.format("shared farm, %d min", math.floor((g.secs or 0) / 60)), "", g.paused and (ORANGE .. "0 (sharing was off)|r") or ("+" .. g.xp .. (g.xp < g.want and (GREY .. " (daily cap)|r") or "")))
+      row("", string.format("shared farm, %d min", math.floor((g.secs or 0) / 60)), "", g.paused and (ORANGE .. "0 (sharing was off)|r") or ("+" .. g.xp .. (g.xp < g.want and (GREY .. " (daily cap)|r") or "") .. GREY .. string.format("  %d XP/h", math.floor(g.xp * 3600 / math.max(60, g.secs or 60))) .. "|r"))
     elseif s.minLvl and s.minLvl > 0 and s.minLvl < (C.PROG_MIN_LEVEL or 10) then row("", "someone in the farm was under level 10", "", GREY .. "no Kina XP or standing|r")
     elseif s.sync and r.shortWhy == "gold" then row("", "the farm made less than its gold target (" .. C.Money(C.Rep.FarmNeeds(s.maxLvl, s.groupN)) .. ")", "", GREY .. "no farm XP|r")
     elseif s.sync then row("", "shared farm under 15 minutes", "", GREY .. "no farm XP|r")

@@ -156,10 +156,11 @@ builders.you = function(p)
     -- record
     local r = C.YouRecord and C.YouRecord() or {}
     local rows = {
-      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h)", r.hours) .. "|r") or "") },
+      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h, %d XP/h)", r.hours,
+        math.floor(((C.Rep and C.Rep.Mine and C.Rep.Mine().xp) or 0) / math.max(0.25, r.hours))) .. "|r") or "") },
       { "Your share of farms", money(r.share) },
-      { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
-      { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "") },
+      { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " unconfirmed|r") or "") },
+      { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "") .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " unconfirmed|r") or "") },
       { "Debts you forgave", tostring(r.forgaveN or 0) },
       { "Forgiven for you", tostring(r.forgivenN or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },

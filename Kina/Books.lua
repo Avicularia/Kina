@@ -221,6 +221,10 @@ function C.YouRecord()
     if rec.conf then
       if (rec.paidOff or 0) >= 1 then r.paid = r.paid + 1; r.paidAmt = r.paidAmt + rec.paidOff end
       if (rec.cameIn or 0) >= 1 then r.recv = r.recv + 1; r.recvAmt = r.recvAmt + rec.cameIn end
+    else
+      -- 1.2.6: arrived but not confirmed by their Kina yet (a mail payment, say)
+      if (rec.paidOff or 0) >= 1 then r.paidPend = (r.paidPend or 0) + 1 end
+      if (rec.cameIn or 0) >= 1 then r.recvPend = (r.recvPend or 0) + 1 end
     end
   end
   for _, d in ipairs(C.Debts and C.Debts() or {}) do

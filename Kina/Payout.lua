@@ -568,7 +568,7 @@ function C.SettleMoved(who, gave, got, via)
   if C.pendingConf then
     local keep = {}
     for _, pc in ipairs(C.pendingConf) do
-      if C.Now() - pc.t < 600 and not (first(pc.from) == who and not rec.conf and C._matchConf(rec, pc.gave, pc.label)) then keep[#keep + 1] = pc end
+      if C.Now() - pc.t < (pc.mail and 259200 or 600) and not (first(pc.from) == who and not rec.conf and C._matchConf(rec, pc.gave, pc.label)) then keep[#keep + 1] = pc end
     end
     C.pendingConf = keep
   end
@@ -611,17 +611,52 @@ function C._matchConf(r, theirGave, label)
       end
     end
     if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "", math.floor(payXP), math.floor(recvXP)) end
+    -- 1.2.6: the fanfare: what I earned and what they earned (the mirror of my covers)
+    if C.Toast and C.Toast.Payment then
+      local theirs = 0
+      for _, cv in ipairs(r.covers or {}) do
+        local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
+        if total >= 1 then
+          local part = (cv.amt or 0) / total
+          if cv.dir == "owed" then theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
+          else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part end
+        end
+      end
+      if nx then payXP, recvXP, theirs = 0, 0, 0 end
+      pcall(C.Toast.Payment, r, math.floor(payXP + recvXP), math.floor(theirs))
+    end
     return true
   end
 end
+-- 1.2.6: a mail payment is sent and collected hours apart (and the other person may be
+-- offline), so mail records match for 3 days, and each side re-sends what it saw
+-- whenever that person shows up in the group again
+local MAIL_WINDOW = 259200
 function C.OnSettleConfirm(from, theirGave, label)
+  local isMail = tostring(label or ""):match("^mail:") and true or false
   for _, r in ipairs(C.db.settles or {}) do
-    if C.Now() - r.t > 600 then break end
-    if first(r.who) == first(from) and not r.conf and C._matchConf(r, theirGave, label) then return true end
+    local age = C.Now() - r.t
+    if age > (isMail and MAIL_WINDOW or 600) then break end
+    if first(r.who) == first(from) and not r.conf and (r.via == "mail") == isMail and C._matchConf(r, theirGave, label) then return true end
   end
-  -- not seen yet (their message came first): keep it a moment
+  -- not seen yet (their message came first): keep it a while
   C.pendingConf = C.pendingConf or {}
-  table.insert(C.pendingConf, { from = from, gave = theirGave, label = label, t = C.Now() })
+  table.insert(C.pendingConf, { from = from, gave = theirGave, label = label, t = C.Now(), mail = isMail or nil })
+end
+local resent = {}
+function C.ResendMailConfirms(who)
+  if not (C.Share and C.Share.SendSettle) then return end
+  who = first(who)
+  for _, r in ipairs(C.db.settles or {}) do
+    if C.Now() - r.t > MAIL_WINDOW then break end
+    if r.via == "mail" and not r.conf and first(r.who) == who and (r.gave > 0 or r.got > 0) then
+      local key = who .. (r.t or 0)
+      if not resent[key] or C.Now() - resent[key] > 600 then
+        resent[key] = C.Now()
+        pcall(C.Share.SendSettle, "cnf", r.who, r.gave, "mail:" .. math.floor(r.got))
+      end
+    end
+  end
 end
 local function plainMoney(c) return (C.Money(c):gsub("|T.-|t", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
 local function mailName(who)

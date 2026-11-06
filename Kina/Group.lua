@@ -324,6 +324,7 @@ function C.ResetSyncAsks() wipe(asked) end
 local function inGroup(name) return C.InGroupName(name) end
 function C.OnKinaMate(name, char, tries)
   local full = name
+  if C.ResendMailConfirms then pcall(C.ResendMailConfirms, name) end
   name = short(name)
   if asked[name] or not char or not char.class then return end
   if not inGroup(full) then
