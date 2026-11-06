@@ -1097,7 +1097,10 @@ if C.PUBLIC then
       for i, a in ipairs(list) do
         local it = C.Item and C.Item(a.id)
         local name = (it and it.name) or ("item " .. a.id)
-        row(i <= 5 and (GOLDC .. "#" .. i .. "|r") or "", string.format("%s x%d  %s(%s)|r", name, a.n, GREY, C.Books.Name and C.Books.Name(a.who) or a.who), money(a.val), "")
+        local live = C.session == s and s.sync and not s.sync.closed
+        out[#out + 1] = { dispute = live and { s = s, id = a.id, name = name } or nil,
+          cols = { i <= 5 and (GOLDC .. "#" .. i .. "|r") or "", string.format("%s x%d  %s(%s)|r", name, a.n, GREY, C.Books.Name and C.Books.Name(a.who) or a.who) .. (live and (GREY .. "  click: dispute value|r") or ""), money(a.val), "" },
+          sort = { #out, 0, 0, 0 } }
       end
     end
     out[#out + 1] = { slog = s, toSession = true, cols = { "", "|cff7CFC00open the full farm log (every kill, loot and coin)|r", "", "" }, sort = { #out, 0, 0, 0 } }
@@ -1149,13 +1152,17 @@ if C.PUBLIC then
             local why = g.why == "under10" and "someone under level 10" or (g.why == "gold" and "made less than its gold target" or "needs 15")
             what = string.format("shared farm %s, %d min (%s)", g.label or "", math.floor((g.secs or 0) / 60), why)
           elseif g.kind == "pay" then what = string.format("paid %s %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.paidOff), g.via)
+          elseif g.kind == "forgive" then what = string.format("forgave %s's debt", C.Books.Name(g.who))
+          elseif g.kind == "extend" then what = string.format("gave %s more time", C.Books.Name(g.who))
+          elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
+          elseif g.kind == "lapsed" then what = string.format("%sa debt to %s lapsed unpaid (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           else what = string.format("%s paid you %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.cameIn), g.via) end
           local note = g.paused and (ORANGE .. "sharing off|r") or (g.xp < g.want and (GREY .. "daily cap|r") or "")
           out[#out + 1] = { cols = { day(g.t), what, note, g.xp > 0 and ("+" .. g.xp) or (GREY .. "0|r") }, sort = { g.t, what, "", g.xp } }
         end
       end
       if rolled > 0 then out[#out + 1] = { cols = { GREY .. "older|r", "rolled up after 90 days", "", "+" .. rolled }, sort = { 0, "", "", rolled } } end
-      return string.format("%sXP:|r Kina level %s, %d XP %s(unverified)|r%s", GOLDC, C.Rep.Roman(m.level), m.xp, GREY, ""),
+      return string.format("%sXP:|r Kina level %s, %d XP  %s·|r  %sStanding:|r %s, %d rep %s(unverified)|r", GOLDC, C.Rep.Roman(m.level), m.xp, GREY, GOLDC, m.standing or "Unproven", m.rep or 0, GREY),
         { "When", "What", "Note", "XP" }, { 0, 70, 560, 700 }, out, {}
     end
     local rows, tot = C.Books.Farms(ui.ledgerDays)
@@ -2522,6 +2529,7 @@ local function buildSettings(f)
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
   toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayCue then C.PlayCue("start") end end)
   toggle("Post farm stats to group chat (every 15 min)", function() return st.groupAd ~= false end, function(v) st.groupAd = v end)
+  toggle("Play the Kina theme after a farm (in the Ledger)", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end)
   toggle("Leave cloth for our tailor (Kina loots for you)", function() return st.leaveCloth == true end, function(v) if C.SetLeaveCloth then C.SetLeaveCloth(v) else st.leaveCloth = v end end)
   box("Farm timer (hours, 0 = none)", function() return tostring((st.farmPreset or 0) / 3600) end,
     function(t) local h = num(t, 0, 24); if h then st.farmPreset = math.floor(h * 3600) end; if C.RefreshWidget then C.RefreshWidget() end end, 50)
@@ -2781,6 +2789,20 @@ local function build()
       title:SetPoint("TOP", f, "TOP", 0, 9); title:SetText("Kina " .. C.version)
       if title.SetShadowOffset then title:SetShadowOffset(1, -1) end
       ui.ironTitle = title
+      -- 1.4.0: the brand: forged title plate, the K coin, KINA in Cinzel and a version chip
+      if C.Cos then
+        local plateF = CreateFrame("Frame", nil, f)
+        plateF:SetSize(250, 62); plateF:SetPoint("TOP", f, "TOP", 0, 30); plateF:SetFrameLevel(f:GetFrameLevel() + 45)
+        local plate = plateF:CreateTexture(nil, "ARTWORK"); plate:SetAllPoints(); plate:SetTexture(C.Cos.Tex("title_plate"))
+        local coin = plateF:CreateTexture(nil, "OVERLAY"); coin:SetSize(34, 34); coin:SetPoint("LEFT", plateF, "LEFT", 22, 0)
+        coin:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo")
+        local word = plateF:CreateFontString(nil, "OVERLAY"); C.Cos.Font(word, 24, "OUTLINE"); word:SetPoint("LEFT", coin, "RIGHT", 10, 1)
+        word:SetText("KINA"); word:SetTextColor(1, 0.82, 0.38)
+        if word.SetShadowOffset then word:SetShadowOffset(2, -2); word:SetShadowColor(0, 0, 0, 0.9) end
+        local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE"); ver:SetPoint("LEFT", word, "RIGHT", 8, -2)
+        ver:SetText("|cffffe9a8v" .. C.version .. "|r")
+        title:Hide()
+      end
     end
     -- the shelf the tabs stand on (A-36), so they don't float
     local shelf = C.Skin.Strip(f, "row", 8)
@@ -2789,6 +2811,7 @@ local function build()
   end
   if f.TitleText and not ui.ironTitle then f.TitleText:SetText("Kina " .. C.version) end
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaFrame") end
+  f:HookScript("OnHide", function() if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end end)
   ui.frame = f
   ui.tabButtons = {}
   local x = 10
@@ -3102,6 +3125,24 @@ local function build()
           end
         end
         showMenu(list)
+      elseif d.dispute then
+        local dd = d.dispute
+        local vend = C.VendorPrice and C.VendorPrice(dd.id) or 0
+        if StaticPopupDialogs and StaticPopup_Show then
+          StaticPopupDialogs["KINA_DISPUTE"] = StaticPopupDialogs["KINA_DISPUTE"] or {
+            text = "%s", button1 = "Dispute", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+            OnAccept = function(_, data)
+              if not (data and data.s and data.s.sync and C.FarmSync) then return end
+              local n = 0
+              for _, ev in ipairs(data.s.sync.chain) do
+                if ev.kind == "L" and tonumber((ev.data or ""):match("^(%d+)")) == data.id then C.FarmSync.Observe("V", ev.seq .. ":" .. data.vend); n = n + 1 end
+              end
+              if C.Log then C.Log("dispute", data.id, data.vend, n) end
+              C.Print(string.format("disputed %s: it now counts at its vendor price (%s each) for everyone in this farm.", data.name, C.Money(data.vend)))
+            end,
+          }
+          StaticPopup_Show("KINA_DISPUTE", string.format("Dispute the value of %s?\nIt will count at its vendor price (%s each) for everyone in this farm. Disputes are logged.", dd.name, C.Money(vend)), nil, { s = dd.s, id = dd.id, name = dd.name, vend = vend })
+        end
       elseif d.debtWho then
         C.debtsWant = d.debtWho
         ui.bookOf = nil; ui.ledgerView = "debts"; ui.offset = 0; C.Refresh()
@@ -3378,6 +3419,7 @@ function C.Toggle(tab)
   else
     if not ui.frame:IsShown() then C.DockToAH() end
     ui.frame:Show(); if C.RaiseKina then C.RaiseKina() end; C.Refresh()
+    if ui.tab == "Ledger" and C.Toast and C.Toast.ThemeOnLedger then pcall(C.Toast.ThemeOnLedger) end
   end
 end
 

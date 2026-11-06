@@ -208,7 +208,7 @@ C.On("UNIT_SPELLCAST_SUCCEEDED", function(_, unit, _, spellID)
     for _, id in ipairs({ ... }) do if nm == spellName(id) then return true end end
     return false
   end
-  if is(DE_SPELLS, 13262) then castAt.de = GetTime()
+  if is(DE_SPELLS, 13262) then castAt.de = GetTime(); C.deGearCache = nil
   elseif is(NODE_SPELLS, 2575, 2366) then castAt.node = GetTime()
   elseif is(FISH_SPELLS, 7620, 7731) then castAt.fish = GetTime() end
 end)
@@ -1052,10 +1052,18 @@ C.On("CHAT_MSG_LOOT", function(_, text, player)
     end
   end
   if s and s.sync and type(text) == "string" then
-    -- a disenchant result: the gear was already counted when it was looted, so the
-    -- materials must not be counted for the group a second time
+    -- a disenchant result. 1.3.1 (Taylor): disenchanting FARM gear counts at what it
+    -- actually became: the gear's value comes off ("D") and the materials go on, so the
+    -- group shares the gain or the loss. Gear from outside the farm: materials ignored.
     local nowDE = GetTime and GetTime() or 0
-    if nowDE - (castAt.de or -99) < 5 then return end
+    if nowDE - (castAt.de or -99) < 5 then
+      local gear = C.DEGearNow and C.DEGearNow(s)
+      if not gear then return end
+      if C.deSwapDone ~= castAt.de and not s.paused and C.FarmSync then
+        C.deSwapDone = castAt.de
+        C.FarmSync.Observe("D", gear .. ":1")
+      end
+    end
     for _, p in ipairs(lootPatterns()) do
       if p[1] and p.self then
         local a, b = text:match(p[1])
@@ -1374,4 +1382,49 @@ do
     end
   end
   C.On("LOOT_READY", function() if C.settings.leaveCloth then C.After(0.05, lootNow) end end)
+end
+
+-- 1.3.1: which farm item a disenchant just used up. Kina counts the farm's looted items
+-- in your bags when the cast starts and again when its result arrives; the one that went
+-- down by one is the disenchanted item (only items looted in this shared farm count).
+do
+  local snap
+  local function farmIDs(s)
+    local ids = {}
+    for _, ev in ipairs(s and s.sync and s.sync.chain or {}) do
+      if ev.kind == "L" then local id = tonumber((ev.data or ""):match("^(%d+)")); if id then ids[id] = true end end
+    end
+    return ids
+  end
+  local function count(ids)
+    local out = {}
+    local CC = C_Container
+    for bag = 0, 4 do
+      local n = (CC and CC.GetContainerNumSlots and CC.GetContainerNumSlots(bag)) or (GetContainerNumSlots and GetContainerNumSlots(bag)) or 0
+      for slot = 1, n do
+        local id, k
+        if CC and CC.GetContainerItemInfo then
+          local info = CC.GetContainerItemInfo(bag, slot)
+          if info then id, k = info.itemID, info.stackCount end
+        elseif GetContainerItemID then id = GetContainerItemID(bag, slot); k = 1 end
+        if id and ids[id] then out[id] = (out[id] or 0) + (k or 1) end
+      end
+    end
+    return out
+  end
+  C.On("UNIT_SPELLCAST_START", function(_, unit, _, spellID)
+    if unit ~= "player" or spellID ~= 13262 then return end
+    local s = C.session
+    if not (s and s.sync) then snap = nil; return end
+    local ids = farmIDs(s)
+    snap = { ids = ids, n = count(ids), t = GetTime and GetTime() or 0 }
+  end)
+  function C.DEGearNow(s)
+    if not snap or (GetTime() - snap.t) > 12 then return nil end
+    if C.deGearCache then return C.deGearCache end
+    local now = count(snap.ids)
+    for id, k in pairs(snap.n) do
+      if (now[id] or 0) < k then C.deGearCache = id; return id end
+    end
+  end
 end

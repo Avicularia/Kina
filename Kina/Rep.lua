@@ -19,6 +19,36 @@ local FARM_MIN_SECS, FARM_MAX = 900, 120             -- 1 XP per minute of a sha
 local PARTNER_DAY_CAP = 300                          -- XP per partner per day
 local FARM_DAY_CAP = 480                             -- farm XP per day
 
+-- 1.3.0 (Taylor, Nov 5-6): STANDING, the trust ladder, in points. It rises from paying
+-- what you owe (10 + 2 per gold of the debt, max 40, part payments their share; +5 when
+-- paid before the due time), from qualifying group farms (+5) and later commendations;
+-- it falls when a debt you owe lapses unpaid (-50). Worked out from the log like XP.
+R.STANDING = {
+  { -300, "Oathbreaker" }, { -100, "Disgraced" }, { -1, "Delinquent" },
+  { 0, "Unproven" }, { 100, "Vouched" }, { 300, "Reliable" }, { 600, "Trusted" },
+  { 1000, "Honored" }, { 1600, "Revered" }, { 2500, "Exalted" },
+}
+function R.StandingOf(pts)
+  pts = tonumber(pts) or 0
+  local name, at, nextAt, nextName = "Unproven", 0, nil, nil
+  if pts < 0 then
+    name = "Delinquent"; at = -1
+    if pts <= -100 then name, at = "Disgraced", -100 end
+    if pts <= -300 then name, at = "Oathbreaker", -300 end
+    return name, at, 0, "Unproven"
+  end
+  for i = 4, #R.STANDING do
+    if pts >= R.STANDING[i][1] then name, at = R.STANDING[i][2], R.STANDING[i][1]; nextAt = R.STANDING[i + 1] and R.STANDING[i + 1][1]; nextName = R.STANDING[i + 1] and R.STANDING[i + 1][2] end
+  end
+  return name, at, nextAt, nextName
+end
+function R.PayRep(totalCopper)
+  if not totalCopper or totalCopper < 1 then return 0 end
+  return math.min(40, 10 + math.floor(totalCopper / 10000) * 2)
+end
+R.EARLY_REP, R.FARM_REP, R.LAPSE_REP = 5, 5, -50
+R.FORGIVE_XP, R.EXTEND_XP, R.LEAD_XP = 15, 5, 10
+
 -- Kina level (experience): I to XX, shown in Roman numerals. Standing (trust) is a
 -- separate, later system; it never changes the level.
 R.MIN_LEVEL, R.MAX_LEVEL = 1, 20
@@ -63,6 +93,7 @@ end
 function R.Replay(lines, st, gains)
   st = st or { xp = 0, share = true, cap = {} }
   st.cap = st.cap or {}
+  st.rep = st.rep or 0
   local function capped(key, limit, want)
     local used = st.cap[key] or 0
     local give = math.max(0, math.min(want, limit - used))
@@ -90,8 +121,32 @@ function R.Replay(lines, st, gains)
       end
       local got = 0
       if want > 0 and st.share then got = capped(who .. ":" .. day(t), PARTNER_DAY_CAP, want); st.xp = st.xp + got end
+      -- 1.3.0: standing from paying (logged at confirm time; older lines by the formula)
+      local rp = 0
+      if f[12] and f[12] ~= "" then rp = tonumber(f[12]) or 0
+      elseif paidOff >= 1 then rp = R.PayRep(paidOff) end
+      if rp > 0 then st.rep = st.rep + capped("rep:" .. who .. ":" .. day(t), 120, rp) end
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end
+    elseif kind == "forgive" and f[3] == "gave" then
+      -- 1.3.0: forgiving earns a little XP (3 a day count)
+      local got = st.share and capped("forgive:" .. day(t), R.FORGIVE_XP * 3, R.FORGIVE_XP) or 0
+      st.xp = st.xp + got
+      if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.FORGIVE_XP, kind = "forgive", who = f[4] or "?" } end
+    elseif kind == "extend" and f[3] == "gave" then
+      local got = st.share and capped("extend:" .. day(t), R.EXTEND_XP * 3, R.EXTEND_XP) or 0
+      st.xp = st.xp + got
+      if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.EXTEND_XP, kind = "extend", who = f[4] or "?" } end
+    elseif kind == "refused" then
+      -- 1.3.0: I turned down a full payment and the debt ran out: -50, -100 if again within 30 days
+      local hit = (st.lastRefused and t - st.lastRefused < 30 * DAY) and -100 or -50
+      st.lastRefused = t
+      st.rep = st.rep + hit
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "refused", who = f[3] or "?", rep = hit } end
+    elseif kind == "lapsed" then
+      -- 1.3.0: a debt you owed passed its due time unpaid
+      st.rep = st.rep + R.LAPSE_REP
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "lapsed", who = f[3] or "?", rep = R.LAPSE_REP } end
     elseif kind == "farmend" then
       -- t|farmend|label|sid|head|hash|secs|total|kills|mates[|minLvl|maxLvl|net|players] (1.0.10)
       local sid, secs, mates = f[4] or "", tonumber(f[7]) or 0, tonumber(f[10]) or 0
@@ -105,6 +160,7 @@ function R.Replay(lines, st, gains)
         local want = math.min(FARM_MAX, math.floor(secs / 60))
         local got = 0
         if st.share then got = capped("farm:" .. day(t), FARM_DAY_CAP, want); st.xp = st.xp + got end
+        st.rep = st.rep + capped("repfarm:" .. day(t), 40, R.FARM_REP)
         if gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = "farm", sid = sid, label = f[3], secs = secs, paused = not st.share or nil } end
       elseif gains and sid ~= "" and mates >= 1 then
         gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", sid = sid, label = f[3], secs = secs }
@@ -145,7 +201,7 @@ function R.History()
   if not log then return gains end
   local st = { xp = 0, share = true, cap = {} }
   if log.repState then
-    st.xp, st.share = log.repState.xp or 0, log.repState.share ~= false
+    st.xp, st.share, st.rep = log.repState.xp or 0, log.repState.share ~= false, log.repState.rep or 0
     for k, v in pairs(log.repState.cap or {}) do st.cap[k] = v end
   end
   R.Replay(log.lines or {}, st, gains)
@@ -165,13 +221,16 @@ function R.Mine()
   local ok = C.EventLog and C.EventLog.Verify() or false
   local st = { xp = 0, share = true, cap = {} }
   if log.repState then
-    st.xp, st.share = log.repState.xp or 0, log.repState.share ~= false
+    st.xp, st.share, st.rep = log.repState.xp or 0, log.repState.share ~= false, log.repState.rep or 0
     for k, v in pairs(log.repState.cap or {}) do st.cap[k] = v end
   end
   st = R.Replay(log.lines or {}, st)
   local xp = ok and st.xp or 0
   local lv = R.LevelOf(xp)
+  local rp = ok and (st.rep or 0) or 0
+  local sname, sat, snext, snextName = R.StandingOf(rp)
   return { xp = xp, level = lv, title = "", next = R.XPFor(math.min(R.MAX_LEVEL, lv + 1)),
+    rep = rp, standing = sname, standingAt = sat, standingNext = snext, standingNextName = snextName,
     share = C.ShareData(), ok = ok }
 end
 

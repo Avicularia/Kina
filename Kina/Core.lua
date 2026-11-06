@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.2.9"
+C.version = "1.4.1"
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -371,7 +371,9 @@ function C.MakeDraggable(f, key, handle, onMoved)
   end
   -- 1.2.6: with the iron look the whole iron border moves the window too (four thin
   -- strips along the edges; the bottom-right corner stays the resize grip)
-  if handle and C.Skin and C.Skin.On() then
+  -- (1.4.1: main window only: on the small widget the strips sat over its Sound and close
+  -- buttons, the "layering" Taylor saw)
+  if handle and C.Skin and C.Skin.On() and f.GetName and f:GetName() == "KinaFrame" then
     local T, GRIP = 8, 26
     local function strip(p1, p2, x1, y1, x2, y2, w, h)
       local e = CreateFrame("Frame", nil, f)

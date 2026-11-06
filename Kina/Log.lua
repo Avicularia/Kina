@@ -67,7 +67,7 @@ function L.Prune(force)
   if C.Rep and C.Rep.Replay and L.Verify() then
     local cutLines = {}
     for i = 1, cut do cutLines[i] = d.lines[i] end
-    local st = d.repState and { xp = d.repState.xp, share = d.repState.share, cap = d.repState.cap } or nil
+    local st = d.repState and { xp = d.repState.xp, share = d.repState.share, cap = d.repState.cap, rep = d.repState.rep, lastRefused = d.repState.lastRefused } or nil
     d.repState = C.Rep.Replay(cutLines, st)
   end
   for i = 1, cut do

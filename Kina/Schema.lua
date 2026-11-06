@@ -62,7 +62,7 @@ local NUMMAP = map(N)
 
 local transfer = { t = T, f = { from = S, to = S, amt = N }, req = { "from", "to", "amt" } }
 local split = { t = T, f = { total = N, each = N, transfers = list(transfer), paid = map({ number = true, boolean = true }),
-  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B) } }
+  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B), lapsed = map(B), offered = NUMMAP, refusedSeen = NUMMAP } }
 local chainEv = { t = T, f = { seq = N, origin = S, oseq = N, kind = S, t = N, hash = S, data = S }, req = { "seq", "origin", "kind", "hash" } }
 local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, closed = B, chain = map(chainEv),
   outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }) },
@@ -82,11 +82,12 @@ for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "l
   "minConfidence", "minProfit", "minimapAngle", "partnerLevel", "postDuration", "priorKills", "rareRate", "tripMinutes", "widgetScale",
   "kinaScale", "dataNoticeSeen", "welcomed", "lastKinaLv" }) do SETTINGS[k] = N end
 for _, k in ipairs({ "hudShown", "autoScan", "farmSound", "tooltip", "worthOnly", "assumeSkinning", "autoOpen", "deMine", "hotAlerts",
-  "matLowest", "farmNoSplit", "text115", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine", "groupAd", "leaveCloth" }) do SETTINGS[k] = B end
+  "matLowest", "farmNoSplit", "text115", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine", "groupAd", "leaveCloth", "deTip", "themeMusic" }) do SETTINGS[k] = B end
 for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots", "lowLevelSeen", "forgiven" }) do SETTINGS[k] = T end
 SETTINGS.partnerClass = S
 SETTINGS.look = S
 SETTINGS.autoLootWas = S
+SETTINGS.lastStanding = S
 
 local DB = { t = T, f = {
   settings = { t = T, f = SETTINGS },
@@ -98,7 +99,7 @@ local DB = { t = T, f = {
   sessions = list(session), activeSession = session,
   stock = map(T), chars = map({ t = T, f = { prof = NUMMAP, bank = NUMMAP, known = T, level = N } }),
   log = { t = T, f = { lines = list({ t = T, f = { e = S, h = S }, req = { "e", "h" } }), base = S, summary = NUMMAP,
-    repState = { t = T, f = { xp = N, share = B, cap = NUMMAP } } } },
+    repState = { t = T, f = { xp = N, share = B, cap = NUMMAP, rep = N, noProg = map(B), lastRefused = N } } } },
   settles = list({ t = T, f = { t = N, who = S, gave = N, got = N, via = S, paidOff = N, cameIn = N, conf = N,
     covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N }, req = { "amt", "dir" } }) },
     req = { "t", "who", "gave", "got", "via" } }),

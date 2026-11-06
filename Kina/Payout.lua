@@ -26,6 +26,17 @@ function C.IsThinCheap(id)
   return not (mi and (mi.q or 0) >= 10 and (mi.n or 0) >= 3)
 end
 
+-- 1.3.1 (Taylor, Nov 6): an item worth money only on the AH (vendor pays under a quarter
+-- of its AH price) is split at its vendor price; when the looter actually sells it, the
+-- partners get their share of the real sale price as a top-up (paid on sale).
+function C.IsAHOnly(id)
+  if C.IsBound and C.IsBound(id) then return false end
+  local _, route, det = C.BestRoute(id, 1)
+  local ah = det and det.ah or 0
+  local vend = C.VendorPrice(id) or 0
+  return ah > 0 and vend < ah * 0.25
+end
+function C.IsFloored(id) return C.IsThinCheap(id) or C.IsAHOnly(id) end
 -- copper one unit counts for in a group split
 function C.SplitValue(id, suffix)
   local v, route = C.FarmValue(id, suffix)
@@ -43,7 +54,7 @@ function C.SplitValue(id, suffix)
     if ah > vend then return math.floor(ah), "AH" end
     return math.floor(vend), "VENDOR"
   end
-  if C.IsThinCheap(id) then
+  if C.IsFloored(id) then
     local _, _, det = C.BestRoute(id, 1)
     local floor = C.VendorPrice(id) or 0
     v = (v > 0) and math.min(v, floor) or floor
@@ -93,7 +104,7 @@ function C.RecordFloors(s)
     elseif ev.kind == "L" and not paused and not excluded[ev.seq] and first(ev.origin) == me then
       local id, n, sfx, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
       id, n, v = tonumber(id), tonumber(n) or 1, tonumber(v) or 0
-      if id and not C.IsBound(id) and C.IsThinCheap(id) then
+      if id and not C.IsBound(id) and C.IsFloored(id) then
         p.floors[#p.floors + 1] = { id = id, n = n, v = v, sfx = (sfx ~= "" and sfx or nil), t = C.Now(),
           label = s.label, members = members, partners = partners }
       end
@@ -315,7 +326,33 @@ C.On("TRADE_SHOW", function()
   readTrade()
 end)
 C.On("TRADE_MONEY_CHANGED", readTrade)
-C.On("TRADE_ACCEPT_UPDATE", readTrade)
+C.On("TRADE_ACCEPT_UPDATE", function(_, me, them)
+  readTrade()
+  if tr and not tr.closed then
+    if me == 1 or me == true then tr.iAcc = true end
+    if them == 1 or them == true then tr.theyAcc = true end
+  end
+end)
+-- 1.3.0: a payment offered and turned down. The debtor put the whole amount in the trade
+-- and accepted, the creditor didn't, and the trade was cancelled: both Kinas note it.
+-- If that debt then runs out of time, it doesn't count against the debtor; the creditor's
+-- Kina takes the hit instead (-50 rep, -100 for a second time within 30 days).
+local function noteRefusal(t)
+  if not (t and t.who) then return end
+  local who = t.who:match("^[^%-]+")
+  for _, d in ipairs(C.Debts()) do
+    if (d.who or ""):match("^[^%-]+") == who and d.s and not d.topup then
+      local sp = d.s.split or {}; d.s.split = sp
+      if d.dir == "owe" and t.iAcc and not t.theyAcc and (t.mine or 0) >= math.floor(d.amt) then
+        sp.offered = sp.offered or {}; sp.offered[d.key] = C.Now()
+        C.Print(string.format("|cffffd100Kina noted that you offered %s the full %s and the trade was cancelled.|r If they never take it, the debt won't count against you.", C.Books.Name(d.who), C.Money(math.floor(d.amt))))
+      elseif d.dir == "owed" and t.theyAcc and not t.iAcc and (t.theirs or 0) >= math.floor(d.amt) then
+        sp.refusedSeen = sp.refusedSeen or {}; sp.refusedSeen[d.key] = C.Now()
+        C.Print(string.format("|cffff8040%s offered the full %s and the trade was cancelled.|r If the debt runs out of time after an offer, it costs YOUR standing, not theirs.", C.Books.Name(d.who), C.Money(math.floor(d.amt))))
+      end
+    end
+  end
+end
 C.On("TRADE_CLOSED", function()
   if not tr or tr.closed then return end
   tr.closed = GetTime()
@@ -338,7 +375,9 @@ C.On("UI_INFO_MESSAGE", function(_, a, b)
     local t = tr; tr = nil
     completed(t, "message")
   elseif msg == ERR_TRADE_CANCELLED or msg == "Trade cancelled." then
-    tr.cancelled = true; tr = nil
+    tr.cancelled = true
+    pcall(noteRefusal, tr)
+    tr = nil
     st.cancelled = (st.cancelled or 0) + 1
     if pendingPay then pendingPay.set = nil end -- try again with the button
   end
@@ -600,7 +639,14 @@ function C._matchConf(r, theirGave, label)
     end
     -- 1.2.3: XP is set by the whole debt's size; a part payment earns its share of
     -- that, rounded down (paying 1c of a 23s debt earns 0)
-    local payXP, recvXP = 0, 0
+    local payXP, recvXP, payRep = 0, 0, 0
+    local function onTime(cv) return cv.stop and (r.t or C.Now()) <= cv.stop + C.DEBT_HOURS * 3600 end
+    for _, cv in ipairs(r.covers or {}) do
+      local tot = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
+      if cv.dir == "owe" and tot >= 1 and C.Rep and C.Rep.PayRep then
+        payRep = payRep + C.Rep.PayRep(tot) * (cv.amt or 0) / tot + (onTime(cv) and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)
+      end
+    end
     for _, cv in ipairs(r.covers or {}) do
       local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
       if total >= 1 then
@@ -610,20 +656,23 @@ function C._matchConf(r, theirGave, label)
         else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part end
       end
     end
-    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "", math.floor(payXP), math.floor(recvXP)) end
+    if nx then payRep = 0 end
+    if C.Log then C.Log("confirmed", via, r.who, r.gave, r.got, r.paidOff, r.cameIn, nx and "nx" or "", math.floor(payXP), math.floor(recvXP), math.floor(payRep)) end
     -- 1.2.6: the fanfare: what I earned and what they earned (the mirror of my covers)
     if C.Toast and C.Toast.Payment then
-      local theirs = 0
+      local theirs, theirRep = 0, 0
       for _, cv in ipairs(r.covers or {}) do
         local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
         if total >= 1 then
           local part = (cv.amt or 0) / total
-          if cv.dir == "owed" then theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
+          if cv.dir == "owed" then
+            theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
+            theirRep = theirRep + C.Rep.PayRep(total) * part + (onTime(cv) and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)
           else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part end
         end
       end
-      if nx then payXP, recvXP, theirs = 0, 0, 0 end
-      pcall(C.Toast.Payment, r, math.floor(payXP + recvXP), math.floor(theirs))
+      if nx then payXP, recvXP, theirs, theirRep = 0, 0, 0, 0 end
+      pcall(C.Toast.Payment, r, math.floor(payXP + recvXP), math.floor(theirs), math.floor(payRep), math.floor(theirRep))
     end
     return true
   end

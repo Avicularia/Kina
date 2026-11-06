@@ -238,7 +238,7 @@ local function hello(channel, target, force)
   local msg = table.concat({ "H", d.uid, b36(PROTO), clean(myName()), clean(C.MarketKey()),
     b36(share and C.market.scanTime or 0), b36(share and S.StampLoot() or 0), b36(share and vendorTime() or 0), b36(share and offerTime() or 0),
     (cls:gsub("%A", "")), b36((UnitLevel and UnitLevel("player")) or 0), table.concat(profs, ","), b36(S.CommStamp()),
-    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")) }, "|")
+    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or "") }, "|")
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -374,6 +374,32 @@ end
 local function inMyGroup(name)
   return C.InGroupName and C.InGroupName(name) or false
 end
+-- 1.4.0: standing points told to the group in the hello (shown "unverified" on their card)
+local standCache, standAt = nil, 0
+function S.MyStanding()
+  if GetTime and GetTime() - standAt < 60 and standCache then return standCache end
+  local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
+  standCache, standAt = (ok and m and m.ok and m.rep) or 0, GetTime and GetTime() or 0
+  return standCache
+end
+function S.StandingOf(name)
+  local d = db()
+  local want = tostring(name or ""):lower():match("^[^%-]+")
+  for _, a in pairs(d.authors or {}) do
+    if a.stand and a.name and tostring(a.name):lower():match("^[^%-]+") == want then return a.stand end
+  end
+end
+-- 1.4.0: what a Kina user told us about their character (class, level, professions)
+function S.CharOf(name)
+  local d = db()
+  local want = tostring(name or ""):lower():match("^[^%-]+")
+  local best
+  for _, a in pairs(d.authors or {}) do
+    local ch = a.char
+    if ch and ch.from and tostring(ch.from):lower():match("^[^%-]+") == want and (not best or (ch.t or 0) > (best.t or 0)) then best = ch end
+  end
+  return best
+end
 -- 1.2.9: does a Kina user in my group (seen in the last 30 min) have this profession?
 function S.GroupHasProf(prof)
   local d = db()
@@ -441,6 +467,7 @@ local function onHello(from, rest, channel)
   local a = authorOf(uid, true)
   a.name, a.seen = name, C.Now()
   if S.syncHeard then S.syncHeard[from] = true end
+  if f[15] and f[15]:match("^%-?%d+$") then a.stand = tonumber(f[15]) end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and C.VersionNewer and C.VersionNewer(f[14], C.version) then
     S.newerSeen = S.newerSeen or {}

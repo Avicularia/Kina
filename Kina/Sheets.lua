@@ -81,8 +81,9 @@ builders.you = function(p)
   local TOP_H = 128
   local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetSize(300, TOP_H)
   local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetPoint("TOPLEFT", 12, -12); portraitBox:SetSize(80, 80)
-  if iron() then C.Skin.Tile(portraitBox, 6) end
+  if iron() and not C.Cos then C.Skin.Tile(portraitBox, 6) end
   local portrait = portraitBox:CreateTexture(nil, "ARTWORK"); portrait:SetPoint("TOPLEFT", 7, -7); portrait:SetPoint("BOTTOMRIGHT", -7, 7)
+  local cos -- 1.4.0: standing ring, level plate, star/leaf (built on first refresh)
   local name = text(idBox, "GameFontNormalLarge"); name:SetPoint("TOPLEFT", portraitBox, "TOPRIGHT", 12, -4); name:SetWidth(170)
   local line = text(idBox, "GameFontHighlight"); line:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -6); line:SetWidth(170)
   local lvl = text(idBox, "GameFontNormalLarge"); lvl:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, -12); lvl:SetWidth(170)
@@ -103,9 +104,10 @@ builders.you = function(p)
   local h3 = heading(profBox, "Professions"); h3:SetPoint("TOPLEFT", 16, -14)
   local profBars = {}
   for i = 1, 4 do
-    local lb = text(profBox, "GameFontHighlightSmall"); lb:SetPoint("TOPLEFT", 16, -36 - (i - 1) * 30); lb:SetWidth(268)
-    local b = bar(profBox, 0.35, 0.75, 0.30); b:SetPoint("TOPLEFT", lb, "BOTTOMLEFT", 0, -3); b:SetWidth(268); b:SetHeight(14)
-    profBars[i] = { lb, b }
+    local ic = profBox:CreateTexture(nil, "ARTWORK"); ic:SetSize(26, 26); ic:SetPoint("TOPLEFT", 12, -34 - (i - 1) * 30)
+    local lb = text(profBox, "GameFontHighlightSmall"); lb:SetPoint("TOPLEFT", 44, -36 - (i - 1) * 30); lb:SetWidth(240)
+    local b = bar(profBox, 0.35, 0.75, 0.30); b:SetPoint("TOPLEFT", lb, "BOTTOMLEFT", 0, -3); b:SetWidth(240); b:SetHeight(14)
+    profBars[i] = { lb, b, ic }
   end
   local profNone = text(profBox, "GameFontHighlightSmall"); profNone:SetPoint("TOPLEFT", 16, -38); profNone:SetWidth(268)
 
@@ -132,6 +134,16 @@ builders.you = function(p)
     line:SetText(string.format("Level %s %s", tostring(me.level or "?"), me.className or "?"))
     local m = C.Rep and C.Rep.Mine() or { level = 1, xp = 0, ok = true }
     lvl:SetText(m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
+    if C.Cos then
+      if not cos then
+        cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 18, "OUTLINE")
+        C.Cos.BarFrame(xpBar, "xp_bar"); C.Cos.BarFrame(stBar, "standing_bar")
+      end
+      local mm = C.Rep.Mine and C.Rep.Mine() or {}
+      local rec = C.YouRecord and C.YouRecord() or {}
+      local starter = (rec.farms or 0) == 0 or ((rec.farms or 0) == 1 and ((rec.oweNow or 0) >= 1 or (rec.owedNow or 0) >= 1))
+      C.Cos.UpdatePortrait(cos, mm.standing, m.level, 0, starter)
+    end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
     -- XP toward the next level
     local R = C.Rep
@@ -140,8 +152,12 @@ builders.you = function(p)
     else xpBar:Set((m.xp - lo) / math.max(1, hi - lo), string.format("%d / %d XP", m.xp, hi)) end
     xpNote:SetText(m.level >= R.MAX_LEVEL and "" or (GREY .. "to level " .. R.Roman(m.level + 1) .. ": pay what you owe and share farms of 15+ minutes" .. "|r"))
     -- standing: not counted yet (it comes with the creditor actions and two-sided logs)
-    stBar:Set(0, "Unproven")
-    stNote:SetText(GREY .. "Standing starts counting in a later version. Everyone shows as unverified until the Kina server checks both players' logs.|r")
+    -- 1.3.0: standing points and title
+    local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
+    local pts, at, nxt = m.rep or 0, m.standingAt or 0, m.standingNext
+    if nxt then stBar:Set(math.max(0, math.min(1, (pts - at) / math.max(1, nxt - at))), string.format("%s  %d / %d", m.standing or "Unproven", pts, nxt))
+    else stBar:Set(pts < 0 and 0 or 1, string.format("%s  %d", m.standing or "Unproven", pts)) end
+    stNote:SetText(GREY .. (pts < 0 and "Pay what you owe on time to climb back. " or "Pay debts fast (+rep), farm together (+5 a farm); a lapsed debt costs 50. ") .. "Unverified until the Kina server checks both logs.|r")
     -- professions
     local list = {}
     for n, sk in pairs(me.profs or {}) do if C.TradeSkill and C.TradeSkill(n) then list[#list + 1] = { n, sk } end end
@@ -150,7 +166,8 @@ builders.you = function(p)
       local x = list[i]
       if x then
         pb[1]:SetText(string.format("%s  %s%d / 300|r", x[1], GREY, x[2])); pb[1]:Show(); pb[2]:Show(); pb[2]:Set(x[2] / 300, "")
-      else pb[1]:Hide(); pb[2]:Hide() end
+        if pb[3] and C.Cos then pb[3]:SetTexture(C.Cos.ProfIcon(x[1])); pb[3]:Show() elseif pb[3] then pb[3]:Hide() end
+      else pb[1]:Hide(); pb[2]:Hide(); if pb[3] then pb[3]:Hide() end end
     end
     if #list == 0 then profNone:SetText(ORANGE .. "None read yet: open your professions (skills) window once.|r"); profNone:Show() else profNone:Hide() end
     -- record
@@ -200,7 +217,12 @@ builders.debts = function(p)
   if empty.SetWordWrap then empty:SetWordWrap(true) end
 
   local card = box(p); card:SetPoint("TOPLEFT", left, "TOPRIGHT", 12, 0); card:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0, 0)
-  local cName = text(card, "GameFontNormalLarge"); cName:SetPoint("TOPLEFT", 18, -14)
+  -- 1.4.0: their profile: portrait in a ring, level, class, professions, Kina level
+  local cPortF = CreateFrame("Frame", nil, card); cPortF:SetSize(40, 40); cPortF:SetPoint("TOPLEFT", 16, -10)
+  local cPort = cPortF:CreateTexture(nil, "ARTWORK"); cPort:SetAllPoints()
+  local cRing = cPortF:CreateTexture(nil, "OVERLAY"); cRing:SetPoint("CENTER"); cRing:SetSize(52, 52)
+  if cPort.SetMask then pcall(cPort.SetMask, cPort, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
+  local cName = text(card, "GameFontNormalLarge"); cName:SetPoint("TOPLEFT", 66, -14)
   local cSub = text(card, "GameFontHighlightSmall"); cSub:SetPoint("TOPLEFT", cName, "BOTTOMLEFT", 0, -4)
   local cBal = text(card, "GameFontHighlight", "RIGHT"); cBal:SetPoint("TOPRIGHT", -18, -16); cBal:SetWidth(300)
   local lines = {}
@@ -275,7 +297,27 @@ builders.debts = function(p)
     end
     cName:SetText(x.who)
     local rep = C.Rep and C.Rep.Of and C.Rep.Of(x.who)
-    cSub:SetText(rep and rep.lv and rep.lv > 0 and (GREY .. "Kina " .. C.Rep.Roman(rep.lv) .. " (unverified)|r") or (GREY .. "Kina level unknown|r"))
+    local ch = C.Share and C.Share.CharOf and C.Share.CharOf(x.who)
+    local bits = {}
+    if ch then
+      bits[#bits + 1] = "Level " .. tostring(ch.level or "?") .. " " .. tostring(ch.class or ""):lower():gsub("^%l", string.upper)
+      local pl = {}
+      for pn, sk in pairs(ch.profs or {}) do pl[#pl + 1] = pn .. " " .. sk end
+      table.sort(pl)
+      if #pl > 0 then bits[#bits + 1] = table.concat(pl, ", ") end
+    end
+    bits[#bits + 1] = (rep and rep.lv and rep.lv > 0) and ("Kina " .. C.Rep.Roman(rep.lv) .. " (unverified)") or "Kina level unknown"
+    cSub:SetText(GREY .. table.concat(bits, "  ·  ") .. "|r")
+    cPort:SetTexture(nil)
+    local unit
+    for _, u in ipairs({ "party1", "party2", "party3", "party4", "target" }) do
+      if UnitName and UnitExists and UnitExists(u) and (UnitName(u) or ""):lower() == tostring(x.who):lower():match("^[^%-]+") then unit = u end
+    end
+    if unit and SetPortraitTexture then pcall(SetPortraitTexture, cPort, unit) else cPort:SetColorTexture(0.1, 0.1, 0.1, 1) end
+    local theirPts = C.Share and C.Share.StandingOf and C.Share.StandingOf(x.who)
+    local theirSt = theirPts and C.Rep.StandingOf(theirPts) or "Unproven"
+    if theirPts then cSub:SetText(cSub:GetText() .. GREY .. "  ·  " .. theirSt .. " (" .. theirPts .. ", unverified)|r") end
+    if C.Cos then cRing:SetTexture(C.Cos.RingFor(theirSt)) end
     local net = x.owed - x.owe
     cBal:SetText(net >= 1 and (GOLD .. x.who .. " owes you " .. C.Money(math.floor(net)) .. "|r") or (net <= -1 and (ORANGE .. "You owe " .. x.who .. " " .. C.Money(math.floor(-net)) .. "|r") or ""))
     for i, l in ipairs(lines) do

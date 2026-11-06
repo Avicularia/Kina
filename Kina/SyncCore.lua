@@ -322,7 +322,13 @@ function Core:Receive(from, msg)
     self:file(origin, tonumber(f[4]) or 0, f[5], f[6] or "", tonumber(f[7]))
   elseif kind == "T" and not self:IsLeader() and from == s.leader then
     -- the leader is stopping: send everything not yet filed, and how many reports we made
-    for oseq in pairs(s.outbox) do self:sendReport(oseq) end
+    -- (1.4.1: once per 6 s, not on every ask: re-sending the whole outbox every 3 s
+    -- jammed the throttled channel and made big farms take ~45 s to stop)
+    local now = self:now()
+    if not s.tSentAt or now - s.tSentAt >= 6 then
+      s.tSentAt = now
+      for oseq in pairs(s.outbox) do self:sendReport(oseq) end
+    end
     self:send(table.concat({ "M", s.sid, self:name(), s.oseq }, "|"), s.leader)
   elseif kind == "M" and self:IsLeader() then
     if f[3] == from and s.marks then s.marks[from] = tonumber(f[4]) or 0 end
@@ -377,7 +383,9 @@ end
 function Core:beginStop()
   local s = self.s
   if s.closed or s.stopping then return end
-  s.stopping, s.stopAt, s.marks, s.lastT = true, self:now() + 40, {}, 0
+  -- 1.4.1: wait at most 15 s (was 40) for the others' last reports; anything still in
+  -- flight is filed by the catch-up after the stop, as before
+  s.stopping, s.stopAt, s.marks, s.lastT = true, self:now() + 15, {}, 0
 end
 function Core:stopReady()
   local s = self.s
@@ -541,6 +549,24 @@ function Core.Totals(s)
     end
   end
   local kills = {}
+  -- 1.3.1: disputed loot lines ("V" = "seq:copper each") count at that value (vendor)
+  local disputed = {}
+  for _, ev in ipairs(s.chain) do
+    if ev.kind == "V" then
+      local seq, per = (ev.data or ""):match("^(%d+):(%d+)$")
+      if seq then disputed[tonumber(seq)] = tonumber(per) end
+    end
+  end
+  out.disputed = disputed
+  -- 1.3.1: the per-unit value each item was counted at (its first loot entry)
+  local unitVal = {}
+  for _, ev in ipairs(s.chain) do
+    if ev.kind == "L" and not excluded[ev.seq] then
+      local id, _, _, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+      id = tonumber(id)
+      if id and not unitVal[id] then unitVal[id] = tonumber(v) or 0 end
+    end
+  end
   for _, ev in ipairs(s.chain) do
     out.events = out.events + 1
     local k = ev.kind
@@ -551,6 +577,7 @@ function Core.Totals(s)
     elseif not paused and not excluded[ev.seq] then
       if k == "L" then
         local _, n, _, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+        if disputed[ev.seq] then v = disputed[ev.seq] end
         local val = (tonumber(n) or 1) * (tonumber(v) or 0)
         out.items = out.items + val
         out.byLooter[ev.origin] = (out.byLooter[ev.origin] or 0) + val
@@ -564,6 +591,18 @@ function Core.Totals(s)
         -- 1.2.8 (Taylor): consumables are each player's own cost; they're still counted
         -- (shown as "used"), but they no longer come off the group split or the Net
         out.used = out.used + val
+      elseif k == "D" then
+        -- 1.3.1: farm gear that was disenchanted: its looted value comes off (the
+        -- materials it became are counted as loot), so the group shares the real outcome
+        local gid, gn = (ev.data or ""):match("^(%d+):(%d*)")
+        gid = tonumber(gid)
+        local per = gid and unitVal[gid]
+        if per then
+          local val = per * (tonumber(gn) or 1)
+          out.items = out.items - val
+          out.byLooter[ev.origin] = (out.byLooter[ev.origin] or 0) - val
+          out.deSwaps = (out.deSwaps or 0) + 1
+        end
       elseif k == "K" then
         -- the same mob seen by two players is one kill (data = "npc-spawn")
         local key = ev.data
