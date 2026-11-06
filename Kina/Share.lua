@@ -374,6 +374,14 @@ end
 local function inMyGroup(name)
   return C.InGroupName and C.InGroupName(name) or false
 end
+-- 1.2.9: does a Kina user in my group (seen in the last 30 min) have this profession?
+function S.GroupHasProf(prof)
+  local d = db()
+  for _, a in pairs(d.authors or {}) do
+    local ch = a.char
+    if ch and ch.profs and ch.profs[prof] and ch.from and inMyGroup(ch.from) and C.Now() - (ch.t or 0) < 1800 then return ch.from end
+  end
+end
 
 local function onQuery(from, rest)
   local uid, what, base = rest:match("^(%x+)|(%u)|(%w+)$")

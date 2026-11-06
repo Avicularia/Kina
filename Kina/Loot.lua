@@ -554,13 +554,17 @@ C.On("PLAYER_ENTERING_WORLD", function() lastMoney = GetMoney and GetMoney() or 
 local SOUND = "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\"
 -- One fanfare at a time: a new click stops the one still playing and starts over,
 -- so rapid Start/Stop clicks never stack into a louder and louder mess.
+-- 1.2.9: every Kina sound is cut from the Kina theme (Taylor's Theme A, locked Nov 6).
+-- One at a time (a new one stops the last), through the game's Sound Effects volume.
 local cueHandle
+local CUES = { start = "farm_start", stop = "farm_stop", paid = "paid", settled = "settled",
+  level = "level_up", standing = "standing_up", warning = "warning" }
 function C.PlayCue(which)
   if C.settings.farmSound == false or not PlaySoundFile then return end
-  if cueHandle and StopSound then pcall(StopSound, cueHandle, 0) end
+  if cueHandle and StopSound then pcall(StopSound, cueHandle, 200) end
   cueHandle = nil
-  local file = (which == "stop") and "ksc-city-cheers.ogg" or "ksc-gates-open.ogg"
-  local ok, willPlay, handle = pcall(PlaySoundFile, SOUND .. file, "Master")
+  local file = (CUES[which] or "farm_start") .. ".ogg"
+  local ok, willPlay, handle = pcall(PlaySoundFile, SOUND .. file, "SFX")
   if ok and willPlay then cueHandle = handle end
 end
 
@@ -1339,4 +1343,35 @@ do
   end
   C.On("PLAYER_ENTERING_WORLD", function() C.After(3, check) end)
   C.On("ZONE_CHANGED_NEW_AREA", function() C.After(2, check) end)
+end
+
+-- 1.2.9: "Leave cloth for our tailor" (Settings, off by default). Kina does the looting
+-- itself (the game's Auto Loot is switched off while this is on, and put back when it's
+-- turned off): it takes everything, except that when a Kina user in the group has
+-- Tailoring and you don't, cloth stays on the corpse for them. The split is unchanged:
+-- the cloth still counts as farm loot when the tailor loots it.
+do
+  local CLOTH = { [2589] = true, [2592] = true, [4306] = true, [4338] = true, [14047] = true, [14256] = true }
+  function C.SetLeaveCloth(on)
+    C.settings.leaveCloth = on and true or false
+    if not (GetCVar and SetCVar) then return end
+    if on then
+      if C.settings.autoLootWas == nil then C.settings.autoLootWas = GetCVar("autoLootDefault") end
+      pcall(SetCVar, "autoLootDefault", "0")
+      C.Print("Kina now loots for you, leaving cloth for your group's tailor. (The game's Auto Loot is off while this is on.)")
+    else
+      if C.settings.autoLootWas ~= nil then pcall(SetCVar, "autoLootDefault", C.settings.autoLootWas); C.settings.autoLootWas = nil end
+      C.Print("Kina leaves the looting to the game again (your Auto Loot setting is back).")
+    end
+  end
+  local function lootNow()
+    if not (C.settings.leaveCloth and GetNumLootItems and LootSlot) then return end
+    local leave = not C.TradeSkill("Tailoring") and C.Share and C.Share.GroupHasProf and C.Share.GroupHasProf("Tailoring")
+    for i = GetNumLootItems(), 1, -1 do
+      local link = GetLootSlotLink and GetLootSlotLink(i)
+      local id = link and tonumber(link:match("item:(%d+)"))
+      if not (leave and id and CLOTH[id]) then pcall(LootSlot, i) end
+    end
+  end
+  C.On("LOOT_READY", function() if C.settings.leaveCloth then C.After(0.05, lootNow) end end)
 end

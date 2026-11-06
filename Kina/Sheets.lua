@@ -243,6 +243,10 @@ builders.debts = function(p)
       if d.dir == "owe" then x.owe = x.owe + d.amt else x.owed = x.owed + d.amt end
     end
     table.sort(order)
+    if C.debtsWant then
+      for k in pairs(byWho) do if tostring(k):lower():match("^[^%-]+") == tostring(C.debtsWant):lower():match("^[^%-]+") then p.selected = k end end
+      C.debtsWant = nil
+    end
     if not (p.selected and byWho[p.selected]) then p.selected = order[1] end
     for i, b in ipairs(people) do
       local x = byWho[order[i] or ""]

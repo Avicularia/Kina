@@ -80,12 +80,13 @@ local SETTINGS = {}
 for _, k in ipairs({ "ahCut", "depositFloor", "vendorMargin", "killsPerHour", "launchTime", "minDealProfit", "farmPreset", "widgetAlpha",
   "picksPerHour", "textScale", "minROI", "bagSlots", "deFriend", "deSkill", "farmHi", "farmLo", "investDays", "investScans", "maxWaitDays",
   "minConfidence", "minProfit", "minimapAngle", "partnerLevel", "postDuration", "priorKills", "rareRate", "tripMinutes", "widgetScale",
-  "kinaScale", "dataNoticeSeen", "welcomed" }) do SETTINGS[k] = N end
+  "kinaScale", "dataNoticeSeen", "welcomed", "lastKinaLv" }) do SETTINGS[k] = N end
 for _, k in ipairs({ "hudShown", "autoScan", "farmSound", "tooltip", "worthOnly", "assumeSkinning", "autoOpen", "deMine", "hotAlerts",
-  "matLowest", "farmNoSplit", "text115", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine" }) do SETTINGS[k] = B end
+  "matLowest", "farmNoSplit", "text115", "minimapHide", "plateKills", "shareData", "shareEnchanters", "showEnemy", "showUnique", "dockAH", "craftMine", "groupAd", "leaveCloth" }) do SETTINGS[k] = B end
 for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerSlots", "lowLevelSeen", "forgiven" }) do SETTINGS[k] = T end
 SETTINGS.partnerClass = S
 SETTINGS.look = S
+SETTINGS.autoLootWas = S
 
 local DB = { t = T, f = {
   settings = { t = T, f = SETTINGS },

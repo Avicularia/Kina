@@ -1038,7 +1038,8 @@ if C.PUBLIC then
         local od
         for _, x in ipairs(C.Debts()) do if x.s == s and x.key == d.who and x.dir == d.dir then od = x end end
         if od and not forgiven and C.DueText then st = st .. "  " .. GREY .. C.DueText(od) .. "|r" end
-        row("", (d.dir == "owe" and "you owe " or "owes you: ") .. d.who, money(d.amt), st)
+        -- 1.2.9: click it to open the Debts page on that person
+        out[#out + 1] = { debtWho = d.who, cols = { "", (d.dir == "owe" and "you owe " or "owes you: ") .. d.who .. "  |cff7CFC00(open in Debts)|r", money(d.amt), st }, sort = { #out, 0, 0, 0 } }
         -- 1.2.0: the buttons (Pay, more time, Forgive) are on the Ledger's Debts page
         if od and left >= 1 and not forgiven then
           out[#out + 1] = { cols = { "", GREY .. "   Pay, more time or Forgive: the Debts button above|r", "", "" }, sort = { #out, 0, 0, 0 } }
@@ -2519,7 +2520,9 @@ local function buildSettings(f)
     "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
   toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
-  toggle("Start/stop fanfares", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end end)
+  toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayCue then C.PlayCue("start") end end)
+  toggle("Post farm stats to group chat (every 15 min)", function() return st.groupAd ~= false end, function(v) st.groupAd = v end)
+  toggle("Leave cloth for our tailor (Kina loots for you)", function() return st.leaveCloth == true end, function(v) if C.SetLeaveCloth then C.SetLeaveCloth(v) else st.leaveCloth = v end end)
   box("Farm timer (hours, 0 = none)", function() return tostring((st.farmPreset or 0) / 3600) end,
     function(t) local h = num(t, 0, 24); if h then st.farmPreset = math.floor(h * 3600) end; if C.RefreshWidget then C.RefreshWidget() end end, 50)
   if not C.PUBLIC then
@@ -3099,6 +3102,9 @@ local function build()
           end
         end
         showMenu(list)
+      elseif d.debtWho then
+        C.debtsWant = d.debtWho
+        ui.bookOf = nil; ui.ledgerView = "debts"; ui.offset = 0; C.Refresh()
       elseif d.slog then
         if d.toSession then ui.tab = "Session" end
         ui.logOf = d.slog; ui.offset = 0; ui.sort.Session = nil; C.Refresh()

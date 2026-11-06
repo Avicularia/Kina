@@ -41,9 +41,7 @@ local function show(p)
   f.line1:SetText(p.closed and p.head or p.sub)
   f.line2:SetText(p.gains)
   f:Hide(); f:Show()
-  if C.settings and C.settings.farmSound ~= false and PlaySoundFile then
-    pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\" .. (p.closed and "ksc-city-cheers.ogg" or "ksc-gates-open.ogg"), "Master")
-  end
+  if C.PlayCue then C.PlayCue(p.closed and "settled" or "paid") end
 end
 C.On("PLAYER_REGEN_ENABLED", function()
   local q = waiting; waiting = {}
@@ -82,4 +80,63 @@ function T.Payment(r, myXP, theirXP)
   end
   last[key] = { t = now, n = 1, amt = amt }
   show({ head = head, sub = C.Money(amt) .. (still >= 1 and (GREY .. "  ·  " .. C.Money(math.floor(still)) .. " still open|r") or ""), gains = gains, closed = closed })
+end
+
+-- 1.2.9: Kina level-up: a toast and the level-up sound (checked now and then; cheap enough)
+do
+  local function check()
+    if not (C.Rep and C.Rep.Mine and C.settings) then return end
+    local ok, m = pcall(C.Rep.Mine)
+    if not ok or not m then return end
+    local lv = m.level or 1
+    local was = tonumber(C.settings.lastKinaLv)
+    C.settings.lastKinaLv = lv
+    if was and lv > was then
+      show({ head = "Kina level " .. (C.Rep.Roman and C.Rep.Roman(lv) or lv) .. "!", sub = GREY .. "keep paying fast and farming together|r", gains = GREEN .. m.xp .. " XP|r" })
+      if C.PlayCue then C.PlayCue("level") end
+    end
+  end
+  T.CheckLevel = check
+  local t = 0
+  local f = CreateFrame("Frame")
+  f:SetScript("OnUpdate", function(_, el) t = t + el; if t >= 30 then t = 0; if not (InCombatLockdown and InCombatLockdown()) then check() end end end)
+end
+
+-- 1.2.9: the group ad. During a shared farm the farm leader's Kina posts one line to
+-- party/raid chat every 15 minutes (never Say or channels; never in combat; not in the
+-- farm's first 15 minutes or while it earns nothing). Setting: Settings > "Post farm
+-- stats to group chat" (on unless turned off).
+do
+  local nextAt
+  local function post()
+    if C.settings.groupAd == false or not SendChatMessage then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    local s = C.session
+    if not (s and s.sync and C.FarmView) then nextAt = nil; return end
+    local v, group, leader = C.FarmView()
+    if not (v and group) then return end
+    local me = UnitName and UnitName("player")
+    if not leader or (leader:match("^[^%-]+") ~= me) then return end
+    local secs = math.max(1, v.secs or 0)
+    if secs < 900 or (v.net or 0) < 1 then return end
+    local n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
+    local gph = v.net * 3600 / secs
+    local function plain(c)
+      c = math.floor(c); local g, sv = math.floor(c / 10000), math.floor((c % 10000) / 100)
+      return (g > 0 and (g .. "g ") or "") .. sv .. "s"
+    end
+    local where = (GetInstanceInfo and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
+    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), math.min(60, math.floor(secs / 60 * 3600 / secs)), where)
+    local chan = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
+    pcall(SendChatMessage, msg, chan)
+  end
+  local f = CreateFrame("Frame")
+  local t = 0
+  f:SetScript("OnUpdate", function(_, el)
+    t = t + el; if t < 5 then return end; t = 0
+    local now = GetTime and GetTime() or 0
+    if not (C.session and C.session.sync) then nextAt = nil; return end
+    if not nextAt then nextAt = now + 900; return end
+    if now >= nextAt then nextAt = now + 900; post() end
+  end)
 end
