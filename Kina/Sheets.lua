@@ -94,10 +94,10 @@ builders.you = function(p)
   -- heading and bar on one line each: "Kina level  I" [bar]
   local h1 = heading(prog, "Kina level"); h1:SetPoint("TOPLEFT", 16, -14)
   local xpBar = bar(prog, 0.85, 0.65, 0.15); xpBar:SetPoint("TOPLEFT", 16, -34); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -3); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -7); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local h2 = heading(prog, "Standing"); h2:SetPoint("TOPLEFT", 16, -72)
   local stBar = bar(prog, 0.30, 0.62, 0.95); stBar:SetPoint("TOPLEFT", 16, -92); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -3); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -7); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
 
   -- bottom left: professions
   local profBox = box(p); profBox:SetPoint("TOPLEFT", idBox, "BOTTOMLEFT", 0, -12); profBox:SetWidth(300); profBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
@@ -137,12 +137,31 @@ builders.you = function(p)
     if C.Cos then
       if not cos then
         cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 18, "OUTLINE")
-        C.Cos.BarFrame(xpBar, "xp_bar"); C.Cos.BarFrame(stBar, "standing_bar")
+        cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
+        -- 1.4.2: test pickers beside the pieces (preview only)
+        local pv = C.Cos.preview
+        local function redo() if p.refresh then p.refresh() end end
+        local rings = {}
+        for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent" }) do rings[#rings + 1] = { st .. (st == "Delinquent" and " / Disgraced" or ""), st } end
+        table.insert(rings, 1, { "(my real standing)", false })
+        local pr = C.Cos.Picker(idBox, "Portrait ring", rings, function(v) pv.ring = v or nil; redo() end); pr:SetPoint("TOPLEFT", portraitBox, "BOTTOMLEFT", -4, -18)
+        local pb = C.Cos.Picker(idBox, "Badge", { { "(real)", false }, { "none", "none" }, { "Starter leaf", "leaf" }, { "Mentor Star I (1)", 1 }, { "Mentor Star II (5)", 5 },
+          { "Mentor Star III (10)", 10 }, { "Mentor Star IV (20)", 20 }, { "Mentor Star V (50, wings)", 50 } }, function(v) pv.badge = v or nil; redo() end)
+        pb:SetPoint("LEFT", pr, "RIGHT", 4, 0)
+        local pl = C.Cos.Picker(idBox, "Level plate", { { "(real)", false }, { "I", 1 }, { "V", 5 }, { "IX", 9 }, { "XII", 12 }, { "XVIII", 18 }, { "XX", 20 } }, function(v) pv.level = v or nil; redo() end)
+        pl:SetPoint("LEFT", pb, "RIGHT", 4, 0)
+        local pf = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
+        pf:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
       end
+      local pv = C.Cos.preview
       local mm = C.Rep.Mine and C.Rep.Mine() or {}
       local rec = C.YouRecord and C.YouRecord() or {}
       local starter = (rec.farms or 0) == 0 or ((rec.farms or 0) == 1 and ((rec.oweNow or 0) >= 1 or (rec.owedNow or 0) >= 1))
-      C.Cos.UpdatePortrait(cos, mm.standing, m.level, 0, starter)
+      local recruits = 0
+      if pv.badge == "leaf" then starter = true elseif pv.badge == "none" then starter = false
+      elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
+      C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
+      if pv.bars == "off" then cos.xpF:Hide(); cos.stF:Hide() else cos.xpF:Show(); cos.stF:Show() end
     end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
     -- XP toward the next level
@@ -176,9 +195,9 @@ builders.you = function(p)
       { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h, %d XP/h)", r.hours,
         math.floor(((C.Rep and C.Rep.Mine and C.Rep.Mine().xp) or 0) / math.max(0.25, r.hours))) .. "|r") or "") },
       { "Your share of farms", money(r.share) },
-      { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " unconfirmed|r") or "") },
-      { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. "  (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "") .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " unconfirmed|r") or "")
-        .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " outside debts|r") or "") },
+      { "Debts you paid" .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " pending|r") or ""), tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
+      { "Paid to you" .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " pending|r") or ""), tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
+        .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or "") },
       { "Debts you forgave", tostring(r.forgaveN or 0) },
       { "Forgiven for you", tostring(r.forgivenN or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },
@@ -223,6 +242,13 @@ builders.debts = function(p)
   local cRing = cPortF:CreateTexture(nil, "OVERLAY"); cRing:SetPoint("CENTER"); cRing:SetSize(52, 52)
   if cPort.SetMask then pcall(cPort.SetMask, cPort, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
   local cName = text(card, "GameFontNormalLarge"); cName:SetPoint("TOPLEFT", 66, -14)
+  local cPick
+  if C.Cos and C.Cos.Picker then
+    local opts = { { "(their real standing)", false } }
+    for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent" }) do opts[#opts + 1] = { st, st } end
+    cPick = C.Cos.Picker(card, "Their ring", opts, function(v) C.Cos.preview.theirRing = v or nil; if p.refresh then p.refresh() end end)
+    cPick:SetPoint("TOPRIGHT", card, "TOPRIGHT", -18, -36)
+  end
   local cSub = text(card, "GameFontHighlightSmall"); cSub:SetPoint("TOPLEFT", cName, "BOTTOMLEFT", 0, -4)
   local cBal = text(card, "GameFontHighlight", "RIGHT"); cBal:SetPoint("TOPRIGHT", -18, -16); cBal:SetWidth(300)
   local lines = {}
@@ -317,7 +343,7 @@ builders.debts = function(p)
     local theirPts = C.Share and C.Share.StandingOf and C.Share.StandingOf(x.who)
     local theirSt = theirPts and C.Rep.StandingOf(theirPts) or "Unproven"
     if theirPts then cSub:SetText(cSub:GetText() .. GREY .. "  ·  " .. theirSt .. " (" .. theirPts .. ", unverified)|r") end
-    if C.Cos then cRing:SetTexture(C.Cos.RingFor(theirSt)) end
+    if C.Cos then cRing:SetTexture(C.Cos.RingFor(C.Cos.preview.theirRing or theirSt)) end
     local net = x.owed - x.owe
     cBal:SetText(net >= 1 and (GOLD .. x.who .. " owes you " .. C.Money(math.floor(net)) .. "|r") or (net <= -1 and (ORANGE .. "You owe " .. x.who .. " " .. C.Money(math.floor(-net)) .. "|r") or ""))
     for i, l in ipairs(lines) do

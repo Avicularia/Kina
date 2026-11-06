@@ -2792,16 +2792,25 @@ local function build()
       -- 1.4.0: the brand: forged title plate, the K coin, KINA in Cinzel and a version chip
       if C.Cos then
         local plateF = CreateFrame("Frame", nil, f)
-        plateF:SetSize(250, 62); plateF:SetPoint("TOP", f, "TOP", 0, 30); plateF:SetFrameLevel(f:GetFrameLevel() + 45)
+        -- (1.4.2: the coin sits in the plate's socket; the plate is dimmed so the gold
+        -- KINA reads on it; a Try button switches the plate off to compare)
+        plateF:SetSize(240, 60); plateF:SetPoint("TOP", f, "TOP", 0, 28); plateF:SetFrameLevel(f:GetFrameLevel() + 45)
         local plate = plateF:CreateTexture(nil, "ARTWORK"); plate:SetAllPoints(); plate:SetTexture(C.Cos.Tex("title_plate"))
-        local coin = plateF:CreateTexture(nil, "OVERLAY"); coin:SetSize(34, 34); coin:SetPoint("LEFT", plateF, "LEFT", 22, 0)
+        plate:SetVertexColor(0.42, 0.40, 0.38)
+        local coin = plateF:CreateTexture(nil, "OVERLAY"); coin:SetSize(40, 40); coin:SetPoint("CENTER", plateF, "LEFT", 27, 1)
         coin:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo")
-        local word = plateF:CreateFontString(nil, "OVERLAY"); C.Cos.Font(word, 24, "OUTLINE"); word:SetPoint("LEFT", coin, "RIGHT", 10, 1)
+        local word = plateF:CreateFontString(nil, "OVERLAY"); C.Cos.Font(word, 24, "OUTLINE"); word:SetPoint("LEFT", plateF, "LEFT", 62, 1)
         word:SetText("KINA"); word:SetTextColor(1, 0.82, 0.38)
         if word.SetShadowOffset then word:SetShadowOffset(2, -2); word:SetShadowColor(0, 0, 0, 0.9) end
         local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE"); ver:SetPoint("LEFT", word, "RIGHT", 8, -2)
         ver:SetText("|cffffe9a8v" .. C.version .. "|r")
         title:Hide()
+        if C.Cos.Picker then
+          local tp = C.Cos.Picker(plateF, "Title plate", { { "Plate (dimmed)", "dim" }, { "Plate (bright)", "bright" }, { "No plate", "off" } }, function(v)
+            if v == "off" then plate:Hide() else plate:Show(); if v == "bright" then plate:SetVertexColor(1, 1, 1) else plate:SetVertexColor(0.42, 0.40, 0.38) end end
+          end)
+          tp:SetPoint("LEFT", plateF, "RIGHT", 2, -4)
+        end
       end
     end
     -- the shelf the tabs stand on (A-36), so they don't float

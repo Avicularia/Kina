@@ -48,16 +48,63 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   if not o then return end
   o.ring:SetTexture(K.RingFor(standing))
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
-  local star = K.StarFor(recruits)
+  local star, wide = K.StarFor(recruits)
   if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(26, 26); o.badge:Show()
-  elseif star then o.badge:SetTexture(star); o.badge:SetSize(30, 30); o.badge:Show()
+  elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(60, 30) else o.badge:SetSize(30, 30) end; o.badge:Show()
   else o.badge:Hide() end
 end
 -- a forged frame over a status bar
+-- (1.4.2: hugs the bar: the art's own bounds, only 7 px wider and 4 px taller each side)
+local CROP = { xp_bar = { 14 / 64, 49 / 64 }, standing_bar = { 8 / 64, 55 / 64 } }
 function K.BarFrame(bar, which)
   local t = bar:CreateTexture(nil, "OVERLAY", nil, 3)
   t:SetTexture(P .. which)
-  t:SetPoint("TOPLEFT", bar, "TOPLEFT", -10, 9); t:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 10, -9)
-  t:SetTexCoord(0, 1, 0.22, 0.78)
+  t:SetPoint("TOPLEFT", bar, "TOPLEFT", -7, 4); t:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 7, -4)
+  local c = CROP[which] or { 0, 1 }
+  t:SetTexCoord(2 / 512, 510 / 512, c[1], c[2])
   return t
+end
+
+------------------------------------------------------------------ test pickers
+-- 1.4.2 (Taylor): try every cosmetic in place. A small "Try" button next to each piece
+-- opens a list; picking one shows it right away (preview only, nothing is saved).
+K.preview = {}
+local menu
+function K.Picker(parent, label, options, onPick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(46, 18); b:SetText("Try"); b:SetFrameLevel((parent:GetFrameLevel() or 1) + 20)
+  local fs = b:GetFontString(); if fs then fs:SetFont(STANDARD_TEXT_FONT, 10, "") end
+  b:SetScript("OnClick", function(self)
+    if menu and menu:IsShown() and menu.owner == self then menu:Hide(); return end
+    if not menu then
+      menu = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+      menu:SetFrameStrata("DIALOG"); menu:SetClampedToScreen(true)
+      if menu.SetBackdrop then
+        menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96); menu:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
+      end
+      menu.rows = {}
+    end
+    menu.owner = self
+    for _, r in ipairs(menu.rows) do r:Hide() end
+    local title = menu.title or menu:CreateFontString(nil, "OVERLAY", "GameFontNormal"); menu.title = title
+    title:SetPoint("TOPLEFT", 10, -8); title:SetText(label)
+    for i, opt in ipairs(options) do
+      local r = menu.rows[i]
+      if not r then
+        r = CreateFrame("Button", nil, menu); r:SetSize(170, 18)
+        r.t = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); r.t:SetPoint("LEFT", 6, 0)
+        r:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        menu.rows[i] = r
+      end
+      r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * 18)
+      r.t:SetText(opt[1])
+      r:SetScript("OnClick", function() menu:Hide(); onPick(opt[2]) end)
+      r:Show()
+    end
+    menu:SetSize(184, 34 + #options * 18)
+    menu:ClearAllPoints(); menu:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+    menu:Show()
+  end)
+  return b
 end
