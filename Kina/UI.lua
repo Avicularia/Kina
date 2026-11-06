@@ -1014,10 +1014,10 @@ if C.PUBLIC then
     if r.unshared then
       row(GOLDC .. "Split|r", "not a shared farm: your partner's loot wasn't counted, so there was no split", "", GREY .. "nothing owed|r")
     elseif s.split and s.split.transfers then
-      row(GOLDC .. "Split|r", "the group farmed (net: coin + loot - consumables)", money(r.farmed))
+      row(GOLDC .. "Split|r", "the group farmed (net: coin + loot)", money(r.farmed))
       if r.groupCoin then
         row("", "coin, split evenly by the game", money(r.groupCoin))
-        row("", "loot, split by Kina (after each looter's consumables)", money(r.lootSplit))
+        row("", "loot, split by Kina", money(r.lootSplit))
       end
       local names = {}
       for who in pairs(s.split.incomes or {}) do names[#names + 1] = who end

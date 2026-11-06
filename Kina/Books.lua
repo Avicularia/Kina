@@ -226,6 +226,9 @@ function C.YouRecord()
       if (rec.paidOff or 0) >= 1 then r.paidPend = (r.paidPend or 0) + 1 end
       if (rec.cameIn or 0) >= 1 then r.recvPend = (r.recvPend or 0) + 1 end
     end
+    -- 1.2.8: money from a farm partner that paid no open debt (it came after the debt
+    -- was forgiven or already paid, or was a gift): shown, not lost
+    if (rec.got or 0) - (rec.cameIn or 0) >= 1 then r.recvExtra = (r.recvExtra or 0) + rec.got - (rec.cameIn or 0) end
   end
   for _, d in ipairs(C.Debts and C.Debts() or {}) do
     if d.dir == "owe" then r.oweNow = r.oweNow + d.amt else r.owedNow = r.owedNow + d.amt end

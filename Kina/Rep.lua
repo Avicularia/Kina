@@ -217,11 +217,18 @@ function R.Of(name)
 end
 
 -- player tooltips: "Kina rep 7 (unverified)" for Kina users
-local function onUnit(tip)
-  if tip ~= GameTooltip or not tip.GetUnit or tip.kinaRep then return end
+-- 1.2.8: in combat the game hands tooltips "secret" unit values that addons may not
+-- touch (UnitIsPlayer on one raised an error every tooltip, 264 times). Skip those, and
+-- keep the "already added" mark in Kina's own table instead of on Blizzard's tooltip.
+local added = setmetatable({}, { __mode = "k" })
+local function onUnitSafe(tip)
+  if tip ~= GameTooltip or not tip.GetUnit or added[tip] then return end
   local _, unit = tip:GetUnit()
-  if not (unit and UnitIsPlayer and UnitIsPlayer(unit)) then return end
-  tip.kinaRep = true
+  if unit == nil then return end
+  if issecretvalue and issecretvalue(unit) then return end
+  if InCombatLockdown and InCombatLockdown() then return end
+  if not (UnitIsPlayer and UnitIsPlayer(unit)) then return end
+  added[tip] = true
   local name = UnitName(unit)
   local lv
   if UnitIsUnit and UnitIsUnit(unit, "player") then lv = R.Announce() else
@@ -232,13 +239,14 @@ local function onUnit(tip)
   else tip:AddLine(string.format("Kina %s |cff888888(unverified)|r", R.Roman(lv)), 0.31, 0.76, 0.97) end
   tip:Show()
 end
+local function onUnit(tip) pcall(onUnitSafe, tip) end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
   TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, onUnit)
 elseif GameTooltip and GameTooltip.HasScript and GameTooltip:HasScript("OnTooltipSetUnit") then
   GameTooltip:HookScript("OnTooltipSetUnit", onUnit)
 end
 if GameTooltip and GameTooltip.HookScript then
-  GameTooltip:HookScript("OnTooltipCleared", function(self) self.kinaRep = nil end)
+  GameTooltip:HookScript("OnTooltipCleared", function(self) added[self] = nil end)
 end
 
 -- level-up message

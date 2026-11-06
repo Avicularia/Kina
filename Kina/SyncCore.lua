@@ -561,8 +561,9 @@ function Core.Totals(s)
       elseif k == "U" then
         local _, n, v = ev.data:match("^(%d*):(%d*):(%-?%d*)$")
         local val = (tonumber(n) or 1) * (tonumber(v) or 0)
+        -- 1.2.8 (Taylor): consumables are each player's own cost; they're still counted
+        -- (shown as "used"), but they no longer come off the group split or the Net
         out.used = out.used + val
-        out.byLooter[ev.origin] = (out.byLooter[ev.origin] or 0) - val
       elseif k == "K" then
         -- the same mob seen by two players is one kill (data = "npc-spawn")
         local key = ev.data
@@ -570,7 +571,7 @@ function Core.Totals(s)
       end
     end
   end
-  out.net = out.coin + out.items - out.used
+  out.net = out.coin + out.items
   out.paused, out.closed = paused, s.closed
   out.noSplit = out.noSplit or nil
   return out
