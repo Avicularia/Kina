@@ -122,6 +122,9 @@ builders.you = function(p)
   -- 1.5.0: vouch for someone from a recent farm
   local vb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); vb:SetSize(130, 22); vb:SetPoint("TOPRIGHT", -14, -10)
   vb:SetText("Vouch for someone"); vb:SetScript("OnClick", function(self) if C.Vouch then C.Vouch.Picker(self) end end)
+  -- 1.5.1: look at someone else's Kina profile (your party first)
+  local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); pb:SetSize(110, 22); pb:SetPoint("RIGHT", vb, "LEFT", -6, 0)
+  pb:SetText("Party profiles"); pb:SetScript("OnClick", function(self) if C.Profile then C.Profile.Picker(self) end end)
   -- two columns of four, so the record fits the smallest window
   local recL, recR = {}, {}
   local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -36); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)

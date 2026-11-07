@@ -390,6 +390,18 @@ function S.StandingOf(name)
   end
 end
 -- 1.4.0: what a Kina user told us about their character (class, level, professions)
+-- 1.5.1: everything their Kina last told mine, for their profile card
+function S.ProfileOf(name)
+  local d = db()
+  local want = tostring(name or ""):lower():match("^[^%-]+")
+  local best
+  for _, a in pairs(d.authors or {}) do
+    local nm = (a.char and a.char.from) or a.name
+    if nm and tostring(nm):lower():match("^[^%-]+") == want and (not best or (a.seen or 0) > (best.seen or 0)) then best = a end
+  end
+  if not best then return nil end
+  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver }
+end
 function S.CharOf(name)
   local d = db()
   local want = tostring(name or ""):lower():match("^[^%-]+")
@@ -468,6 +480,7 @@ local function onHello(from, rest, channel)
   a.name, a.seen = name, C.Now()
   if S.syncHeard then S.syncHeard[from] = true end
   if f[15] and f[15]:match("^%-?%d+$") then a.stand = tonumber(f[15]) end
+  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") then a.ver = f[14] end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and C.VersionNewer and C.VersionNewer(f[14], C.version) then
     S.newerSeen = S.newerSeen or {}

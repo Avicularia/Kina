@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.5.0"
+C.version = "1.5.1"
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -333,6 +333,15 @@ function C.RestorePos(f, key, ...)
 end
 
 -- handle: an extra region that also starts a drag (a title strip above child widgets)
+local dragFns = setmetatable({}, { __mode = "k" })
+-- 1.5.1: another piece of a window that moves it (the KINA banner sits over the title band)
+function C.DragBy(f, piece)
+  local fn = dragFns[f]
+  if not (fn and piece) then return end
+  piece:EnableMouse(true)
+  piece:SetScript("OnMouseDown", function(_, btn) if btn == "LeftButton" then fn[1]() end end)
+  piece:SetScript("OnMouseUp", function(_, btn) if btn == "LeftButton" and C.dragging == f then fn[2]() end end)
+end
 function C.MakeDraggable(f, key, handle, onMoved)
   f:SetMovable(true); f:EnableMouse(true); f:SetClampedToScreen(true)
   f:RegisterForDrag("LeftButton")
@@ -362,6 +371,7 @@ function C.MakeDraggable(f, key, handle, onMoved)
   else
     f:SetScript("OnDragStart", start); f:SetScript("OnDragStop", stop)
   end
+  dragFns[f] = { start, stop }
   if handle then
     -- the title bar moves the window from the moment you press, no drag threshold
     handle:EnableMouse(true)
@@ -385,10 +395,13 @@ function C.MakeDraggable(f, key, handle, onMoved)
       e:SetScript("OnMouseUp", function(_, btn) if btn == "LeftButton" and C.dragging == f then stop() end end)
       e:SetScript("OnHide", function() if C.dragging == f then stop() end end)
     end
-    strip("TOPLEFT", "TOPRIGHT", 0, 0, -36, 0, nil, T)          -- top (the close button keeps its corner)
-    strip("TOPLEFT", "BOTTOMLEFT", 0, -T, 0, 0, T, nil)          -- left
-    strip("TOPRIGHT", "BOTTOMRIGHT", 0, -36, 0, GRIP, T, nil)    -- right (stops above the grip)
-    strip("BOTTOMLEFT", "BOTTOMRIGHT", T, 0, -GRIP, 0, nil, T)   -- bottom (stops left of the grip)
+    -- (1.5.1: the iron is drawn ~16 px OUTSIDE the window too; the strips now cover that
+    -- outer half as well, so grabbing anywhere on the visible iron moves it)
+    local O = 16
+    strip("TOPLEFT", "TOPRIGHT", -O, O, -36, O, nil, T + O)          -- top (the close button keeps its corner)
+    strip("TOPLEFT", "BOTTOMLEFT", -O, -T, -O, 0, T + O, nil)        -- left
+    strip("TOPRIGHT", "BOTTOMRIGHT", O, -36, O, GRIP, T + O, nil)    -- right (stops above the grip)
+    strip("BOTTOMLEFT", "BOTTOMRIGHT", T, -O, -GRIP, -O, nil, T + O) -- bottom (stops left of the grip)
   end
 end
 

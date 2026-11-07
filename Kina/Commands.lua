@@ -102,6 +102,9 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "kph" then
     local n = tonumber(rest); if n and n > 0 then C.settings.killsPerHour = n; C.Print("default kills/hour = " .. n) end
   elseif cmd == "hud" or cmd == "widget" then C.ShowWidget(not C.settings.hudShown)
+  elseif cmd == "profile" then
+    local who = rest ~= "" and rest or (UnitName and UnitName("target"))
+    if C.Profile then C.Profile.Show(who) end
   elseif cmd == "vouch" then
     local who, k = rest:match("^(%S+)%s*(%d*)$")
     if who and C.Vouch then C.Vouch.Give(who, tonumber(k) or 1)

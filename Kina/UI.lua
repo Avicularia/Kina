@@ -2807,6 +2807,8 @@ local function build()
         local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE"); ver:SetPoint("BOTTOMLEFT", word, "BOTTOMRIGHT", -14, 6)
         ver:SetText("|cffc9b27av" .. C.version .. "|r")
         title:Hide()
+        -- 1.5.1: grabbing the banner moves the window too
+        if C.DragBy then C.DragBy(f, plateF) end
       end
     end
     -- the shelf the tabs stand on (A-36), so they don't float

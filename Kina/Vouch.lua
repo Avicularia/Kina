@@ -124,7 +124,8 @@ local function makeCard(parent)
     c:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     c:SetBackdropColor(0.10, 0.08, 0.06, 0.92); c:SetBackdropBorderColor(0.55, 0.45, 0.25, 1)
   end
-  c.box = CreateFrame("Frame", nil, c); c.box:SetSize(64, 64); c.box:SetPoint("TOP", 0, -24)
+  c.box = CreateFrame("Button", nil, c); c.box:SetSize(64, 64); c.box:SetPoint("TOP", 0, -24)
+  c.box:SetScript("OnClick", function() if c.who and C.Profile and not c.preview then C.Profile.Show(c.who) end end) -- 1.5.1
   c.portrait = c.box:CreateTexture(nil, "ARTWORK")
   c.cos = C.Cos and C.Cos.Portrait(c.box, c.portrait)
   if c.cos then c.cos.plate:Hide(); c.cos.num:Hide() end
