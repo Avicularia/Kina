@@ -140,7 +140,7 @@ do
             sp.lapsed[d.key] = true
             if C.Log then C.Log("lapsed", d.who, math.floor(d.amt), (d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) end
             show({ head = "Debt lapsed: " .. (C.Books and C.Books.Name(d.who) or d.who), sub = C.Money(math.floor(d.amt)) .. GREY .. " (" .. (d.farm or "farm") .. ") was not paid in time|r", gains = "|cffff4040" .. C.Rep.LAPSE_REP .. " rep|r" .. GREY .. "  (paying it still earns XP and rep back)|r" })
-            if C.PlayCue then C.PlayCue("warning") end
+            if C.PlayCue then C.PlayCue("repdown") end
           end
         elseif due and due - C.Now() < 900 and not warned[key] then
           warned[key] = true
@@ -157,7 +157,7 @@ do
             sp.lapsed[d.key] = true
             if C.Log then C.Log("refused", d.who, math.floor(d.amt), (d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) end
             show({ head = "Payment refused: " .. (C.Books and C.Books.Name(d.who) or d.who), sub = GREY .. "they offered the full amount and the time ran out|r", gains = "|cffff4040standing lost|r" })
-            if C.PlayCue then C.PlayCue("warning") end
+            if C.PlayCue then C.PlayCue("repdown") end
           end
         end
       end
@@ -192,7 +192,7 @@ do
       return (g > 0 and (g .. "g ") or "") .. sv .. "s"
     end
     local where = (GetInstanceInfo and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
-    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), math.min(60, math.floor(secs / 60 * 3600 / secs)), where)
+    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), math.floor(math.min(C.Rep and C.Rep.FARM_MAX or 120, math.floor(secs / 60)) * 3600 / secs), where)
     local chan = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
     pcall(SendChatMessage, msg, chan)
   end

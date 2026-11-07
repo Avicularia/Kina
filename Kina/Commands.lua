@@ -105,7 +105,7 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "sound" then
     C.settings.farmSound = (C.settings.farmSound == false)
     C.Print("farm fanfares: " .. (C.settings.farmSound and "on" or "off"))
-    if C.settings.farmSound then C.PlayCue("start") end
+    if C.settings.farmSound then C.PlayClick() end
     if C.RefreshWidget then C.RefreshWidget() end
   elseif cmd == "timer" then
     local h = tonumber(rest)

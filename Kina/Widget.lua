@@ -371,7 +371,7 @@ local function build()
   tip(alpha, "Background", "Click to make the background more or less see-through.")
   w.snd = smallButton(w, "SND", 36, function()
     C.settings.farmSound = (C.settings.farmSound == false)
-    if C.settings.farmSound then C.PlayCue("start") end
+    if C.settings.farmSound then C.PlayClick() end
     C.RefreshWidget()
   end); w.snd:SetPoint("RIGHT", alpha, "LEFT", -2, 0)
   tip(w.snd, "Sound", "Turns the start and stop fanfares on or off.")

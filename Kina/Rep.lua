@@ -207,6 +207,22 @@ function R.History()
   R.Replay(log.lines or {}, st, gains)
   return gains, log.repState and log.repState.xp or 0
 end
+-- 1.4.5: XP per hour of farming, honestly: every XP gained in the last `days` days
+-- (farms, payments, forgiving...) divided by the hours of shared farming in those days.
+-- (The old figure divided ALL XP ever by all hours, and a long farm's XP caps at 120.)
+function R.XPPerHour(days)
+  local gains = R.History()
+  local since = C.Now() - (days or 7) * DAY
+  local xp, secs = 0, 0
+  for _, g in ipairs(gains) do
+    if g.t >= since then
+      xp = xp + (g.xp or 0)
+      if (g.kind == "farm" or g.kind == "short") and g.secs then secs = secs + g.secs end
+    end
+  end
+  if secs < 600 then return nil end
+  return math.floor(xp * 3600 / secs)
+end
 -- XP a payment of this size would give (before the daily cap per partner)
 function R.PayXP(copper)
   if not copper or copper < 1 then return 0 end

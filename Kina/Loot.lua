@@ -558,7 +558,11 @@ local SOUND = "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\"
 -- One at a time (a new one stops the last), through the game's Sound Effects volume.
 local cueHandle
 local CUES = { start = "farm_start", stop = "farm_stop", paid = "paid", settled = "settled",
-  level = "level_up", standing = "standing_up", warning = "warning" }
+  level = "level_up", standing = "standing_up", warning = "warning", repdown = "rep_down" }
+-- 1.4.5: the Sound switch gives a plain click, not the farm-start fanfare
+function C.PlayClick()
+  if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON) end
+end
 function C.PlayCue(which)
   if C.settings.farmSound == false or not PlaySoundFile then return end
   if cueHandle and StopSound then pcall(StopSound, cueHandle, 200) end

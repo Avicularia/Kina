@@ -170,7 +170,8 @@ builders.you = function(p)
       C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
       local stName = pv.ring or mm.standing or "Unproven"
       standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep|r")
-      if pv.bars == "off" then cos.xpF:Hide(); cos.stF:Hide() else cos.xpF:Show(); cos.stF:Show() end
+      -- (1.4.5: frames off by default, Taylor's call; Try > Bar frames still shows them)
+      if pv.bars == "on" then cos.xpF:Show(); cos.stF:Show() else cos.xpF:Hide(); cos.stF:Hide() end
     end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
     -- XP toward the next level
@@ -201,8 +202,8 @@ builders.you = function(p)
     -- record
     local r = C.YouRecord and C.YouRecord() or {}
     local rows = {
-      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h, %d XP/h)", r.hours,
-        math.floor(((C.Rep and C.Rep.Mine and C.Rep.Mine().xp) or 0) / math.max(0.25, r.hours))) .. "|r") or "") },
+      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h%s)", r.hours,
+        (C.Rep and C.Rep.XPPerHour) and (function() local v = C.Rep.XPPerHour(7); return v and string.format(", %d XP/h this week", v) or "" end)() or "") .. "|r") or "") },
       { "Your share of farms", money(r.share) },
       { "Debts you paid" .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " pending|r") or ""), tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
       { "Paid to you" .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " pending|r") or ""), tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")

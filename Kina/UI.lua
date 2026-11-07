@@ -2527,7 +2527,7 @@ local function buildSettings(f)
     "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
   toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
-  toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayCue then C.PlayCue("start") end end)
+  toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayClick then C.PlayClick() end end)
   toggle("Post farm stats to group chat (every 15 min)", function() return st.groupAd ~= false end, function(v) st.groupAd = v end)
   toggle("Play the Kina theme after a farm (in the Ledger)", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end)
   toggle("Leave cloth for our tailor (Kina loots for you)", function() return st.leaveCloth == true end, function(v) if C.SetLeaveCloth then C.SetLeaveCloth(v) else st.leaveCloth = v end end)
