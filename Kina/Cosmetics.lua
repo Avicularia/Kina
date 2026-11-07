@@ -40,6 +40,7 @@ function K.Portrait(box, portrait)
   if portrait.SetMask then pcall(portrait.SetMask, portrait, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
   portrait:ClearAllPoints(); portrait:SetPoint("TOPLEFT", 4, -4); portrait:SetPoint("BOTTOMRIGHT", -4, 4)
   local W = box:GetWidth() or 80
+  o.W = W
   o.glow = box:CreateTexture(nil, "BACKGROUND", nil, -2)
   o.glow:SetPoint("CENTER", portrait, "CENTER"); o.glow:SetSize(W * 1.45, W * 1.45); o.glow:SetBlendMode("ADD")
   o.ring = box:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -68,8 +69,10 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   o.pulse = standing == "Exalted"
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
   local star, wide = K.StarFor(recruits)
-  if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(30, 30); o.badge:Show()
-  elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(72, 36) else o.badge:SetSize(32, 32) end; o.badge:Show()
+  -- 1.5.3 (Taylor: the mentor star was tiny): sized from the portrait, and bigger
+  local W = o.W or 80
+  if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(W * 0.48, W * 0.48); o.badge:Show()
+  elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(W * 1.25, W * 0.62) else o.badge:SetSize(W * 0.6, W * 0.6) end; o.badge:Show()
   else o.badge:Hide() end
 end
 -- a forged frame over a status bar

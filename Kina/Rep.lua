@@ -125,6 +125,10 @@ function R.Replay(lines, st, gains)
       local rp = 0
       if f[12] and f[12] ~= "" then rp = tonumber(f[12]) or 0
       elseif paidOff >= 1 then rp = R.PayRep(paidOff) end
+      -- 1.5.3 (Taylor): being paid earns the same standing as paying. Lines from before
+      -- 1.5.3 gave the receiver 0: work it out from what came in (the on-time bonus
+      -- isn't known for those, so it's left out)
+      if rp <= 0 and paidOff < 1 and cameIn >= 1 then rp = R.PayRep(cameIn) end
       if rp > 0 then st.rep = st.rep + capped("rep:" .. who .. ":" .. day(t), 120, rp) end
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end

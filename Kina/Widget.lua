@@ -154,9 +154,72 @@ local function chip(textv, r, g, b)
   w.chip:SetWidth(math.max(40, (w.chip.text:GetStringWidth() or 30) + 12))
 end
 
+-- 1.5.3 (Taylor): your party under the widget: each member's portrait in their standing
+-- ring (their Kina level on the plate, a mentor star when they have one); click one for
+-- their Kina profile. Hidden when you're alone.
+local strip
+local function first(n) return n and (tostring(n):match("^([^%-]+)") or tostring(n)) or "" end
+local function partyStrip()
+  if not (C.Cos and C.Cos.Portrait) then return end
+  local mates = {}
+  local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+  local raid = IsInRaid and IsInRaid()
+  local me = UnitName and UnitName("player")
+  for i = 1, n do
+    local u = raid and ("raid" .. i) or ("party" .. i)
+    local ok, un = pcall(UnitName, u)
+    if ok and un and not (issecretvalue and issecretvalue(un)) and un ~= me and #mates < 4 then mates[#mates + 1] = { u = u, name = first(un) } end
+  end
+  if #mates == 0 then if strip then strip:Hide() end; return end
+  if not strip then
+    strip = CreateFrame("Frame", nil, w)
+    strip:SetHeight(78)
+    if C.Skin and C.Skin.On() and C.Skin.Panel then C.Skin.Panel(strip, 6)
+    else local bg = strip:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.6) end
+    strip.cells = {}
+    for i = 1, 4 do
+      local c = CreateFrame("Button", nil, strip); c:SetSize(70, 70)
+      c.box = CreateFrame("Frame", nil, c); c.box:SetSize(38, 38); c.box:SetPoint("TOP", 0, -10)
+      c.portrait = c.box:CreateTexture(nil, "ARTWORK")
+      c.cos = C.Cos.Portrait(c.box, c.portrait)
+      c.cos.plate:SetSize(22, 22); C.Cos.Font(c.cos.num, 9, "OUTLINE")
+      c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.name:SetPoint("BOTTOM", 0, 0); c.name:SetWidth(70)
+      if c.name.SetWordWrap then c.name:SetWordWrap(false) end
+      local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.4, 0.08)
+      c:SetScript("OnClick", function(self) if self.who and C.Profile then C.Profile.Show(self.who) end end)
+      c:SetScript("OnEnter", function(self)
+        if not (GameTooltip and self.who) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM"); GameTooltip:AddLine(self.who); GameTooltip:AddLine("Click for their Kina profile", 1, 1, 1); GameTooltip:Show()
+      end)
+      c:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+      strip.cells[i] = c
+    end
+  end
+  strip:ClearAllPoints(); strip:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, -4); strip:SetPoint("TOPRIGHT", w, "BOTTOMRIGHT", 0, -4)
+  local cw = (w:GetWidth() or 324) / 4
+  for i, c in ipairs(strip.cells) do
+    local m = mates[i]
+    if m then
+      c:ClearAllPoints(); c:SetPoint("TOP", strip, "TOPLEFT", cw * (i - 0.5) + (4 - #mates) * cw / 2, -4)
+      c.who = m.name
+      if c.lastUnit ~= m.u .. m.name and SetPortraitTexture then pcall(SetPortraitTexture, c.portrait, m.u); c.lastUnit = m.u .. m.name end
+      local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(m.name)
+      local stand = pr and pr.stand
+      local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
+      local klv = pr and pr.kinaLv
+      C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1)
+      if klv and klv > 0 then c.cos.plate:Show(); c.cos.num:Show() else c.cos.plate:Hide(); c.cos.num:Hide() end
+      c.name:SetText((pr and "|cffffffff" or "|cff9d9d9d") .. m.name .. "|r")
+      c:Show()
+    else c:Hide(); c.who = nil end
+  end
+  strip:Show()
+end
+
 function C.RefreshWidget()
   if not (w and w:IsShown()) then return end
   pcall(refreshPay)
+  pcall(partyStrip)
   -- 1.1.0: the Scan AH button and what it's doing
   if w.scan then
     if C.ahOpen and not w.pay:IsShown() then
@@ -172,7 +235,8 @@ function C.RefreshWidget()
     else w.scan:Hide() end
   end
   local s = C.session
-  if chipIron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
+  if w.sndIcon then w.sndIcon:SetTexture(C.Cos.Tex(C.settings.farmSound == false and "sound_off" or "sound_on"))
+  elseif chipIron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
   else w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND") end
   if w.rep and C.RepLine then pcall(function() w.rep.text:SetText(C.RepLine() .. (C.ShareData() and "" or " |cff888888paused|r")) end) end
   w.timer:SetText(presetText(C.settings.farmPreset))
@@ -483,8 +547,34 @@ local function build()
     x:SetSize(24, 24); x:SetPoint("TOPRIGHT", w, "TOPRIGHT", 1, 1); x:SetFrameLevel(w:GetFrameLevel() + 40)
     x:SetScript("OnClick", function() C.ShowWidget(false) end)
     tip(x, "Hide", "Hides the widget. /kina widget (or the minimap button) brings it back; a running farm keeps going.")
-    w.snd:SetSize(56, 18); w.snd:ClearAllPoints(); w.snd:SetPoint("RIGHT", x, "LEFT", -2, 0)
-    if w.snd:GetFontString() then fx(w.snd:GetFontString(), 10) end
+    -- 1.5.3 (Taylor): the same KINA nameplate as the main window, centred on the top edge;
+    -- the sound toggle is a speaker in the top-left corner, opposite the close X
+    icon:Hide(); title:Hide()
+    local plate = CreateFrame("Frame", nil, w); plate:SetSize(190, 48); plate:SetPoint("CENTER", w, "TOP", 0, 2)
+    plate:SetFrameLevel(w:GetFrameLevel() + 45)
+    local pt = plate:CreateTexture(nil, "BACKGROUND"); pt:SetAllPoints(); pt:SetTexture(C.Cos and C.Cos.Tex("kina_plaque") or nil)
+    local pc = plate:CreateTexture(nil, "OVERLAY"); pc:SetSize(30, 30); pc:SetPoint("CENTER", plate, "CENTER", -50, 0)
+    pc:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo")
+    local pw = plate:CreateTexture(nil, "ARTWORK"); pw:SetSize(100, 25); pw:SetPoint("CENTER", plate, "CENTER", 11, 0)
+    pw:SetTexture(C.Cos and C.Cos.Tex("kina_word") or nil)
+    if C.DragBy then C.DragBy(w, plate) end
+    -- hovering the plate shows your Kina level (what the little level button did)
+    plate:SetScript("OnEnter", function(self)
+      if not GameTooltip then return end
+      if C.TipOwner then C.TipOwner(self) else GameTooltip:SetOwner(self, "ANCHOR_BOTTOM") end
+      GameTooltip:AddLine("Kina level (experience)")
+      for _, l in ipairs(C.RepDetail and C.RepDetail() or {}) do GameTooltip:AddLine(l, 1, 1, 1, true) end
+      GameTooltip:Show()
+    end)
+    plate:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    w.rep:Hide()
+    w.snd:SetSize(24, 22); w.snd:ClearAllPoints(); w.snd:SetPoint("TOPLEFT", w, "TOPLEFT", 6, -2)
+    w.snd:SetFrameLevel(w:GetFrameLevel() + 40)
+    for _, k in ipairs({ "Left", "Middle", "Right" }) do local t = w.snd[k]; if t and t.Hide then t:Hide() end end
+    if w.snd.GetNormalTexture and w.snd:GetNormalTexture() then w.snd:GetNormalTexture():SetAlpha(0) end
+    if w.snd.GetPushedTexture and w.snd:GetPushedTexture() then w.snd:GetPushedTexture():SetAlpha(0) end
+    w.sndIcon = w.snd:CreateTexture(nil, "OVERLAY"); w.sndIcon:SetSize(20, 20); w.sndIcon:SetPoint("CENTER")
+    if w.snd:GetFontString() then w.snd:GetFontString():Hide() end
     if handle then
       handle:EnableMouse(true)
       handle:HookScript("OnMouseUp", function(_, btn)

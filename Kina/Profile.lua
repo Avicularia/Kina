@@ -86,7 +86,7 @@ local function row(parent, y)
 end
 local function build()
   card = CreateFrame("Frame", "KinaProfile", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  card:SetSize(320, 400); card:SetFrameStrata("DIALOG"); card:SetToplevel(true)
+  card:SetSize(320, 400); card:SetFrameStrata("FULLSCREEN_DIALOG"); card:SetToplevel(true) -- 1.5.3: above the Kina window
   card:SetClampedToScreen(true); card:EnableMouse(true); card:SetMovable(true)
   card:RegisterForDrag("LeftButton"); card:SetScript("OnDragStart", card.StartMoving); card:SetScript("OnDragStop", card.StopMovingOrSizing)
   if card.SetBackdrop then
@@ -186,11 +186,11 @@ function P.Show(name)
   for i, r in ipairs(rows) do o.rows[i][1]:SetText(GREY .. r[1] .. "|r"); o.rows[i][2]:SetText(r[2]) end
   o.note:SetText(GREY .. "Standing and Kina level are what their Kina reports (unverified until the Kina server checks both logs).|r")
   -- buttons
-  local can, why = false, "Kina isn't ready"
-  if C.Vouch then can, why = C.Vouch.CanVouch(name) end
   local function pick(i) if C.Vouch.Give(name, i) then P.Show(name) end end
   for _, btn in ipairs({ o.up, o.down }) do
     local bad = btn == o.down
+    local can, why = false, "Kina isn't ready"
+    if C.Vouch then can, why = C.Vouch.CanVouch(name, bad and 5 or 1) end
     btn:SetAlpha(can and 1 or 0.35)
     btn:SetScript("OnClick", function(self) if can then C.Vouch.OpenReasons(self, name, bad, pick) end end)
     btn:SetScript("OnEnter", function(self)
@@ -202,7 +202,7 @@ function P.Show(name)
     if ChatFrame_SendTell then pcall(ChatFrame_SendTell, name) end
   end)
   o.frame:ClearAllPoints(); o.frame:SetPoint("CENTER", UIParent, "CENTER", 260, 60)
-  o.frame:Show()
+  o.frame:Show(); o.frame:Raise()
   return true
 end
 

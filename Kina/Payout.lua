@@ -643,7 +643,8 @@ function C._matchConf(r, theirGave, label)
     local function onTime(cv) return cv.stop and (r.t or C.Now()) <= cv.stop + C.DEBT_HOURS * 3600 end
     for _, cv in ipairs(r.covers or {}) do
       local tot = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
-      if cv.dir == "owe" and tot >= 1 and C.Rep and C.Rep.PayRep then
+      -- 1.5.3 (Taylor): paying and being paid earn the SAME standing
+      if tot >= 1 and C.Rep and C.Rep.PayRep then
         payRep = payRep + C.Rep.PayRep(tot) * (cv.amt or 0) / tot + (onTime(cv) and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)
       end
     end
@@ -667,8 +668,8 @@ function C._matchConf(r, theirGave, label)
           local part = (cv.amt or 0) / total
           if cv.dir == "owed" then
             theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
-            theirRep = theirRep + C.Rep.PayRep(total) * part + (onTime(cv) and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)
           else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part end
+          theirRep = theirRep + C.Rep.PayRep(total) * part + (onTime(cv) and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)
         end
       end
       if nx then payXP, recvXP, theirs, theirRep = 0, 0, 0, 0 end

@@ -517,14 +517,14 @@ local RANK = { "|cffffd100", "|cffd9d9d9", "|cffd08a4a", "|cff9d9d9d", "|cff9d9d
 
 builders.youVouch = function(p)
   -- left: totals and every kind
-  local L = box(p); L:SetPoint("TOPLEFT", 0, 0); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetWidth(330)
+  local L = box(p); L:SetPoint("TOPLEFT", 0, 0); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetWidth(300)
   local h = heading(L, "Commendations received"); h:SetPoint("TOPLEFT", 16, -14)
   local big = text(L, "GameFontNormalHuge"); big:SetPoint("TOPLEFT", 16, -40)
   if C.Cos then C.Cos.Font(big, 26, "OUTLINE") end
-  local bigSub = text(L, "GameFontHighlightSmall"); bigSub:SetPoint("TOPLEFT", big, "BOTTOMLEFT", 0, -4)
+  local bigSub = text(L, "GameFontHighlightSmall"); bigSub:SetPoint("TOPLEFT", 16, -96) -- (1.5.3: clear of the big icons)
   local kindRows = {}
   for i = 1, 8 do
-    local y = -100 - (i - 1) * 24 - (i > 4 and 12 or 0)
+    local y = -124 - (i - 1) * 26 - (i > 4 and 12 or 0)
     local l = text(L, "GameFontHighlight"); l:SetPoint("TOPLEFT", 16, y)
     local n = text(L, "GameFontHighlight", "RIGHT"); n:SetPoint("TOPRIGHT", -16, y)
     kindRows[i] = { l, n }
@@ -532,12 +532,12 @@ builders.youVouch = function(p)
   local gaveT = text(L, "GameFontHighlightSmall"); gaveT:SetPoint("BOTTOMLEFT", 16, 14); gaveT:SetPoint("RIGHT", L, "RIGHT", -16, 0)
 
   -- middle: top 5 who commended you (click one)
-  local M = box(p); M:SetPoint("TOPLEFT", L, "TOPRIGHT", 12, 0); M:SetPoint("BOTTOMLEFT", L, "BOTTOMRIGHT", 12, 0); M:SetWidth(330)
+  local M = box(p); M:SetPoint("TOPLEFT", L, "TOPRIGHT", 12, 0); M:SetPoint("BOTTOMLEFT", L, "BOTTOMRIGHT", 12, 0); M:SetWidth(300)
   local h2 = heading(M, "Who commended you most"); h2:SetPoint("TOPLEFT", 16, -14)
   local h2s = text(M, "GameFontHighlightSmall"); h2s:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -3); h2s:SetText(GREY .. "click a name to see what they gave you|r")
   local top = {}
   for i = 1, 5 do
-    local r = rankRow(M, i, 298, true); r:SetPoint("TOPLEFT", 16, -56 - (i - 1) * 40); top[i] = r
+    local r = rankRow(M, i, 10, true); r:SetPoint("TOPLEFT", 16, -56 - (i - 1) * 40); r:SetPoint("RIGHT", M, "RIGHT", -16, 0); top[i] = r
   end
   local more = text(M, "GameFontHighlightSmall"); more:SetPoint("BOTTOMLEFT", 16, 14)
   local empty = text(M, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 16, -60); empty:SetWidth(290)
@@ -578,6 +578,7 @@ builders.youVouch = function(p)
       local r, x = top[i], st.list[i]
       if x then
         r:Show()
+        r.barW = (r:GetWidth() or 268) - 32
         r.rank:SetText(RANK[i] .. i .. "|r"); r.name:SetText(x.who)
         r.val:SetText(GOLD .. x.good .. "|r " .. icon(false, 13) .. (x.bad > 0 and ("  " .. RED .. x.bad .. "|r " .. icon(true, 13)) or ""))
         r.sub:SetText(GREY .. "last " .. dateOf(x.last) .. "|r")

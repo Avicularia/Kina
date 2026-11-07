@@ -12,8 +12,11 @@ V.KINDS = { "Pulled their weight", "Great leader", "Profession support", "Good c
   -- 1.5.2 (Taylor): bad commendations (5-8), always shown in red with a thumbs down
   "Didn't pull their weight", "Left the group early", "Greedy with loot", "Rude or toxic" }
 V.GOOD_N = 4
-V.REP, V.REPEAT_REP, V.GIVE_XP = 15, 3, 5
-V.BAD_REP, V.BAD_REPEAT_REP, V.BAD_PER_DAY = -10, -3, 3
+-- 1.5.3 (Taylor): +10 / -10, the same size both ways. Per farm you can commend at most 2
+-- people (any number of bad ones), and one or the other per person, never both.
+V.REP, V.REPEAT_REP, V.GIVE_XP = 10, 3, 5
+V.BAD_REP, V.BAD_REPEAT_REP = -10, -3
+V.GOOD_PER_FARM = 2
 function V.IsBad(k) return (tonumber(k) or 1) > V.GOOD_N end
 V.RED = "|cffff4030"
 local UP, DOWN = "Interface\\AddOns\\Kina\\Media\\Cos\\thumb_up", "Interface\\AddOns\\Kina\\Media\\Cos\\thumb_down"
@@ -22,24 +25,6 @@ local DAY = 86400
 local function first(n) return n and (tostring(n):match("^([^%-]+)") or n) or "" end
 local function lower(n) return first(n):lower() end
 
--- the people I farmed with in a qualifying farm that ended in the last 24 hours
-function V.Eligible()
-  local out, seen = {}, {}
-  local me = lower(UnitName and UnitName("player"))
-  for _, s in ipairs(C.db.sessions or {}) do
-    if s.stop and C.Now() - s.stop <= DAY and s.sync and s.split and s.split.incomes then
-      local secs = s.stop - (s.start or s.stop) - (s.pausedSecs or 0)
-      local n = 0; for _ in pairs(s.split.incomes) do n = n + 1 end
-      if secs >= 900 and n >= 2 then
-        for who in pairs(s.split.incomes) do
-          local k = lower(who)
-          if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] then seen[k] = true; out[#out + 1] = { who = first(who), ref = (s.sync.sid or ("t" .. tostring(s.start))), farm = s.label } end
-        end
-      end
-    end
-  end
-  return out
-end
 local function vdb()
   C.db.vouch = C.db.vouch or { given = {}, got = {} }
   local d = C.db.vouch; d.given = d.given or {}; d.got = d.got or {}
@@ -47,19 +32,46 @@ local function vdb()
   for _, t in ipairs({ d.given, d.got }) do for i = #t, 1, -1 do if C.Now() - (t[i].t or 0) > 30 * DAY then table.remove(t, i) end end end
   return d
 end
+local function givenIn(ref, who)
+  for _, g in ipairs(vdb().given) do if g.ref == ref and lower(g.who) == lower(who) then return g end end
+end
+function V.GoodLeft(ref)
+  local n = 0
+  for _, g in ipairs(vdb().given) do if g.ref == ref and not V.IsBad(g.kind) then n = n + 1 end end
+  return math.max(0, V.GOOD_PER_FARM - n)
+end
+-- the people from my qualifying farms (ended in the last 24 hours) I haven't commended
+-- for that farm yet, newest farm first
+function V.Eligible()
+  local out, seen = {}, {}
+  local me = lower(UnitName and UnitName("player"))
+  local ss = C.db.sessions or {}
+  for i = #ss, 1, -1 do
+    local s = ss[i]
+    if s.stop and C.Now() - s.stop <= DAY and s.sync and s.split and s.split.incomes then
+      local secs = s.stop - (s.start or s.stop) - (s.pausedSecs or 0)
+      local n = 0; for _ in pairs(s.split.incomes) do n = n + 1 end
+      if secs >= 900 and n >= 2 then
+        local ref = s.sync.sid or ("t" .. tostring(s.start))
+        for who in pairs(s.split.incomes) do
+          local k = lower(who)
+          if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] and not givenIn(ref, who) then
+            seen[k] = true; out[#out + 1] = { who = first(who), ref = ref, farm = s.label }
+          end
+        end
+      end
+    end
+  end
+  return out
+end
 function V.CanVouch(who, kind)
   local k = lower(who)
   if C.IsMyChar and C.IsMyChar(who) then return false, "you can't commend yourself or your own characters" end
   local okFarm
   for _, e in ipairs(V.Eligible()) do if lower(e.who) == k then okFarm = e end end
-  if not okFarm then return false, "only for someone in a qualifying farm with you in the last 24 hours" end
-  for _, g in ipairs(vdb().given) do
-    if lower(g.who) == k and C.Now() - g.t < DAY then return false, "you already vouched for them today" end
-  end
-  if kind and V.IsBad(kind) then
-    local n = 0
-    for _, g in ipairs(vdb().given) do if V.IsBad(g.kind) and C.Now() - g.t < DAY then n = n + 1 end end
-    if n >= V.BAD_PER_DAY then return false, "you've given " .. V.BAD_PER_DAY .. " bad commendations today" end
+  if not okFarm then return false, "only for someone in a qualifying farm with you in the last 24 hours (and once per farm)" end
+  if kind and not V.IsBad(kind) and V.GoodLeft(okFarm.ref) <= 0 then
+    return false, "you've commended " .. V.GOOD_PER_FARM .. " people from this farm already (bad commendations are still open)"
   end
   return true, okFarm
 end
@@ -85,7 +97,8 @@ function V.OnVouch(from, kind, ref)
   if not V.KINDS[kind] then return end
   local d = vdb()
   for _, g in ipairs(d.got) do
-    if lower(g.who) == lower(from) and C.Now() - g.t < DAY then return end -- one a day per person
+    -- one per person per farm (older Kinas sent no farm: one a day)
+    if lower(g.who) == lower(from) and ((ref and ref ~= "" and g.ref == ref) or ((not ref or ref == "") and C.Now() - g.t < DAY)) then return end
   end
   if C.IsMyChar and C.IsMyChar(from) then return end -- 1.5.2: never from your own characters
   local bad = V.IsBad(kind)
@@ -215,14 +228,26 @@ local function fillCard(c, e)
     else
       c.up:Show(); c.down:Show(); c.result:Hide()
       if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.55, 0.45, 0.25, 1) end
+      -- 1.5.3: only 2 good commendations per farm; bad ones stay open
+      c.upOK = c.preview and ((pop and pop.previewGood or 0) < V.GOOD_PER_FARM) or (not c.preview and V.CanVouch(e.who, 1))
+      c.up:SetAlpha(c.upOK and 1 or 0.35)
     end
   end
+  c.paint = paint
   c.gaveKind = nil
   if not c.preview and not V.CanVouch(e.who) then c.done = true end
   local function give(i)
-    if c.preview or V.Give(e.who, i) then c.done = true; c.gaveKind = i; paint() end
+    if c.preview or V.Give(e.who, i) then
+      if c.preview and not V.IsBad(i) and pop then pop.previewGood = (pop.previewGood or 0) + 1 end
+      c.done = true; c.gaveKind = i
+      for _, o in ipairs(pop and pop.cards or {}) do if o:IsShown() and o.paint then o.paint() end end
+      paint()
+    end
   end
-  c.up:SetScript("OnClick", function(self) V.OpenReasons(self, e.who, false, give) end)
+  c.up:SetScript("OnClick", function(self)
+    if not c.upOK then C.Print("you can commend " .. V.GOOD_PER_FARM .. " people per farm; bad commendations are still open."); return end
+    V.OpenReasons(self, e.who, false, give)
+  end)
   c.down:SetScript("OnClick", function(self) V.OpenReasons(self, e.who, true, give) end)
   paint()
 end
@@ -236,7 +261,7 @@ function V.ShowPrompt(preview)
   if #open == 0 then return false end
   if not pop then
     pop = CreateFrame("Frame", "KinaCommend", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    pop:SetFrameStrata("DIALOG"); pop:SetClampedToScreen(true); pop:EnableMouse(true); pop:SetMovable(true)
+    pop:SetFrameStrata("FULLSCREEN_DIALOG"); pop:SetClampedToScreen(true); pop:EnableMouse(true); pop:SetMovable(true)
     pop:RegisterForDrag("LeftButton"); pop:SetScript("OnDragStart", pop.StartMoving); pop:SetScript("OnDragStop", pop.StopMovingOrSizing)
     if pop.SetBackdrop then
       pop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
@@ -261,6 +286,7 @@ function V.ShowPrompt(preview)
     if UISpecialFrames then table.insert(UISpecialFrames, "KinaCommend") end
   end
   for _, c in ipairs(pop.cards) do c:Hide() end
+  pop.previewGood = 0
   local n = math.min(#open, 8)
   local cols = math.min(n, PER_ROW)
   local rows = math.ceil(n / PER_ROW)
@@ -273,7 +299,7 @@ function V.ShowPrompt(preview)
     c:ClearAllPoints(); c:SetPoint("TOPLEFT", pop, "TOPLEFT", 14 + x0 + col * (CARD_W + 10), -58 - r * (CARD_H + 10))
     c.preview = preview; fillCard(c, open[i]); c:Show()
   end
-  pop.sub:SetText(preview and "|cffff9933Preview: nothing will be sent.|r" or "Good farm? A commendation raises their standing. Missed it? Kina > You works for 24 hours.")
+  pop.sub:SetText(preview and "|cffff9933Preview: nothing will be sent.|r" or "Thumbs up for up to " .. V.GOOD_PER_FARM .. " people (+" .. V.REP .. " standing), thumbs down for anyone (" .. V.BAD_REP .. "). One or the other per person.")
   pop:SetSize(math.max(420, 28 + cols * (CARD_W + 10) - 10), 58 + rows * (CARD_H + 10) + 24)
   pop:ClearAllPoints(); pop:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
   pop.left = V.PROMPT_SECS; pop.bar:SetValue(V.PROMPT_SECS)
