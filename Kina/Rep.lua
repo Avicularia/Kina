@@ -35,6 +35,7 @@ function R.StandingOf(pts)
     name = "Delinquent"; at = -1
     if pts <= -100 then name, at = "Disgraced", -100 end
     if pts <= -300 then name, at = "Oathbreaker", -300 end
+    if pts <= -1000 then name, at = "Blacklisted", -1000 end
     return name, at, 0, "Unproven"
   end
   for i = 4, #R.STANDING do
@@ -90,81 +91,150 @@ end
 
 -- Replays log lines on top of a state { xp, share, cap = { [key] = xp } }.
 -- gains (optional): every XP gain is added to it as { t, xp, want, kind, who, sid, label, paidOff, cameIn, via, paused }
+-- 1.5.4 (Taylor, Nov 7): THE STANDING RULES
+--  * no daily caps on anything; a farm's XP is 1 a minute with no ceiling
+--  * thumbs down: -10 every time; thumbs up +10 (gains below get the multiplier)
+--  * multipliers apply to GAINS only (XP and standing):
+--      below 0: x0.5 (x0.25 while Blacklisted); back at 0+ but under your best ever: x3
+--  * falling below 0 the first time offers a one-time pardon ("jail" line): back to 1,
+--    x3 until your best ever. Every later fall: the rules, x0.5 to 0, then x3 to your best
+--  * positive standing with 10 thumbs down in 48 h or 15 in 7 days drops to -99
+--  * -1000 or lower: Blacklisted (x0.25 until positive) and a permanent scar
+--  * idle weeks ("decay" lines, worked out when you come back): -100/week while
+--    positive (not below 0), +50/week while negative (+25 Blacklisted), never above -20
+--  * while this Kina is out of date ("frozen" lines) nothing is gained or lost
+R.BLACKLIST, R.BREAK_REP = -1000, -99
+local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT" }
+R.STATE_KEYS = STATE_KEYS
+function R.Mult(st)
+  if (st.rep or 0) < 0 then return st.black and 0.25 or 0.5 end
+  if st.recoverTo and (st.rep or 0) < st.recoverTo then return 3 end
+  return 1
+end
 function R.Replay(lines, st, gains)
   st = st or { xp = 0, share = true, cap = {} }
   st.cap = st.cap or {}
   st.rep = st.rep or 0
-  local function capped(key, limit, want)
-    local used = st.cap[key] or 0
-    local give = math.max(0, math.min(want, limit - used))
-    st.cap[key] = used + give
-    return give
+  st.maxEver = st.maxEver or math.max(0, st.rep); st.lowEver = st.lowEver or math.min(0, st.rep)
+  st.negSecs, st.posSecs = st.negSecs or 0, st.posSecs or 0
+  st.badTimes = st.badTimes or {}
+  local function capped(_, _, want) return want end -- (1.5.4: no caps)
+  local function after(t)
+    if st.rep > st.maxEver then st.maxEver = st.rep end
+    if st.rep < st.lowEver then st.lowEver = st.rep end
+    if st.rep <= R.BLACKLIST then st.black = true; st.everBlack = true end
+    if st.rep > 0 then st.black = nil end
+    if st.recoverTo and st.rep >= st.recoverTo then st.recoverTo = nil end
+  end
+  local function fell(before, t)
+    if before >= 0 and st.rep < 0 then
+      st.fell = (st.fell or 0) + 1; st.lastFall = t
+      st.recoverTo = math.max(st.recoverTo or 0, st.maxEver)
+    end
+  end
+  local function gainRep(x, t)
+    if st.frozen or x <= 0 then return 0 end
+    local g = math.floor(x * R.Mult(st) + 0.5)
+    st.rep = st.rep + g; after(t); return g
+  end
+  local function loseRep(x, t)
+    if st.frozen then return 0 end
+    local before = st.rep
+    st.rep = st.rep - x; after(t); fell(before, t); return -x
+  end
+  local function gainXP(x)
+    if st.frozen or not st.share or x <= 0 then return 0 end
+    local g = math.floor(x * R.Mult(st) + 0.5)
+    st.xp = st.xp + g; return g
   end
   for _, line in ipairs(lines) do
     local f = fields(line.e)
     local t, kind = tonumber(f[1]) or 0, f[2]
+    if st.lastT and t > st.lastT then
+      if st.rep < 0 then st.negSecs = st.negSecs + (t - st.lastT) elseif st.rep > 0 then st.posSecs = st.posSecs + (t - st.lastT) end
+    end
+    if not st.lastT or t > st.lastT then st.lastT = t end
     if kind == "share" then st.share = (f[3] ~= "off")
+    elseif kind == "frozen" then st.frozen = (f[3] == "on") or nil
+    elseif kind == "jail" then
+      -- the one-time pardon: back to 1, x3 until the best ever
+      if not st.jailUsed and st.rep < 0 then
+        st.jailUsed = true; st.rep = 1; st.black = nil
+        st.recoverTo = math.max(st.recoverTo or 0, st.maxEver); after(t)
+        if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "jail", rep = 1 } end
+      end
+    elseif kind == "decay" then
+      local amt = tonumber(f[3]) or 0
+      if not st.frozen and amt ~= 0 then
+        local before = st.rep
+        if amt < 0 then st.rep = math.max(0, st.rep + amt) else st.rep = math.min(-20, st.rep + amt) end
+        if before < 0 and st.rep < before then st.rep = before end
+        after(t)
+        if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "decay", rep = st.rep - before } end
+      end
     elseif kind == "confirmed" and f[9] == "nx" then
-      -- a payment that only covered under-level-10 farms: no XP (1.0.10)
       if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = (tonumber(f[7]) or 0) >= 1 and "pay" or "receipt", who = f[4] or "?",
         paidOff = tonumber(f[7]) or 0, cameIn = tonumber(f[8]) or 0, via = f[3], noProg = true } end
     elseif kind == "confirmed" then
-      -- t|confirmed|via|who|gave|got|paidOff|cameIn
       local who, paidOff, cameIn = f[4] or "?", tonumber(f[7]) or 0, tonumber(f[8]) or 0
       local want = 0
-      if f[10] and f[10] ~= "" then
-        -- 1.2.3: the XP was worked out from the whole debt when it was confirmed
-        want = (tonumber(f[10]) or 0) + (tonumber(f[11]) or 0)
+      if f[10] and f[10] ~= "" then want = (tonumber(f[10]) or 0) + (tonumber(f[11]) or 0)
       else
         if paidOff >= 1 then want = math.min(PAY_MAX, PAY_BASE + math.floor(paidOff / 10000) * PAY_PER_GOLD) end
         if cameIn >= 1 then want = want + RECV_XP end
       end
-      local got = 0
-      if want > 0 and st.share then got = capped(who .. ":" .. day(t), PARTNER_DAY_CAP, want); st.xp = st.xp + got end
-      -- 1.3.0: standing from paying (logged at confirm time; older lines by the formula)
+      local got = gainXP(want)
       local rp = 0
       if f[12] and f[12] ~= "" then rp = tonumber(f[12]) or 0
       elseif paidOff >= 1 then rp = R.PayRep(paidOff) end
-      -- 1.5.3 (Taylor): being paid earns the same standing as paying. Lines from before
-      -- 1.5.3 gave the receiver 0: work it out from what came in (the on-time bonus
-      -- isn't known for those, so it's left out)
       if rp <= 0 and paidOff < 1 and cameIn >= 1 then rp = R.PayRep(cameIn) end
-      if rp > 0 then st.rep = st.rep + capped("rep:" .. who .. ":" .. day(t), 120, rp) end
-      if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who,
+      local gr = gainRep(rp, t)
+      if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who, rep = gr,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end
     elseif kind == "forgive" and f[3] == "gave" then
-      -- 1.3.0: forgiving earns a little XP (3 a day count)
-      local got = st.share and capped("forgive:" .. day(t), R.FORGIVE_XP * 3, R.FORGIVE_XP) or 0
-      st.xp = st.xp + got
+      local got = gainXP(R.FORGIVE_XP)
       if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.FORGIVE_XP, kind = "forgive", who = f[4] or "?" } end
     elseif kind == "extend" and f[3] == "gave" then
-      local got = st.share and capped("extend:" .. day(t), R.EXTEND_XP * 3, R.EXTEND_XP) or 0
-      st.xp = st.xp + got
+      local got = gainXP(R.EXTEND_XP)
       if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.EXTEND_XP, kind = "extend", who = f[4] or "?" } end
     elseif kind == "vouch" and f[3] == "got" then
-      -- 1.5.0: someone vouched for me (the rep was set when it arrived)
-      local rp = tonumber(f[7]) or 0
-      st.rep = st.rep + rp
-      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "vouched", who = f[4] or "?", rep = rp, vk = tonumber(f[5]) } end
+      local k = tonumber(f[5]) or 1
+      local rp
+      if k > 4 then
+        local before = st.rep
+        rp = loseRep(10, t)
+        if not st.frozen then
+          -- the thumbs-down breakpoint (positive standing only)
+          local keep = {}
+          for _, bt in ipairs(st.badTimes) do if t - bt < 7 * DAY then keep[#keep + 1] = bt end end
+          keep[#keep + 1] = t; st.badTimes = keep
+          local n48 = 0
+          for _, bt in ipairs(keep) do if t - bt < 2 * DAY then n48 = n48 + 1 end end
+          if before > 0 and (n48 >= 10 or #keep >= 15) and st.rep > R.BREAK_REP then
+            st.rep = R.BREAK_REP; after(t); fell(before, t); rp = st.rep - before
+            if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "breakpoint", rep = rp } end
+          end
+        end
+      else
+        rp = gainRep(math.max(0, tonumber(f[7]) or 10), t)
+      end
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "vouched", who = f[4] or "?", rep = rp, vk = k } end
     elseif kind == "vouch" and f[3] == "gave" and (tonumber(f[5]) or 1) > 4 then
-      -- 1.5.2: giving a bad commendation earns nothing
+      -- giving a bad commendation earns nothing
     elseif kind == "vouch" and f[3] == "gave" then
-      local got = st.share and capped("vouch:" .. day(t), 15, 5) or 0
-      st.xp = st.xp + got
+      local got = gainXP(5)
       if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = 5, kind = "vouchgave", who = f[4] or "?" } end
     elseif kind == "refused" then
-      -- 1.3.0: I turned down a full payment and the debt ran out: -50, -100 if again within 30 days
-      local hit = (st.lastRefused and t - st.lastRefused < 30 * DAY) and -100 or -50
+      local hit = (st.lastRefused and t - st.lastRefused < 30 * DAY) and 100 or 50
       st.lastRefused = t
-      st.rep = st.rep + hit
-      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "refused", who = f[3] or "?", rep = hit } end
+      local r = loseRep(hit, t)
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "refused", who = f[3] or "?", rep = r } end
     elseif kind == "lapsed" then
-      -- 1.3.0: a debt you owed passed its due time unpaid
-      st.rep = st.rep + R.LAPSE_REP
-      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "lapsed", who = f[3] or "?", rep = R.LAPSE_REP } end
+      local r = loseRep(-R.LAPSE_REP, t)
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "lapsed", who = f[3] or "?", rep = r } end
     elseif kind == "farmend" then
-      -- t|farmend|label|sid|head|hash|secs|total|kills|mates[|minLvl|maxLvl|net|players] (1.0.10)
       local sid, secs, mates = f[4] or "", tonumber(f[7]) or 0, tonumber(f[10]) or 0
+      st.lastFarmT = t
       local why = R.Unqualified(f)
       if why then
         if sid ~= "" then st.noProg = st.noProg or {}; st.noProg[sid] = true end
@@ -172,22 +242,16 @@ function R.Replay(lines, st, gains)
           gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", why = why, sid = sid, label = f[3], secs = secs }
         end
       elseif sid ~= "" and mates >= 1 and secs >= FARM_MIN_SECS then
-        local want = math.min(FARM_MAX, math.floor(secs / 60))
-        local got = 0
-        if st.share then got = capped("farm:" .. day(t), FARM_DAY_CAP, want); st.xp = st.xp + got end
-        st.rep = st.rep + capped("repfarm:" .. day(t), 40, R.FARM_REP)
+        local want = math.floor(secs / 60)
+        local got = gainXP(want)
+        gainRep(R.FARM_REP, t)
         if gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = "farm", sid = sid, label = f[3], secs = secs, paused = not st.share or nil } end
       elseif gains and sid ~= "" and mates >= 1 then
         gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", sid = sid, label = f[3], secs = secs }
       end
     end
   end
-  -- caps only matter for recent days: keep the state small
-  local today = day(C.Now())
-  for k in pairs(st.cap) do
-    local d = tonumber(k:match(":(%d+)$"))
-    if d and today - d > 2 then st.cap[k] = nil end
-  end
+  st.cap = {}
   return st
 end
 
@@ -217,7 +281,9 @@ function R.History()
   local st = { xp = 0, share = true, cap = {} }
   if log.repState then
     st.xp, st.share, st.rep = log.repState.xp or 0, log.repState.share ~= false, log.repState.rep or 0
-    for k, v in pairs(log.repState.cap or {}) do st.cap[k] = v end
+    for _, k in ipairs(R.STATE_KEYS) do st[k] = log.repState[k] end
+    st.lastRefused = log.repState.lastRefused
+    if log.repState.badTimes then st.badTimes = {}; for i, v in ipairs(log.repState.badTimes) do st.badTimes[i] = v end end
   end
   R.Replay(log.lines or {}, st, gains)
   return gains, log.repState and log.repState.xp or 0
@@ -253,16 +319,31 @@ function R.Mine()
   local st = { xp = 0, share = true, cap = {} }
   if log.repState then
     st.xp, st.share, st.rep = log.repState.xp or 0, log.repState.share ~= false, log.repState.rep or 0
-    for k, v in pairs(log.repState.cap or {}) do st.cap[k] = v end
+    for _, k in ipairs(R.STATE_KEYS) do st[k] = log.repState[k] end
+    st.lastRefused = log.repState.lastRefused
+    if log.repState.badTimes then st.badTimes = {}; for i, v in ipairs(log.repState.badTimes) do st.badTimes[i] = v end end
   end
   st = R.Replay(log.lines or {}, st)
   local xp = ok and st.xp or 0
   local lv = R.LevelOf(xp)
   local rp = ok and (st.rep or 0) or 0
   local sname, sat, snext, snextName = R.StandingOf(rp)
+  -- 1.5.4: the record numbers (time counted up to now)
+  local neg, pos = st.negSecs or 0, st.posSecs or 0
+  if st.lastT and C.Now() > st.lastT then
+    if (st.rep or 0) < 0 then neg = neg + (C.Now() - st.lastT) elseif (st.rep or 0) > 0 then pos = pos + (C.Now() - st.lastT) end
+  end
+  local n48, n7 = 0, 0
+  for _, bt in ipairs(st.badTimes or {}) do
+    if C.Now() - bt < 7 * DAY then n7 = n7 + 1 end
+    if C.Now() - bt < 2 * DAY then n48 = n48 + 1 end
+  end
   return { xp = xp, level = lv, title = "", next = R.XPFor(math.min(R.MAX_LEVEL, lv + 1)),
     rep = rp, standing = sname, standingAt = sat, standingNext = snext, standingNextName = snextName,
-    share = C.ShareData(), ok = ok }
+    share = C.ShareData(), ok = ok,
+    best = st.maxEver or math.max(0, rp), lowest = st.lowEver or math.min(0, rp), negDays = neg / DAY, posDays = pos / DAY,
+    black = st.black, everBlack = st.everBlack, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
+    lastFarmT = st.lastFarmT, fell = st.fell or 0, frozen = st.frozen, bad48 = n48, bad7 = n7 }
 end
 
 -- what Kina tells other Kina users (in its hello): level, or -1 if the log is damaged

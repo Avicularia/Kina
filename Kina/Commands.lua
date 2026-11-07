@@ -105,14 +105,13 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "profile" then
     local who = rest ~= "" and rest or (UnitName and UnitName("target"))
     if C.Profile then C.Profile.Show(who) end
+  elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "vouch" then
-    local who, k = rest:match("^(%S+)%s*(%d*)$")
-    if who and C.Vouch then C.Vouch.Give(who, tonumber(k) or 1)
-    else C.Print("commend: /kina vouch Name [1-8]  (good: 1 pulled their weight, 2 great leader, 3 profession support, 4 good company; |cffff4030bad: 5 didn't pull their weight, 6 left early, 7 greedy with loot, 8 rude or toxic|r), or Commend someone on the You tab") end
+    C.Print("commendations happen in the window that opens when a group farm ends.")
   elseif cmd == "preview" and rest == "commend" then if C.Vouch then C.Vouch.ShowPrompt(true) end
   elseif cmd == "preview" then if C.Toast and C.Toast.Preview then C.Toast.Preview(rest) end
   elseif cmd == "sound" then
-    C.settings.farmSound = (C.settings.farmSound == false)
+    if C.SetVolume then C.SetVolume(C.Volume() > 0 and 0 or 4) else C.settings.farmSound = (C.settings.farmSound == false) end
     C.Print("farm fanfares: " .. (C.settings.farmSound and "on" or "off"))
     if C.settings.farmSound then C.PlayClick() end
     if C.RefreshWidget then C.RefreshWidget() end

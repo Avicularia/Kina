@@ -62,14 +62,15 @@ local NUMMAP = map(N)
 
 local transfer = { t = T, f = { from = S, to = S, amt = N }, req = { "from", "to", "amt" } }
 local split = { t = T, f = { total = N, each = N, transfers = list(transfer), paid = map({ number = true, boolean = true }),
-  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B), lapsed = map(B), offered = NUMMAP, refusedSeen = NUMMAP } }
+  received = map({ number = true, boolean = true }), incomes = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B), lapsed = map(B), offered = NUMMAP, refusedSeen = NUMMAP, clock = NUMMAP, pclock = NUMMAP, clockAt = NUMMAP } }
 local chainEv = { t = T, f = { seq = N, origin = S, oseq = N, kind = S, t = N, hash = S, data = S }, req = { "seq", "origin", "kind", "hash" } }
 local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, closed = B, chain = map(chainEv),
   outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }) },
   req = { "sid" } }
 local session = { t = T, f = { start = N, stop = N, last = N, label = S, kills = N, money = NUMMAP, items = NUMMAP, byNpc = NUMMAP,
   party = list({ t = T, f = { name = S } }), split = split, sync = sync, log = list(T), g = T, posted = NUMMAP, startCounts = NUMMAP,
-  paused = B, pauseAt = N, pausedSecs = N, gameXP = N, char = S, class = S, endGold = N, endItems = N, endUsed = N, endWorth = N, startMoney = N, limit = N,
+  paused = B, pauseAt = N, pausedSecs = N, gameXP = N, char = S, class = S, lastKill = N,
+  hold = { t = T, f = { at = N, me = S, peers = map(S), done = B, ready = N, leader = S } }, endGold = N, endItems = N, endUsed = N, endWorth = N, startMoney = N, limit = N,
   result = { t = T, f = { secs = N, cash = N, items = N, used = N, total = N, perHour = N, coin = N, pickpocket = N, vendor = N,
     spent = N, kills = N, net = B, income = B } },
   gview = { t = T, f = { secs = N, net = N, coin = N, items = N, used = N, kills = N, paused = B } }, why = S, zone = S, skins = N, nodes = N,
@@ -87,6 +88,17 @@ for _, k in ipairs({ "pos", "farmAutoJoin", "hotHide", "partnerProfs", "partnerS
 SETTINGS.partnerClass = S
 SETTINGS.look = S
 SETTINGS.autoLootWas = S
+SETTINGS.themeMutedMusic = B
+SETTINGS.kinaVolume = N
+SETTINGS.tipOnly = B
+SETTINGS.askScan = B
+SETTINGS.rulesFell = N
+SETTINGS.rulesBlack = B
+SETTINGS.rulesWarn5 = N
+SETTINGS.rulesWarn10 = N
+SETTINGS.decayFrom = N
+SETTINGS.decayWeeks = N
+SETTINGS.tipDE = B
 SETTINGS.lastStanding = S
 
 local DB = { t = T, f = {
@@ -99,7 +111,9 @@ local DB = { t = T, f = {
   sessions = list(session), activeSession = session,
   stock = map(T), chars = map({ t = T, f = { prof = NUMMAP, bank = NUMMAP, known = T, level = N } }),
   log = { t = T, f = { lines = list({ t = T, f = { e = S, h = S }, req = { "e", "h" } }), base = S, summary = NUMMAP,
-    repState = { t = T, f = { xp = N, share = B, cap = NUMMAP, rep = N, noProg = map(B), lastRefused = N } } } },
+    repState = { t = T, f = { xp = N, share = B, cap = NUMMAP, rep = N, noProg = map(B), lastRefused = N,
+      maxEver = N, lowEver = N, recoverTo = N, black = B, everBlack = B, jailUsed = B, frozen = B, negSecs = N, posSecs = N, lastT = N,
+      fell = N, lastFall = N, lastFarmT = N, badTimes = list(N), badSeen = N } } } },
   settles = list({ t = T, f = { t = N, who = S, gave = N, got = N, via = S, paidOff = N, cameIn = N, conf = N,
     covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N }, req = { "amt", "dir" } }) },
     req = { "t", "who", "gave", "got", "via" } }),
@@ -110,7 +124,7 @@ local DB = { t = T, f = {
   ledger = { t = T, f = { seen = T, seenN = NUMMAP, entries = list(T), transfers = T } },
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N,
-  vouch = { t = T, f = { given = list({ t = T, f = { who = S, kind = N, t = N, ref = S } }), got = list({ t = T, f = { who = S, kind = N, t = N, ref = S, rep = N } }) } },
+  vouch = { t = T, f = { given = list({ t = T, f = { who = S, kind = N, t = N, ref = S } }), got = list({ t = T, f = { who = S, kind = N, t = N, ref = S, rep = N } }), closed = NUMMAP } },
   selftest = T, repairs = list(T), forgive = { t = T, f = { pending = list({ t = T, f = { who = S, amt = N, ref = S, t = N, kind = S }, req = { "who", "ref" } }) } },
   tradeStats = { t = T, f = { complete = N, missed = N, cancelled = N, lastMissed = N, msgs = list(S) } },
 } }

@@ -8,7 +8,7 @@ local P = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Cos\\"
 K.FONT = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Fonts\\Cinzel-Bold.ttf"
 local RING = { Unproven = "ring_base", Vouched = "ring_vouched", Reliable = "ring_reliable", Trusted = "ring_trusted",
   Honored = "ring_honored", Revered = "ring_revered", Exalted = "ring_exalted",
-  Delinquent = "ring_disgraced", Disgraced = "ring_disgraced", Oathbreaker = "ring_disgraced" }
+  Delinquent = "ring_disgraced", Disgraced = "ring_disgraced", Oathbreaker = "ring_disgraced", Blacklisted = "ring_disgraced" }
 local PROF = { Mining = "prof_mining", Herbalism = "prof_herbalism", Skinning = "prof_skinning", Enchanting = "prof_enchanting" }
 function K.Tex(name) return P .. name end
 function K.RingFor(standing) return P .. (RING[standing or "Unproven"] or "ring_base") end
@@ -31,20 +31,41 @@ end
 -- the portrait: a round portrait inside the standing ring (with a glow from Honored
 -- up, a slow pulse at Exalted), the badge crowning the ring, the level plate at its foot
 local COLOR = { Unproven = "|cffbfbfbf", Vouched = "|cffd8d8d8", Reliable = "|cffd9a35a", Trusted = "|cffe0b060",
-  Honored = "|cffe8d8a0", Revered = "|cfff2e6b8", Exalted = "|cffffd34d", Delinquent = "|cffff6040", Disgraced = "|cffff4030", Oathbreaker = "|cffd02020" }
+  Honored = "|cffe8d8a0", Revered = "|cfff2e6b8", Exalted = "|cffffd34d", Delinquent = "|cffff6040", Disgraced = "|cffff4030", Oathbreaker = "|cffd02020", Blacklisted = "|cff8a1010" }
 function K.StandingColor(st) return COLOR[st or "Unproven"] or "|cffbfbfbf" end
-local GLOW = { Honored = { 0.9, 0.85, 0.6, 0.30 }, Revered = { 1, 0.95, 0.75, 0.40 }, Exalted = { 1, 0.80, 0.25, 0.55 },
-  Delinquent = { 0.8, 0.15, 0.1, 0.30 }, Disgraced = { 0.8, 0.1, 0.05, 0.40 }, Oathbreaker = { 0.7, 0.05, 0.05, 0.5 } }
+-- 1.5.4 (Taylor): every tier from Vouched up has its own glow, stronger each step, with
+-- more going on as you climb: Reliable breathes, Trusted breathes deeper, Honored adds a
+-- spark travelling round the ring, Revered adds slow turning light rays, Exalted all of it
+-- brighter with two sparks. Dishonour is deliberately NOT pretty: no glow at all, the
+-- portrait goes grey (Delinquent half grey), and the ring is dimmed.
+-- { r, g, b, base alpha, breathe depth, breathe speed, sparks, rays alpha }
+local FX = {
+  Vouched = { 0.95, 0.60, 0.40, 0.18, 0, 0, 0, 0 },
+  Reliable = { 0.55, 0.95, 0.60, 0.24, 0.08, 1.2, 0, 0 },
+  Trusted = { 0.65, 0.80, 1.00, 0.30, 0.12, 1.6, 0, 0 },
+  Honored = { 1.00, 0.85, 0.45, 0.38, 0.14, 1.8, 1, 0 },
+  Revered = { 0.85, 0.65, 1.00, 0.46, 0.16, 2.0, 1, 0.22 },
+  Exalted = { 1.00, 0.82, 0.35, 0.58, 0.20, 2.4, 2, 0.38 },
+}
+local SHAME = { Delinquent = 0.5, Disgraced = 1, Oathbreaker = 1, Blacklisted = 1 }
 function K.Portrait(box, portrait)
   local o = {}
   if portrait.SetMask then pcall(portrait.SetMask, portrait, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
   portrait:ClearAllPoints(); portrait:SetPoint("TOPLEFT", 4, -4); portrait:SetPoint("BOTTOMRIGHT", -4, 4)
+  o.portrait = portrait
   local W = box:GetWidth() or 80
   o.W = W
+  o.rays = box:CreateTexture(nil, "BACKGROUND", nil, -4)
+  o.rays:SetPoint("CENTER", portrait, "CENTER"); o.rays:SetSize(W * 1.95, W * 1.95); o.rays:SetBlendMode("ADD"); o.rays:SetTexture(P .. "fx_rays"); o.rays:Hide()
   o.glow = box:CreateTexture(nil, "BACKGROUND", nil, -2)
   o.glow:SetPoint("CENTER", portrait, "CENTER"); o.glow:SetSize(W * 1.45, W * 1.45); o.glow:SetBlendMode("ADD")
   o.ring = box:CreateTexture(nil, "OVERLAY", nil, 2)
   o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
+  o.sparks = {}
+  for i = 1, 2 do
+    local sp = box:CreateTexture(nil, "OVERLAY", nil, 6); sp:SetSize(W * 0.32, W * 0.32); sp:SetBlendMode("ADD"); sp:SetTexture(P .. "fx_spark"); sp:Hide()
+    o.sparks[i] = sp
+  end
   o.plate = box:CreateTexture(nil, "OVERLAY", nil, 4)
   o.plate:SetSize(36, 36); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, 4)
   o.plate:SetTexture(P .. "level_plate")
@@ -55,18 +76,42 @@ function K.Portrait(box, portrait)
   local t = 0
   local pulser = CreateFrame("Frame", nil, box)
   pulser:SetScript("OnUpdate", function(_, el)
-    if not o.pulse then return end
+    local fx = o.fx
+    if not fx or not box:IsVisible() then return end
     t = t + el
-    o.glow:SetAlpha(0.35 + 0.25 * math.sin(t * 2.2))
+    local base, depth, speed = fx[4], fx[5], fx[6]
+    o.glow:SetAlpha(base + (depth > 0 and depth * math.sin(t * speed) or 0))
+    if fx[8] > 0 and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, t * 0.12); o.rays:SetAlpha(fx[8] * (0.8 + 0.2 * math.sin(t * 1.3))) end
+    for i = 1, fx[7] do
+      local sp = o.sparks[i]
+      local a = t * 0.9 + (i - 1) * math.pi
+      local rr = W * 0.57
+      sp:ClearAllPoints(); sp:SetPoint("CENTER", o.ring, "CENTER", math.cos(a) * rr, math.sin(a) * rr)
+      sp:SetAlpha(0.55 + 0.45 * math.sin(t * 3 + i))
+    end
   end)
   return o
 end
 function K.UpdatePortrait(o, standing, level, recruits, starter)
   if not o then return end
   o.ring:SetTexture(K.RingFor(standing))
-  local g = GLOW[standing or ""]
-  if g then o.glow:SetTexture(K.RingFor(standing)); o.glow:SetVertexColor(g[1], g[2], g[3]); o.glow:SetAlpha(g[4]); o.glow:Show() else o.glow:Hide() end
-  o.pulse = standing == "Exalted"
+  local fx = FX[standing or ""]
+  o.fx = fx
+  if fx then
+    o.glow:SetTexture(K.RingFor(standing)); o.glow:SetVertexColor(fx[1], fx[2], fx[3]); o.glow:SetAlpha(fx[4]); o.glow:Show()
+    if fx[8] > 0 then o.rays:SetVertexColor(fx[1], fx[2], fx[3]); o.rays:Show() else o.rays:Hide() end
+    for i = 1, 2 do if i <= fx[7] then o.sparks[i]:SetVertexColor(1, 0.95, 0.8); o.sparks[i]:Show() else o.sparks[i]:Hide() end end
+  else
+    o.glow:Hide(); o.rays:Hide(); for i = 1, 2 do o.sparks[i]:Hide() end
+  end
+  -- dishonour: grey portrait, dimmed ring
+  local sh = SHAME[standing or ""]
+  if o.portrait then
+    if o.portrait.SetDesaturation then pcall(o.portrait.SetDesaturation, o.portrait, sh or 0)
+    elseif o.portrait.SetDesaturated then pcall(o.portrait.SetDesaturated, o.portrait, sh ~= nil) end
+    o.portrait:SetVertexColor(sh and 0.75 or 1, sh and 0.72 or 1, sh and 0.68 or 1)
+  end
+  o.ring:SetVertexColor(sh and 0.7 or 1, sh and 0.66 or 1, sh and 0.62 or 1)
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
   local star, wide = K.StarFor(recruits)
   -- 1.5.3 (Taylor: the mentor star was tiny): sized from the portrait, and bigger
@@ -131,7 +176,7 @@ function K.OpenList(anchor, label, options, onPick, style)
   menu:Show()
 end
 function K.Picker(parent, label, options, onPick)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(b) end
   b:SetSize(46, 18); b:SetText("Try"); b:SetFrameLevel((parent:GetFrameLevel() or 1) + 20)
   local fs = b:GetFontString(); if fs then fs:SetFont(STANDARD_TEXT_FONT, 10, "") end
   b:SetScript("OnClick", function(self) K.OpenList(self, label, options, onPick) end)
@@ -204,3 +249,53 @@ pf:SetScript("OnUpdate", function(_, el)
     for _, g in pairs(glows) do for _, t in ipairs(g) do t:SetAlpha(a) end end
   end
 end)
+
+------------------------------------------------------------------ the KINA plaque's life
+-- 1.5.5 (Taylor): a breathing gold halo around the nameplate, a light sweep across the
+-- plate every few seconds, and gold sparks drifting up off it. Runs only while shown.
+function K.PlaqueFX(plate, w, h, count)
+  local halo = plate:CreateTexture(nil, "BACKGROUND", nil, -3)
+  halo:SetTexture(P .. "fx_halo"); halo:SetBlendMode("ADD"); halo:SetVertexColor(1, 0.72, 0.25)
+  halo:SetPoint("CENTER", plate, "CENTER", 0, 0); halo:SetSize(w * 1.22, h * 1.75)
+  local clip = CreateFrame("Frame", nil, plate); clip:SetPoint("CENTER", plate, "CENTER", 0, 0); clip:SetSize(w * 0.74, h * 0.62)
+  if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+  clip:SetFrameLevel(plate:GetFrameLevel() + 2)
+  local sweep = clip:CreateTexture(nil, "OVERLAY"); sweep:SetTexture(P .. "fx_sweep"); sweep:SetBlendMode("ADD")
+  sweep:SetSize(h * 0.5, h); sweep:SetVertexColor(1, 0.95, 0.8); sweep:SetAlpha(0)
+  local fx = CreateFrame("Frame", nil, plate); fx:SetAllPoints(plate); fx:SetFrameLevel(plate:GetFrameLevel() + 3)
+  local sparks = {}
+  count = count or 22
+  for i = 1, count do
+    local s = fx:CreateTexture(nil, "OVERLAY"); s:SetTexture(P .. "fx_spark"); s:SetBlendMode("ADD"); s:SetVertexColor(1, 0.80, 0.42)
+    sparks[i] = { tex = s, x = math.random() * w * 0.9 - w * 0.45, life = math.random(), speed = 0.25 + math.random() * 0.35,
+      size = 4 + math.random() * 7, wob = math.random() * 6.28 }
+  end
+  local t, nextSweep, sweepT = 0, 2, nil
+  fx:SetScript("OnUpdate", function(_, el)
+    if el > 0.2 then el = 0.2 end
+    t = t + el
+    halo:SetAlpha(0.55 + 0.30 * math.sin(t * 1.6))
+    -- the sweep: across the plate in 0.9 s, every 5-7 s
+    if not sweepT and t >= nextSweep then sweepT = 0 end
+    if sweepT then
+      sweepT = sweepT + el
+      local f = sweepT / 0.9
+      if f >= 1 then sweepT = nil; nextSweep = t + 5 + math.random() * 2; sweep:SetAlpha(0)
+      else
+        sweep:ClearAllPoints(); sweep:SetPoint("CENTER", clip, "CENTER", (f - 0.5) * (w * 0.9), 0)
+        sweep:SetAlpha(math.sin(f * math.pi) * 0.55)
+      end
+    end
+    -- sparks rise from the plate and fade
+    for _, p in ipairs(sparks) do
+      p.life = p.life + el * p.speed
+      if p.life >= 1 then p.life = 0; p.x = math.random() * w * 0.9 - w * 0.45; p.size = 4 + math.random() * 7 end
+      local yy = -h * 0.30 + p.life * h * 1.05
+      local xx = p.x + math.sin(p.life * 6 + p.wob) * 4
+      local s = p.size * (1 - p.life * 0.4)
+      p.tex:SetSize(s, s); p.tex:ClearAllPoints(); p.tex:SetPoint("CENTER", fx, "CENTER", xx, yy)
+      p.tex:SetAlpha(math.sin(p.life * math.pi) * 0.9)
+    end
+  end)
+  return fx
+end

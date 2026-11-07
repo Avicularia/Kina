@@ -14,8 +14,8 @@ V.KINDS = { "Pulled their weight", "Great leader", "Profession support", "Good c
 V.GOOD_N = 4
 -- 1.5.3 (Taylor): +10 / -10, the same size both ways. Per farm you can commend at most 2
 -- people (any number of bad ones), and one or the other per person, never both.
-V.REP, V.REPEAT_REP, V.GIVE_XP = 10, 3, 5
-V.BAD_REP, V.BAD_REPEAT_REP = -10, -3
+V.REP, V.GIVE_XP = 10, 5
+V.BAD_REP = -10
 V.GOOD_PER_FARM = 2
 function V.IsBad(k) return (tonumber(k) or 1) > V.GOOD_N end
 V.RED = "|cffff4030"
@@ -27,7 +27,9 @@ local function lower(n) return first(n):lower() end
 
 local function vdb()
   C.db.vouch = C.db.vouch or { given = {}, got = {} }
-  local d = C.db.vouch; d.given = d.given or {}; d.got = d.got or {}
+  local d = C.db.vouch; d.given = d.given or {}; d.got = d.got or {}; d.closed = d.closed or {}
+  -- 1.5.4: a farm's commendations close with its window (kept a few days)
+  for ref, t in pairs(d.closed) do if C.Now() - t > 3 * DAY then d.closed[ref] = nil end end
   -- keep 30 days
   for _, t in ipairs({ d.given, d.got }) do for i = #t, 1, -1 do if C.Now() - (t[i].t or 0) > 30 * DAY then table.remove(t, i) end end end
   return d
@@ -46,14 +48,15 @@ function V.Eligible()
   local out, seen = {}, {}
   local me = lower(UnitName and UnitName("player"))
   local ss = C.db.sessions or {}
-  for i = #ss, 1, -1 do
+  for i = 1, #ss do -- (newest first: farms are stored newest at the front)
     local s = ss[i]
     if s.stop and C.Now() - s.stop <= DAY and s.sync and s.split and s.split.incomes then
       local secs = s.stop - (s.start or s.stop) - (s.pausedSecs or 0)
       local n = 0; for _ in pairs(s.split.incomes) do n = n + 1 end
       if secs >= 900 and n >= 2 then
         local ref = s.sync.sid or ("t" .. tostring(s.start))
-        for who in pairs(s.split.incomes) do
+        if vdb().closed[ref] then n = 0 end -- (1.5.4) its window was closed: too late
+        for who in pairs(n >= 2 and s.split.incomes or {}) do
           local k = lower(who)
           if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] and not givenIn(ref, who) then
             seen[k] = true; out[#out + 1] = { who = first(who), ref = ref, farm = s.label }
@@ -102,19 +105,9 @@ function V.OnVouch(from, kind, ref)
   end
   if C.IsMyChar and C.IsMyChar(from) then return end -- 1.5.2: never from your own characters
   local bad = V.IsBad(kind)
-  local repeatV = false
-  for _, g in ipairs(d.got) do if lower(g.who) == lower(from) and V.IsBad(g.kind) == bad and C.Now() - g.t < 7 * DAY then repeatV = true end end
-  local rep
-  if bad then
-    rep = repeatV and V.BAD_REPEAT_REP or V.BAD_REP
-    -- a bad commendation from someone who is in bad standing themselves costs nothing
-    local theirs = C.Share and C.Share.StandingOf and C.Share.StandingOf(from)
-    if type(theirs) == "number" and theirs < 0 then rep = 0 end
-  else
-    rep = repeatV and V.REPEAT_REP or V.REP
-    local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
-    if (m.rep or 0) < 0 then rep = math.floor(rep / 2) end
-  end
+  -- 1.5.4 (Taylor): +10 / -10 every time, no softening; multipliers are applied to
+  -- gains when the standing is worked out (Rep.lua)
+  local rep = bad and V.BAD_REP or V.REP
   table.insert(d.got, { who = first(from), kind = kind, t = C.Now(), ref = ref, rep = rep })
   if C.Log then C.Log("vouch", "got", first(from), kind, ref or "", rep) end
   if C.Toast and C.Toast.Vouched then C.Toast.Vouched(first(from), V.KINDS[kind], rep, bad) end
@@ -271,19 +264,17 @@ function V.ShowPrompt(preview)
     if C.Cos then C.Cos.Font(pop.title, 20, "OUTLINE") end
     pop.title:SetText("Commend your party"); pop.title:SetTextColor(1, 0.85, 0.45)
     pop.sub = pop:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); pop.sub:SetPoint("TOP", pop.title, "BOTTOM", 0, -4)
-    pop.close = CreateFrame("Button", nil, pop, "UIPanelCloseButton"); pop.close:SetPoint("TOPRIGHT", -2, -2)
-    pop.bar = CreateFrame("StatusBar", nil, pop); pop.bar:SetHeight(6)
-    pop.bar:SetPoint("BOTTOMLEFT", 12, 10); pop.bar:SetPoint("BOTTOMRIGHT", -12, 10)
-    pop.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar"); pop.bar:SetStatusBarColor(0.95, 0.75, 0.25)
-    pop.bar:SetMinMaxValues(0, V.PROMPT_SECS)
-    pop.cards = {}
-    pop:SetScript("OnUpdate", function(self, el)
-      if self:IsMouseOver() then return end -- hovering holds the timer
-      self.left = (self.left or 0) - el
-      self.bar:SetValue(math.max(0, self.left))
-      if self.left <= 0 then self:Hide() end
+    -- 1.5.4 (Taylor): this window is the ONLY place to commend. No timer, no Escape:
+    -- it stays until you click Done, and then that farm's commendations are closed.
+    pop.done = CreateFrame("Button", nil, pop, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pop.done) end; pop.done:SetSize(120, 24); pop.done:SetPoint("BOTTOM", 0, 10)
+    pop.done:SetText("Done")
+    pop.done:SetScript("OnClick", function() pop:Hide() end)
+    pop:SetScript("OnHide", function(self)
+      if self.preview then return end
+      local d = vdb()
+      for ref in pairs(self.refs or {}) do d.closed[ref] = C.Now() end
     end)
-    if UISpecialFrames then table.insert(UISpecialFrames, "KinaCommend") end
+    pop.cards = {}
   end
   for _, c in ipairs(pop.cards) do c:Hide() end
   pop.previewGood = 0
@@ -299,10 +290,12 @@ function V.ShowPrompt(preview)
     c:ClearAllPoints(); c:SetPoint("TOPLEFT", pop, "TOPLEFT", 14 + x0 + col * (CARD_W + 10), -58 - r * (CARD_H + 10))
     c.preview = preview; fillCard(c, open[i]); c:Show()
   end
-  pop.sub:SetText(preview and "|cffff9933Preview: nothing will be sent.|r" or "Thumbs up for up to " .. V.GOOD_PER_FARM .. " people (+" .. V.REP .. " standing), thumbs down for anyone (" .. V.BAD_REP .. "). One or the other per person.")
-  pop:SetSize(math.max(420, 28 + cols * (CARD_W + 10) - 10), 58 + rows * (CARD_H + 10) + 24)
+  pop.sub:SetText(preview and "|cffff9933Preview: nothing will be sent.|r" or "Thumbs up for up to " .. V.GOOD_PER_FARM .. " people, thumbs down for anyone. This is your only chance: when you click Done, it's closed.")
+  pop:SetSize(math.max(460, 28 + cols * (CARD_W + 10) - 10), 58 + rows * (CARD_H + 10) + 34)
   pop:ClearAllPoints(); pop:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
-  pop.left = V.PROMPT_SECS; pop.bar:SetValue(V.PROMPT_SECS)
+  pop.preview = preview
+  pop.refs = {}
+  for i = 1, n do if open[i].ref then pop.refs[open[i].ref] = true end end
   pop:Show()
   return true
 end

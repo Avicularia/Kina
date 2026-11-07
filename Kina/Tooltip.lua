@@ -9,7 +9,7 @@ local _, C = ...
 local D = C.Data
 local floor = math.floor
 
-local HEAD  = { 0.31, 0.76, 0.97 }  -- Kina blue
+local HEAD  = { 1.00, 0.82, 0.35 }  -- 1.5.4: Kina gold
 local LABEL = { 0.80, 0.80, 0.80 }
 local GOLD  = { 1.00, 0.82, 0.00 }
 local DIM   = { 0.60, 0.60, 0.60 }
@@ -130,13 +130,13 @@ end
 local function addLines(tip, id)
   local r = C.Item(id)
   if not r then return end
-  tip:AddLine(" ")
-  tip:AddLine("Kina", HEAD[1], HEAD[2], HEAD[3])
+  -- 1.5.4 (Taylor): one clean block, headed by the Kina coin
+  tip:AddLine("|TInterface\\AddOns\\Kina\\Media\\KinaLogo:14:14|t |cffffd15aKina|r", 1, 1, 1)
 
   -- Vendor
   local v, how = C.VendorPrice(id)
   if v and v > 0 then
-    tip:AddDoubleLine("Vendor", C.Money(v) .. (how == "seen" and "" or " |cff999999(client)|r"),
+    tip:AddDoubleLine("Vendor", C.Money(v),
       LABEL[1], LABEL[2], LABEL[3], 1, 1, 1)
   else
     tip:AddDoubleLine("Vendor", "no vendor value", LABEL[1], LABEL[2], LABEL[3], DIM[1], DIM[2], DIM[3])
@@ -145,7 +145,7 @@ local function addLines(tip, id)
   -- Auction
   local mi, who, scanT = C.MarketItem(id)
   if r.bind == 1 or r.bind == 4 then
-    tip:AddDoubleLine("Auction", "soulbound", LABEL[1], LABEL[2], LABEL[3], DIM[1], DIM[2], DIM[3])
+    tip:AddDoubleLine("Auction", "soulbound: can't auction", LABEL[1], LABEL[2], LABEL[3], WARN[1], WARN[2], WARN[3])
   elseif mi and mi.m then
     local net, price, cut, risk = C.AHNet(id, 1)
     tip:AddDoubleLine("Auction (" .. (mi.q or mi.n or 0) .. " listed)", C.Money(mi.m), LABEL[1], LABEL[2], LABEL[3], GOOD[1], GOOD[2], GOOD[3])
@@ -161,18 +161,23 @@ local function addLines(tip, id)
     tip:AddDoubleLine("Auction", "no scan yet", LABEL[1], LABEL[2], LABEL[3], DIM[1], DIM[2], DIM[3])
   end
 
-  -- Disenchant (gear only)
-  if C.IsGear(r) then addDE(tip, id, r) end
+  -- Disenchant (gear only; the breakdown can be switched off in Settings)
+  if C.IsGear(r) and C.settings.tipDE ~= false then addDE(tip, id, r) end
 
-  -- the recommendation, with the reason
-  local route, best, det = C.BestRoute(id, 1)
-  if route and route ~= "KEEP" then
-    local why = ""
-    if route == "AUCTION" and det.deAll and not det.canDE then why = " (no enchanter set in Settings)"
-    elseif route == "AUCTION" and det.de then why = " (beats disenchant)"
-    elseif route == "DISENCHANT" and det.ah then why = string.format(" (AH keeps %s)", C.Money(det.ah))
-    elseif route == "VENDOR" and det.ah then why = string.format(" (AH keeps only %s)", C.Money(det.ah)) end
-    tip:AddDoubleLine("Best: " .. route:lower() .. why, C.Money(best), HEAD[1], HEAD[2], HEAD[3], GOLD[1], GOLD[2], GOLD[3])
+  -- the recommendation (1.5.4: the same call as the disenchant edge rule when it can be
+  -- disenchanted: DE has to beat the best sale by 10-20%)
+  local d = C.DECall and C.DECall(id)
+  if d then
+    local name = (d.call == "disenchant" and "Disenchant") or (d.call == "auction" and "Auction house") or "Vendor"
+    tip:AddDoubleLine("Best: " .. name, C.Money(d.best), GOOD[1], GOOD[2], GOOD[3], GOLD[1], GOLD[2], GOLD[3])
+  else
+    local route, best, det = C.BestRoute(id, 1)
+    if route and route ~= "KEEP" then
+      local why = ""
+      local nm = (route == "AUCTION" and "Auction house") or (route == "DISENCHANT" and "Disenchant") or "Vendor"
+      if route == "VENDOR" and v and v > 0 then best = v end
+      tip:AddDoubleLine("Best: " .. nm .. why, C.Money(best), GOOD[1], GOOD[2], GOOD[3], GOLD[1], GOLD[2], GOLD[3])
+    end
   end
 
   if mi and scanT then
@@ -186,20 +191,61 @@ local function addLines(tip, id)
 end
 
 ------------------------------------------------------------------ hooks
-local function handle(tip, data)
-  if not C.ready or C.PUBLIC or C.settings.tooltip == false then return end -- public: prices stay behind the scenes for now
-  if not tip or tip:IsForbidden() then return end
-  if tip ~= GameTooltip and tip ~= ItemRefTooltip then return end -- skip comparison tooltips
+-- 1.5.4 (Taylor): back on in the public build, and FIRST among the add-on lines: the
+-- block goes in right after the item's own sell-price line (a line hook, which runs
+-- before other add-ons' whole-tooltip hooks); items without a sell price get it at the
+-- end as before. One block per hover (kept in a local table, never on the tooltip).
+local shown = setmetatable({}, { __mode = "k" })
+local function idOf(tip, data)
   local id = type(data) == "table" and tonumber(data.id) or nil
   if not id and tip.GetItem then
     local _, link = tip:GetItem()
-    id = C.ItemIDFromLink(link)
+    if link and not (issecretvalue and issecretvalue(link)) then id = C.ItemIDFromLink(link) end
   end
-  if not id then return end
-  if tip.kscItemID == id then return end -- callbacks can fire twice for one hover
-  tip.kscItemID = id
+  return id
+end
+local function handle(tip, data)
+  if not C.ready or C.settings.tooltip == false then return end
+  if not tip or (tip.IsForbidden and tip:IsForbidden()) then return end
+  if tip ~= GameTooltip and tip ~= ItemRefTooltip then return end -- skip comparison tooltips
+  if InCombatLockdown and InCombatLockdown() then return end
+  local id = idOf(tip, data)
+  if not id or shown[tip] == id then return end
+  shown[tip] = id
   local ok, err = pcall(addLines, tip, id)
   if not ok and C.debug then C.Print("tooltip error: " .. tostring(err)) end
+  tip:Show()
+  if C.settings.tipOnly and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
+    local keep, name = tip:NumLines(), tip:GetName()
+    C_Timer.After(0, function() pcall(C.TipOnlyKina, tip, name, keep, id) end)
+  end
+end
+-- 1.5.4 (Taylor): "the only thing I need to see is the part you added": with Settings >
+-- "Only Kina in item tooltips" on, the lines other add-ons put under Kina's block are
+-- dropped (the tooltip is rebuilt from the game's own lines and Kina's)
+function C.TipOnlyKina(tip, name, keep, id)
+  if not tip:IsShown() or shown[tip] ~= id or tip:NumLines() <= keep then return end
+  if InCombatLockdown and InCombatLockdown() then return end
+  local rows = {}
+  for i = 1, keep do
+    local L, R = _G[name .. "TextLeft" .. i], _G[name .. "TextRight" .. i]
+    local lt = L and L:GetText()
+    if lt and issecretvalue and issecretvalue(lt) then return end
+    local rt = R and R:IsShown() and R:GetText() or nil
+    local lr, lg, lb = 1, 1, 1; if L then lr, lg, lb = L:GetTextColor() end
+    local rr, rg, rb = 1, 1, 1; if R then rr, rg, rb = R:GetTextColor() end
+    -- the game draws the sell price with coins next to the text: keep it as text
+    if lt and SELL_PRICE and lt:find(SELL_PRICE, 1, true) and C.VendorPrice then
+      local v = C.VendorPrice(id); if v and v > 0 then lt = SELL_PRICE .. " " .. C.Money(v) end
+    end
+    rows[i] = { lt or " ", rt, lr, lg, lb, rr, rg, rb }
+  end
+  tip:ClearLines()
+  for i, r in ipairs(rows) do
+    if r[2] and r[2] ~= "" then tip:AddDoubleLine(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+    else tip:AddLine(r[1], r[3], r[4], r[5], #r[1] > 48) end
+  end
+  shown[tip] = id
   tip:Show()
 end
 
@@ -209,19 +255,22 @@ local function install()
   if hooked then return end
   hooked = true
   for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
-    if tip and tip.HookScript then
-      tip:HookScript("OnTooltipCleared", function(self) self.kscItemID = nil end)
-    end
+    if tip and tip.HookScript then tip:HookScript("OnTooltipCleared", function(self) shown[self] = nil end) end
   end
-  if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, handle)
+  local TDP = TooltipDataProcessor
+  if TDP and TDP.AddLinePostCall and Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.SellPrice then
+    TDP.AddLinePostCall(Enum.TooltipDataLineType.SellPrice, function(tip) local _, d = pcall(function() return tip.GetPrimaryTooltipData and tip:GetPrimaryTooltipData() end); handle(tip, d) end)
+  end
+  if TDP and TDP.AddTooltipPostCall and Enum and Enum.TooltipDataType then
+    TDP.AddTooltipPostCall(Enum.TooltipDataType.Item, handle)
   else
     for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
       if tip and tip.HookScript then tip:HookScript("OnTooltipSetItem", function(self) handle(self) end) end
     end
   end
 end
-C.On("INIT", install)
+-- registered as soon as Kina loads (not at INIT), so it runs ahead of later hooks
+install()
 
 function C.ToggleTooltip()
   C.settings.tooltip = (C.settings.tooltip == false)

@@ -132,6 +132,12 @@ function Core:append(origin, oseq, kind, data)
   end
   local ev = { seq = s.head + 1, origin = origin, oseq = oseq, kind = kind, data = clean(data),
     t = math.floor(self:now() - (s.startAt or self:now())) }
+  -- 1.5.4: a farm that stopped itself after an idle hour ends at its last kill
+  if kind == "S" and data == "idle" then
+    local lastK
+    for _, e in ipairs(s.chain) do if e.kind == "K" then lastK = e.t end end
+    if lastK then ev.t = math.min(ev.t, lastK + 60) end
+  end
   ev.hash = fp(s.hash, ev)
   s.chain[ev.seq] = ev
   s.head, s.hash = ev.seq, ev.hash
@@ -200,7 +206,7 @@ function Core:Observe(kind, data)
   if not s or s.closed then return end
   s.oseq = s.oseq + 1
   -- Stop: the leader first collects every report still on its way (see beginStop)
-  if kind == "S" and self:IsLeader() then self:beginStop(); return end
+  if kind == "S" and self:IsLeader() then s.stopData = data; self:beginStop(); return end
   if self:IsLeader() and s.settleUntil and self:now() < s.settleUntil then
     s.deferred = s.deferred or {}
     s.deferred[#s.deferred + 1] = { self:name(), s.oseq, kind, clean(data) }
@@ -313,7 +319,7 @@ function Core:Receive(from, msg)
     local origin = f[3]
     if origin ~= from then return end -- you can only report for yourself
     if not self:members()[origin] then return end -- not in this farm
-    if f[5] == "S" then self:beginStop(); return end
+    if f[5] == "S" then s.stopData = (f[6] == "idle") and "idle" or s.stopData; self:beginStop(); return end
     if s.settleUntil and self:now() < s.settleUntil then
       s.deferred = s.deferred or {}
       s.deferred[#s.deferred + 1] = { origin, tonumber(f[4]) or 0, f[5], f[6] or "", tonumber(f[7]) }
@@ -455,7 +461,7 @@ function Core:Tick()
     if s.stopping and not s.closed then
       if self:stopReady() then
         s.stopping = nil
-        self:append(self:name(), 0, "S", "")
+        self:append(self:name(), 0, "S", s.stopData or "")
       elseif now - (s.lastT or 0) >= 3 then
         s.lastT = now
         self:send(table.concat({ "T", s.sid }, "|"))
@@ -537,7 +543,9 @@ end
 
 -- Totals from the log: identical on every copy with the same last fingerprint.
 -- { coin, items, used, net, kills, byLooter = {name=copper}, members, paused, closed }
-function Core.Totals(s)
+-- reprice (optional, 0.9.0): fn(id, suffix) -> copper each, used instead of the prices
+-- stamped when the loot was filed (the post-farm AH scan re-prices the split)
+function Core.Totals(s, reprice)
   local out = { coin = 0, items = 0, used = 0, kills = 0, byLooter = {}, coinBy = {}, members = {}, events = 0 }
   if not s then return out end
   local excluded, paused = {}, false
@@ -562,8 +570,9 @@ function Core.Totals(s)
   local unitVal = {}
   for _, ev in ipairs(s.chain) do
     if ev.kind == "L" and not excluded[ev.seq] then
-      local id, _, _, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+      local id, _, sfx, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
       id = tonumber(id)
+      if reprice and id then v = reprice(id, sfx ~= "" and sfx or nil) end
       if id and not unitVal[id] then unitVal[id] = tonumber(v) or 0 end
     end
   end
@@ -576,7 +585,8 @@ function Core.Totals(s)
     elseif k == "N" then out.noSplit = true -- 1.0.10: a "don't split" farm (set by whoever started it)
     elseif not paused and not excluded[ev.seq] then
       if k == "L" then
-        local _, n, _, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+        local lid, n, lsfx, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+        if reprice and tonumber(lid) then v = reprice(tonumber(lid), lsfx ~= "" and lsfx or nil) end
         if disputed[ev.seq] then v = disputed[ev.seq] end
         local val = (tonumber(n) or 1) * (tonumber(v) or 0)
         out.items = out.items + val

@@ -401,7 +401,7 @@ function C.Debts()
   for _, s in ipairs(C.db.sessions or {}) do
     if s.stop and C.Now() - s.stop > 14 * 86400 then break end
     local sp = s.split
-    if sp and sp.transfers then
+    if sp and sp.transfers and not (s.hold and not s.hold.done) then -- (0.9.0: not while waiting for AH prices)
       sp.paid = sp.paid or {}; sp.received = sp.received or {}
       for _, t in ipairs(sp.transfers) do
         if (first(t.from) == me or t.from == "you") and t.amt > 0 then
@@ -493,20 +493,67 @@ end
 -- (EXTEND_DAYS keeps its old name for older callers; it now counts HOURS.)
 C.DEBT_HOURS, C.EXTEND_HOURS, C.MAX_HOURS = 2, 2, 4
 C.DEBT_DAYS, C.EXTEND_DAYS = C.DEBT_HOURS, C.EXTEND_HOURS
+-- 1.5.4 (Taylor): the debt clock counts PLAY time, not real time: it only runs while
+-- the debtor or the creditor is logged in (2 hours of that, up to 4 with extensions).
+-- Each Kina counts its own online time (sp.clock) and they swap counts when they meet
+-- (sp.pclock); while both are online only the creditor's Kina counts, so the time isn't
+-- counted twice. After a payment is offered and turned down there are 5 minutes in
+-- which it can still be paid without anyone losing standing.
+C.GRACE = 300
+function C.DebtLimit(d)
+  local sp = d.s.split or {}
+  local ext = sp.ext and tonumber(sp.ext[d.key]) or 0
+  return math.min(C.MAX_HOURS, C.DEBT_HOURS + math.max(0, ext)) * 3600
+end
+function C.DebtUsed(d)
+  local sp = d.s.split or {}
+  return (sp.clock and sp.clock[d.key] or 0) + (sp.pclock and sp.pclock[d.key] or 0)
+end
 function C.DebtDue(d)
   if not (d and d.s) then return nil end
   local sp = d.s.split or {}
-  local ext = sp.ext and tonumber(sp.ext[d.key]) or 0
-  local hours = math.min(C.MAX_HOURS, C.DEBT_HOURS + math.max(0, ext))
-  return (d.s.stop or d.s.start or 0) + hours * 3600
+  local due = C.Now() + math.max(0, C.DebtLimit(d) - C.DebtUsed(d))
+  local off = (d.dir == "owe" and sp.offered and sp.offered[d.key]) or (d.dir == "owed" and sp.refusedSeen and sp.refusedSeen[d.key])
+  if tonumber(off) then due = math.max(due, off + C.GRACE) end
+  return due
 end
 function C.DueText(d)
   local due = C.DebtDue(d)
   if not due then return "" end
   local left = due - C.Now()
-  if left < 0 then return "|cffff4040past due|r" end
+  if left <= 0 then return "|cffff4040past due|r" end
   local h, m = math.floor(left / 3600), math.floor((left % 3600) / 60)
-  return "due in " .. (h > 0 and (h .. " h " .. m .. " min") or (math.max(1, m) .. " min"))
+  return "due in " .. (h > 0 and (h .. " h " .. m .. " min") or (math.max(1, m) .. " min")) .. " of play"
+end
+-- run the clocks (every 30 s from Toast's debt check)
+function C.TickDebtClocks()
+  local now = C.Now()
+  for _, d in ipairs(C.Debts()) do
+    if d.s and not d.topup and d.amt >= 1 then
+      local sp = d.s.split or {}; d.s.split = sp
+      sp.clock = sp.clock or {}; sp.clockAt = sp.clockAt or {}
+      local last = sp.clockAt[d.key]
+      local together = C.InGroupName and C.InGroupName(d.who)
+      if last and now - last > 0 and now - last <= 120 and (d.dir == "owed" or not together) then
+        sp.clock[d.key] = (sp.clock[d.key] or 0) + (now - last)
+      end
+      sp.clockAt[d.key] = now
+      if together and C.Share and C.Share.SendClock then
+        pcall(C.Share.SendClock, d.who, math.floor(sp.clock[d.key] or 0), (d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0)))
+      end
+    end
+  end
+end
+-- their Kina told mine how long it has counted on our debt
+function C.OnDebtClock(from, secs, ref)
+  local who = first(from)
+  for _, d in ipairs(C.Debts()) do
+    if d.s and first(d.who) == who and (((d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) == ref) then
+      local sp = d.s.split or {}; d.s.split = sp
+      sp.pclock = sp.pclock or {}
+      if (tonumber(secs) or 0) > (sp.pclock[d.key] or 0) then sp.pclock[d.key] = tonumber(secs) end
+    end
+  end
 end
 -- how much of the payment XP a payment earns by how soon it came after the farm:
 -- full within 5 minutes, falling evenly to half at 1 hour, half after that
@@ -799,7 +846,7 @@ function C.ShowSettle()
       f.rows[i] = { cb = cb, text = t }
     end
     f.empty = C.Text(f, "OVERLAY", "GameFontDisableSmall"); f.empty:SetPoint("TOPLEFT", 14, -36)
-    local send = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    local send = CreateFrame("Button", nil, f, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(send) end
     send:SetSize(140, 22); send:SetPoint("BOTTOMLEFT", 10, 10); send:SetText("Send selected")
     send:SetScript("OnClick", function()
       queue = {}
@@ -808,7 +855,7 @@ function C.ShowSettle()
       sendNext()
     end)
     if C.ButtonTip then C.ButtonTip(send, "Send selected", "Mails the money you owe to everyone ticked (postage applies), and a request to everyone ticked who owes you. Paid debts drop off this list.") end
-    local all = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    local all = CreateFrame("Button", nil, f, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(all) end
     all:SetSize(110, 22); all:SetPoint("LEFT", send, "RIGHT", 6, 0); all:SetText("Tick all")
     all:SetScript("OnClick", function() for _, row in ipairs(f.rows) do if row.d then row.cb:SetChecked(true) end end end)
     if C.ButtonTip then C.ButtonTip(all, "Tick all", "Selects every row, so one Send settles everything.") end

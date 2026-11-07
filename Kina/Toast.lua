@@ -122,19 +122,20 @@ do
   local warned = {}
   function T.CheckDue()
     if not (C.Debts and C.DebtDue) then return end
+    if C.TickDebtClocks then pcall(C.TickDebtClocks) end
     for _, d in ipairs(C.Debts()) do
       if d.dir == "owe" and d.amt >= 1 and d.s and not d.topup then
         local due = C.DebtDue(d)
         local sp = d.s.split or {}
         local key = tostring(d.s.start or 0) .. (d.key or "")
-        if due and C.Now() > due and sp.offered and sp.offered[d.key] then
+        if due and C.Now() >= due and sp.offered and sp.offered[d.key] then
           sp.lapsed = sp.lapsed or {}
           if not sp.lapsed[d.key] then
             sp.lapsed[d.key] = true
             if C.Log then C.Log("offered", d.who, math.floor(d.amt), (d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) end
             C.Print(string.format("%s's debt time ran out after you offered the full %s: no standing lost.", C.Books and C.Books.Name(d.who) or d.who, C.Money(math.floor(d.amt))))
           end
-        elseif due and C.Now() > due then
+        elseif due and C.Now() >= due then
           sp.lapsed = sp.lapsed or {}
           if not sp.lapsed[d.key] then
             sp.lapsed[d.key] = true
@@ -151,7 +152,7 @@ do
         -- the creditor's side: time ran out on a debt whose full payment I turned down
         local due = C.DebtDue(d)
         local sp = d.s.split or {}
-        if due and C.Now() > due and sp.refusedSeen and sp.refusedSeen[d.key] then
+        if due and C.Now() >= due and sp.refusedSeen and sp.refusedSeen[d.key] then
           sp.lapsed = sp.lapsed or {}
           if not sp.lapsed[d.key] then
             sp.lapsed[d.key] = true
@@ -211,9 +212,32 @@ end
 -- and the average disenchant result; disenchant needs a 10% edge, +5% while Forever's
 -- odds aren't confirmed, +5% when a bad roll is really bad (worst likely result under
 -- half the alternative), never more than 20%. All three numbers are always shown.
+-- the call itself (also used by the full Kina tooltip block): nil when it can't be disenchanted
+function C.DECall(id)
+  if not (C.DEValue and C.BestRoute) then return end
+  local dv = C.DEValue(id)
+  if not dv or dv.ev < 1 then return end
+  local _, _, det = C.BestRoute(id, 1)
+  local vend = (C.VendorPrice and C.VendorPrice(id)) or 0
+  local ah = det and det.ah or 0
+  local alt = math.max(vend, ah)
+  local worst, top
+  for _, o in ipairs(dv.outcomes or {}) do if not top or o.p > top.p then top = o end end
+  if top then worst = 0; for mat, qty in pairs(top.mats) do worst = worst + (C.MatExit(mat) or 0) * ((top.lo or qty)) end end
+  local edge = 0.10 + 0.05 -- odds not yet confirmed on Forever
+  if worst and alt > 0 and worst < alt * 0.5 then edge = edge + 0.05 end
+  edge = math.min(edge, 0.20)
+  local pct = alt > 0 and math.floor((dv.ev / alt - 1) * 100) or 100
+  local call
+  if dv.ev >= alt * (1 + edge) then call = "disenchant" elseif ah > vend then call = "auction" else call = "vendor" end
+  return { call = call, pct = pct, edge = edge, vend = vend, ah = ah, ev = dv.ev, best = (call == "disenchant" and dv.ev) or alt }
+end
 do
   local added = setmetatable({}, { __mode = "k" })
   local function line(tip)
+    -- 1.5.4: the full Kina block (Tooltip.lua) carries this call now; this one line is
+    -- only for when that block is switched off
+    if not (C.settings and C.settings.tooltip == false) then return end
     if tip ~= GameTooltip or added[tip] or (InCombatLockdown and InCombatLockdown()) then return end
     if C.settings and C.settings.deTip == false then return end
     if not (tip.GetItem and C.DEValue and C.BestRoute) then return end
@@ -221,25 +245,11 @@ do
     if not link or (issecretvalue and issecretvalue(link)) then return end
     local id = tonumber(link:match("item:(%d+)"))
     if not id then return end
-    local dv = C.DEValue(id)
-    if not dv or dv.ev < 1 then return end
+    local d = C.DECall(id)
+    if not d then return end
     added[tip] = true
-    local _, _, det = C.BestRoute(id, 1)
-    local vend = (C.VendorPrice and C.VendorPrice(id)) or 0
-    local ah = det and det.ah or 0
-    local alt = math.max(vend, ah)
-    local worst
-    local top
-    for _, o in ipairs(dv.outcomes or {}) do if not top or o.p > top.p then top = o end end
-    if top then worst = 0; for mat, qty in pairs(top.mats) do worst = worst + (C.MatExit(mat) or 0) * ((top.lo or qty)) end end
-    local edge = 0.10 + 0.05 -- odds not yet confirmed on Forever
-    if worst and alt > 0 and worst < alt * 0.5 then edge = edge + 0.05 end
-    edge = math.min(edge, 0.20)
-    local pct = alt > 0 and math.floor((dv.ev / alt - 1) * 100) or 100
-    local call
-    if dv.ev >= alt * (1 + edge) then call = "|cff7CFC00disenchant|r"
-    elseif ah > vend then call = "|cffb083ffauction house|r" else call = "|cff8ecfffvendor|r" end
-    tip:AddLine(string.format("Kina: vendor %s · AH %s · DE %s avg (%s%d%%) -> %s", C.Money(vend), ah > 0 and C.Money(ah) or "-", C.Money(dv.ev), pct >= 0 and "+" or "", pct, call), 0.85, 0.85, 0.85)
+    local call = (d.call == "disenchant" and "|cff7CFC00disenchant|r") or (d.call == "auction" and "|cffb083ffauction house|r") or "|cff8ecfffvendor|r"
+    tip:AddLine(string.format("Kina: vendor %s · AH %s · DE %s avg (%s%d%%) -> %s", C.Money(d.vend), d.ah > 0 and C.Money(d.ah) or "-", C.Money(d.ev), d.pct >= 0 and "+" or "", d.pct, call), 0.85, 0.85, 0.85)
     tip:Show()
   end
   local function safe(tip) pcall(line, tip) end
@@ -255,13 +265,31 @@ end
 -- farm-end sting). Off by default (Settings > "Play the Kina theme when a farm ends").
 -- (1.5.2: it used to wait for the Ledger and looked at the OLDEST farm, so it never played.)
 do
-  local handle
-  function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil end
+  local handle, playId = nil, 0
+  -- 1.5.4 (Taylor): the game's music goes quiet while the theme plays, then comes back.
+  -- Only if it was on; the flag is saved so a reload or logout mid-song still restores it.
+  local function musicBack()
+    if C.settings and C.settings.themeMutedMusic then
+      C.settings.themeMutedMusic = nil
+      if SetCVar then pcall(SetCVar, "Sound_EnableMusic", "1") end
+    end
+  end
+  T.MusicBack = musicBack
+  function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil; musicBack() end
   function T.ThemeAtFarmEnd()
-    if not (C.settings and C.settings.themeMusic == true and PlaySoundFile) then return false end
+    if not (C.settings and C.settings.themeMusic == true and PlaySoundFile) or (C.Volume and C.Volume() == 0) then return false end
     T.ThemeStop()
-    local ok, will, h = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\kina_theme.ogg", "SFX")
-    if ok and will then handle = h; return true end
+    local ok, will, h = pcall(PlaySoundFile, C.SoundFile and C.SoundFile("kina_theme") or ("Interface\\AddOns\\" .. ADDON .. "\\Sounds\\kina_theme.ogg"), "SFX")
+    if ok and will then
+      handle = h
+      if GetCVar and SetCVar and tostring(GetCVar("Sound_EnableMusic")) == "1" then
+        C.settings.themeMutedMusic = true; pcall(SetCVar, "Sound_EnableMusic", "0")
+      end
+      playId = playId + 1
+      local mine = playId
+      if C.After then C.After(31, function() if playId == mine then handle = nil; musicBack() end end) end -- the theme is 30 s
+      return true
+    end
     return false
   end
   function T.ThemeOnLedger() end -- kept for older callers
@@ -301,3 +329,6 @@ function T.Preview(kind)
     C.Print("/kina preview levelup | repup | repdown | paid | settled")
   end
 end
+
+-- 1.5.4: a reload or logout during the theme left the game's music off: put it back
+C.On("PLAYER_LOGIN", function() if C.Toast and C.Toast.MusicBack then pcall(C.Toast.MusicBack) end end)

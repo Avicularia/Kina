@@ -990,8 +990,8 @@ if C.PUBLIC then
   local function money(v) return (v and v ~= 0) and C.Money(math.floor(v + 0.5)) or (GREY .. "-|r") end
   local function day(t) return t and date("%m/%d", t) or "" end
   local function period() return ui.ledgerDays and (ui.ledgerDays .. " days") or "all time" end
-  local VIEWS = { "farms", "debts", "flow", "xp" }
-  local VIEWNAME = { farms = "Farms", debts = "Debts", flow = "Gold flow", xp = "XP" }
+  local VIEWS = { "farms", "debts", "collections", "flow", "xp" }
+  local VIEWNAME = { farms = "Farms", debts = "Debts", collections = "Collections", flow = "Gold flow", xp = "XP" }
   ui.LEDGER_VIEWS, ui.LEDGER_VIEWNAME = VIEWS, VIEWNAME
   C.LedgerViewName = function() return VIEWNAME[ui.ledgerView or "farms"] end
   C.NextLedgerView = function()
@@ -1113,6 +1113,10 @@ if C.PUBLIC then
     ui.bookOf = nil
     local view = ui.ledgerView or "farms"
     local out = {}
+    if view == "collections" then
+      -- 1.5.4 (Taylor): lapsed, refused, forgiven and settled debts, out of the Debts page
+      return GOLDC .. "Collections|r " .. GREY .. "debts that lapsed, were forgiven or were settled|r", {}, {}, {}, { panel = "collections" }
+    end
     if view == "debts" then
       -- 1.2.0: a page of its own: people on the left, one person's debts with buttons on the right
       return GOLDC .. "Debts|r " .. GREY .. "between you and the people you farmed with|r", {}, {}, {}, { panel = "debts" }
@@ -1170,7 +1174,7 @@ if C.PUBLIC then
     end
     local rows, tot = C.Books.Farms(ui.ledgerDays)
     for _, r in ipairs(rows) do
-      local st = (#r.debts == 0) and (GREY .. "even|r") or (r.open and (ORANGE .. "open|r") or (GREEN .. "settled|r"))
+      local st = (#r.debts == 0) and (GREY .. "EVEN|r") or (r.open and (ORANGE .. "OPEN|r") or (GREEN .. "SETTLED|r"))
       out[#out + 1] = { book = r.s, cols = { day(r.t), r.label .. "  " .. st, tostring(r.players), money(r.farmed), money(r.share), money(r.collected),
         r.toCollect >= 1 and (ORANGE .. money(r.toCollect) .. "|r") or money(0), money(r.paid), r.owe >= 1 and (ORANGE .. money(r.owe) .. "|r") or money(0),
         r.xp > 0 and ("+" .. r.xp) or (GREY .. "-|r") },
@@ -1178,9 +1182,13 @@ if C.PUBLIC then
     end
     local head = string.format("%sFarms, %s:|r farmed %s, collected %s, %sto collect %s|r, paid %s, %syou owe %s|r, XP +%d (%d waiting)   %s(click a farm for its details)|r",
       GOLDC, period(), money(tot.farmed), money(tot.collected), ORANGE, money(tot.toCollect), money(tot.paid), ORANGE, money(tot.owe), tot.xp, tot.waiting, GREY)
-    return head, { "Date", "Farm", "Players", "Farmed", "Your share", "Collected", "To collect", "Paid", "You owe", "XP" },
+    local share = 0; for _, r in ipairs(rows) do share = share + (r.share or 0) end
+    local open = (tot.owe or 0) >= 1 and (ORANGE .. "you owe " .. money(tot.owe) .. "|r") or ((tot.toCollect or 0) >= 1 and (GOLDC .. money(tot.toCollect) .. " owed|r") or (GREEN .. "none|r"))
+    return GOLDC .. "Farms, " .. period() .. "|r  " .. GREY .. "click a farm for its details|r", { "Date", "Farm", "Players", "Farmed", "Your share", "Collected", "To collect", "Paid", "You owe", "XP" },
       { 0, 46, 210, 260, 345, 430, 515, 600, 680, 760 }, out,
-      { empty = "No farms yet. Press Start on the Kina widget when you farm; every farm shows up here with its gold, debts and XP." }
+      { empty = "No farms yet. Press Start on the Kina widget when you farm; every farm shows up here with its gold, debts and XP.",
+        tiles = { { "Farmed", GOLDC .. money(tot.farmed) .. "|r" }, { "Your share", GOLDC .. money(share) .. "|r" }, { "Collected", GREEN .. money(tot.collected) .. "|r" },
+          { "Paid", money(tot.paid) }, { "Open", open }, { "Kina XP", "|cff4fc3f7+" .. (tot.xp or 0) .. "|r", (tot.waiting or 0) > 0 and (tot.waiting .. " waiting") or nil } } }
   end
 end
 
@@ -1205,8 +1213,8 @@ tabs.Session = function()
   local out = {}
   local function add(label, r, live, ref)
     out[#out + 1] = { slog = ref, cols = { (live and "|cff7CFC00" or "") .. label .. (live and "|r" or ""), string.format("%d min", math.floor(r.secs / 60)),
-      C.Money(r.total), C.Money(r.perHour), string.format("coin %s, pickpocket %s, vendor %s, items %s", C.Money(r.coin),
-      C.Money(r.pickpocket), C.Money(r.vendor), C.Money(r.items)), tostring(r.kills) .. ((ref and C.GameXPPerHour and C.GameXPPerHour(ref)) and ("  |cff9d9d9d" .. C.FmtXPH(C.GameXPPerHour(ref)) .. "|r") or "") },
+      C.Money(r.total), C.Money(r.perHour), string.format("|cffe6c85acoin|r %s  ·  |cff9d9d9dvendor|r %s  ·  |cff6ec27aitems|r %s%s", C.Money(r.coin),
+      C.Money(r.vendor), C.Money(r.items), (r.pickpocket or 0) > 0 and ("  ·  pickpocket " .. C.Money(r.pickpocket)) or ""), tostring(r.kills) .. ((ref and C.GameXPPerHour and C.GameXPPerHour(ref)) and ("  |cff9d9d9d" .. C.FmtXPH(C.GameXPPerHour(ref)) .. "|r") or "") },
       sort = { label, r.secs, r.total, r.perHour, r.coin + r.pickpocket, r.kills } }
   end
   local s = C.SessionSummary()
@@ -1215,8 +1223,19 @@ tabs.Session = function()
     local ss = C.db.sessions[i]
     if ss.result then add((ss.label or "?") .. (ss.why and ss.why ~= "stopped" and (" (" .. ss.why .. ")") or ""), ss.result, false, ss) end
   end
-  return "Start/Stop on the farm widget before and after farming. |cff7CFC00Click a farm to see its log:|r how its Net adds up, and every kill, loot and gold change it counted.",
-    { "Session", "Length", "Total", "Per hour", "Breakdown", "Kills" }, { 0, 220, 300, 400, 500, 790 }, out
+  -- 1.5.5: the summary tiles
+  local n, secs, tot, best = 0, 0, 0, nil
+  for _, ss in ipairs(C.db.sessions) do
+    if ss.result then
+      n = n + 1; secs = secs + (ss.result.secs or 0); tot = tot + (ss.result.total or 0)
+      if (ss.result.secs or 0) >= 600 and (not best or (ss.result.perHour or 0) > (best.result.perHour or 0)) then best = ss end
+    end
+  end
+  local tiles = { { "Farms", tostring(n), "all time" }, { "Time farmed", string.format("%.1f h", secs / 3600) },
+    { "Earned", "|cffffd100" .. C.Money(math.floor(tot)) .. "|r" }, { "Average per hour", "|cffffd100" .. C.Money(secs > 0 and math.floor(tot * 3600 / secs) or 0) .. "|r" },
+    { "Best farm", best and ("|cffffd100" .. C.Money(math.floor(best.result.perHour or 0)) .. "/h|r") or "-", best and best.label or nil } }
+  return "|cffffd100Farms|r  |cff9d9d9dclick a farm to open its log|r",
+    { "Farm", "Length", "Total", "Per hour", "Made of", "Kills" }, { 0, 220, 300, 400, 500, 790 }, out, { tiles = tiles }
 end
 
 ------------------------------------------------------------------ column help
@@ -2253,12 +2272,13 @@ end
 
 local function buildScanBar(f)
   local bar = CreateFrame("StatusBar", nil, f)
-  bar:SetSize(430, 16); bar:SetPoint("BOTTOMLEFT", 16, 14)
-  bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+  bar:SetSize(430, 20); bar:SetPoint("BOTTOMLEFT", 16, 12)
+  -- 1.5.5: the same family as the buttons: dark glass, gold rim, a warm gold fill
+  bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8"); bar:SetStatusBarColor(0.80, 0.58, 0.18, 0.75)
   bar:SetMinMaxValues(0, 1); bar:SetValue(0)
-  local bg = bar:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.6)
+  local bg = bar:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.035, 0.03, 0.025, 0.85)
   local function edge(p1, p2, horiz)
-    local t = bar:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(0.96, 0.78, 0.30, 0.7)
+    local t = bar:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(0.78, 0.62, 0.30, 0.95)
     t:SetPoint(p1, -1, 1); t:SetPoint(p2, 1, -1)
     if horiz then t:SetHeight(1) else t:SetWidth(1) end
   end
@@ -2377,7 +2397,6 @@ local function buildSettings(f)
   -- scrolls (mouse wheel or the bar on the right) when the options don't fit
   local sf = CreateFrame("ScrollFrame", "KinaSettingsScroll", f, "UIPanelScrollFrameTemplate")
   sf:SetPoint("TOPLEFT", 12, -74); sf:SetPoint("BOTTOMRIGHT", -34, 62); sf:Hide()
-  local bg = sf:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(1, 1, 1, 0.03)
   local outer = CreateFrame("Frame", nil, sf); outer:SetSize(ui.w - 50, 800)
   sf:SetScrollChild(outer)
   ui.settingsContent = outer
@@ -2396,35 +2415,59 @@ local function buildSettings(f)
   end
   local p = CreateFrame("Frame", nil, outer); p:SetPoint("TOPLEFT", 0, -YOU_H); p:SetPoint("TOPRIGHT", 0, -YOU_H); p:SetHeight(800)
   local maxY = 0
-  local COLW, ROWH = 280, 23
+  -- 1.5.5 (Taylor): three even columns of cards (a titled dark panel per section),
+  -- switches instead of [x] buttons
+  local COLW, ROWH = math.max(300, math.floor(((ui.w or 1000) - 70) / 3)), 26
   local col, y = 0, 0
+  local INSET = 16
   local function at(w)
-    return function(region) region:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + col * COLW, -6 - y) end
+    return function(region) region:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + INSET, -6 - y) end
   end
-  local function column(n) maxY = math.max(maxY, y); col, y = n, 0 end
+  local card
+  local function closeCard()
+    if card then card:SetHeight(y - card.y0 + 6); y = y + 14; card = nil end
+  end
+  local function column(n) closeCard(); maxY = math.max(maxY, y); col, y = n, 0 end
   local function header(text)
-    local fs = C.Text(p, "OVERLAY", "GameFontNormal"); at()(fs); fs:SetText(text)
-    y = y + ROWH
+    closeCard()
+    card = CreateFrame("Frame", nil, p); card.y0 = y
+    card:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW, -2 - y); card:SetWidth(COLW - 10)
+    if C.Skin and C.Skin.Panel then C.Skin.Panel(card) end
+    local fs = card:CreateFontString(nil, "OVERLAY"); fs:SetPoint("TOPLEFT", 14, -10)
+    if C.Cos then C.Cos.Font(fs, 15, "") else fs:SetFontObject(GameFontNormal) end
+    fs:SetTextColor(1, 0.84, 0.43); fs:SetText(text)
+    local rule = card:CreateTexture(nil, "ARTWORK"); rule:SetPoint("TOPLEFT", 12, -32); rule:SetPoint("TOPRIGHT", -12, -32); rule:SetHeight(1)
+    rule:SetColorTexture(0.47, 0.38, 0.20, 1)
+    y = y + 42
   end
   local function note(getText)
-    local fs = C.Text(p, "OVERLAY", "GameFontDisableSmall"); at()(fs); fs:SetWidth(COLW - 14); fs:SetJustifyH("LEFT")
+    local fs = C.Text(p, "OVERLAY", "GameFontDisableSmall"); at()(fs); fs:SetWidth(COLW - 10 - INSET * 2); fs:SetJustifyH("LEFT")
     if fs.SetWordWrap then fs:SetWordWrap(false) end
     controls[#controls + 1] = function() fs:SetText(getText() or "") end
     y = y + 16
   end
   local function toggle(label, get, set, tip)
-    local b = button(p, "", COLW - 14, function() set(not get()); C.RefreshSettings(); C.Refresh() end)
+    local b = CreateFrame("Button", nil, p); b:SetSize(COLW - 10 - INSET * 2, ROWH - 2)
     at()(b)
-    local fs = b:GetFontString(); if fs then fs:SetJustifyH("LEFT"); fs:ClearAllPoints(); fs:SetPoint("LEFT", 8, 0) end
+    b:SetScript("OnClick", function() set(not get()); if C.PlayClick then C.PlayClick() end; C.RefreshSettings(); C.Refresh() end)
+    local sw = b:CreateTexture(nil, "ARTWORK"); sw:SetSize(34, 17); sw:SetPoint("LEFT", 0, 0)
+    local fs = C.Text(b, "OVERLAY", "GameFontHighlight"); fs:SetPoint("LEFT", sw, "RIGHT", 10, 0); fs:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+    fs:SetJustifyH("LEFT"); if fs.SetWordWrap then fs:SetWordWrap(false) end
+    local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.4, 0.06)
     if tip then
       b:SetScript("OnEnter", function(self) C.TipOwner(self); GameTooltip:AddLine(tip, 1, 1, 1, true); GameTooltip:Show() end)
       b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
-    controls[#controls + 1] = function() b:SetText((get() and "|cff40ff40[x]|r " or "[  ] ") .. label) end
+    controls[#controls + 1] = function()
+      local on = get() and true or false
+      sw:SetTexture("Interface\\AddOns\\Kina\\Media\\Cos\\" .. (on and "switch_on" or "switch_off"))
+      fs:SetText((label:gsub("^%s+", "")))
+      fs:SetTextColor(on and 0.92 or 0.70, on and 0.90 or 0.68, on and 0.86 or 0.64)
+    end
     y = y + ROWH
   end
   local function action(label, fn, w, sameRow)
-    local b = button(p, label, w or (COLW - 14), function() fn(); C.RefreshSettings(); C.Refresh() end)
+    local b = button(p, label, w or (COLW - 10 - INSET * 2), function() fn(); C.RefreshSettings(); C.Refresh() end)
     if sameRow then b:SetPoint("LEFT", sameRow, "RIGHT", 6, 0) else at()(b); y = y + ROWH end
     return b
   end
@@ -2432,7 +2475,7 @@ local function buildSettings(f)
   local function box(label, get, set, w, tip)
     local fs = C.Text(p, "OVERLAY", "GameFontHighlightSmall"); at()(fs); fs:SetText(label)
     local eb = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
-    eb:SetSize(w or 70, 18); eb:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + col * COLW + (COLW - 14) - (w or 70), -6 - y + 2); eb:SetAutoFocus(false)
+    eb:SetSize(w or 70, 18); eb:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + (COLW - 10 - INSET) - (w or 70), -6 - y + 2); eb:SetAutoFocus(false)
     local function apply(self) set(self:GetText() or ""); self:ClearFocus(); C.RefreshSettings(); C.Refresh() end
     eb:SetScript("OnEnterPressed", apply)
     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus(); C.RefreshSettings() end)
@@ -2532,11 +2575,11 @@ local function buildSettings(f)
   toggle("Kina iron look (after /reload)", function() return st.look ~= "classic" end, function(v) st.look = (not v) and "classic" or nil
     C.Print("the " .. (v and "iron" or "classic") .. " look applies after a /reload.") end,
     "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
+  toggle("Ask for an AH scan when a farm ends", function() return st.askScan ~= false end, function(v) st.askScan = v end,
+    "Debts wait until every Kina user in the farm has scanned the auction house or skipped, so the split uses fresh prices.")
   toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
-  toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayClick then C.PlayClick() end end)
   toggle("Post farm stats to group chat (every 15 min)", function() return st.groupAd ~= false end, function(v) st.groupAd = v end)
-  toggle("Play the Kina theme when a farm ends", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end)
   toggle("Leave cloth for our tailor (Kina loots for you)", function() return st.leaveCloth == true end, function(v) if C.SetLeaveCloth then C.SetLeaveCloth(v) else st.leaveCloth = v end end)
   box("Farm timer (hours, 0 = none)", function() return tostring((st.farmPreset or 0) / 3600) end,
     function(t) local h = num(t, 0, 24); if h then st.farmPreset = math.floor(h * 3600) end; if C.RefreshWidget then C.RefreshWidget() end end, 50)
@@ -2583,9 +2626,9 @@ local function buildSettings(f)
     local lbl = C.Text(p, "OVERLAY", "GameFontHighlightSmall"); at()(lbl)
     local sl = CreateFrame("Slider", "KinaTextScaleSlider", p)
     sl:SetOrientation("HORIZONTAL"); sl:SetSize(150, 16)
-    sl:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + col * COLW + (COLW - 14) - 150, -6 - y + 1)
+    sl:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + (COLW - 10 - INSET) - 150, -6 - y + 1)
     local track = sl:CreateTexture(nil, "BACKGROUND")
-    track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(6); track:SetColorTexture(1, 1, 1, 0.18)
+    track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(4); track:SetColorTexture(0.78, 0.6, 0.25, 0.55)
     sl:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
     sl:SetMinMaxValues(0.7, 1.5); sl:SetValueStep(0.05)
     if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
@@ -2607,6 +2650,19 @@ local function buildSettings(f)
   end
   action("Put every Kina window back", function() C.ResetWindows() end)
   toggle("Debug messages", function() return C.debug end, function(v) C.debug = v end)
+  if C.PUBLIC then
+  -- 1.5.5: a third column: sound and item tooltips
+  column(2)
+  header("Sound")
+  toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) if C.SetVolume then C.SetVolume(v and 4 or 0) else st.farmSound = v end; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayClick then C.PlayClick() end end,
+    "The volume itself is on the farm widget's speaker.")
+  toggle("Play the Kina theme when a farm ends", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end,
+    "The game's music pauses while it plays.")
+  header("Item tooltips")
+  toggle("Kina prices on item tooltips", function() return st.tooltip ~= false end, function(v) st.tooltip = v end)
+  toggle("Only Kina (hide other add-ons' lines)", function() return st.tipOnly == true end, function(v) st.tipOnly = v end)
+  toggle("Disenchant breakdown", function() return st.tipDE ~= false end, function(v) st.tipDE = v end)
+  end
 
   if not C.PUBLIC then
   -------------------------------------------------- column 3: partner, sharing and pickpocketing
@@ -2723,6 +2779,7 @@ local function buildSettings(f)
   action("New haul session", function() if P and P.HaulReset then P.HaulReset(); C.Print("new pocket haul session.") end end, 132, ppSync)
 
   end
+  closeCard()
   maxY = math.max(maxY, y)
   p:SetHeight(maxY + 20); outer:SetHeight(maxY + 20 + YOU_H)
   ui.settingsPanel = sf
@@ -2813,6 +2870,7 @@ local function build()
         local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE"); ver:SetPoint("TOP", plateF, "BOTTOM", 0, 6)
         ver:SetText("|cffc9b27av" .. C.version .. "|r")
         title:Hide()
+        if C.Cos.PlaqueFX then pcall(C.Cos.PlaqueFX, plateF, 284, 71, 26) end -- 1.5.5: halo, sweep, sparks
         -- 1.5.1: grabbing the banner moves the window too
         if C.DragBy then C.DragBy(f, plateF) end
       end
@@ -2844,13 +2902,11 @@ local function build()
   ui.tabButtons = {}
   local x = 10
   for _, name in ipairs(tabOrder) do
-    local b = button(f, name, 54, function() ui.tab = name; ui.offset = 0; C.Refresh() end)
+    local b = button(f, name, 54, function() ui.tab = name; ui.offset = 0; if name == "You" then ui.youWho = nil end; C.Refresh() end)
     b:SetPoint("TOPLEFT", x, -28); x = x + 56
     if C.Skin and C.Skin.On() then
-      -- iron tabs instead of buttons: wider, so the name sits inside the 9 px border
-      if b.kinaSkin then b.kinaSkin:Show(false); b.kinaSkin.Layout = function() end end
-      b:SetSize(70, 24); x = x + 18
-      C.Skin.Tab(b)
+      -- 1.5.5: tabs are the same buttons as everywhere else (gold-filled when open)
+      b:SetSize(76, 24); x = x + 24
     end
     ui.tabButtons[name] = b
   end
@@ -3050,11 +3106,11 @@ local function build()
   ui.head:SetPoint("TOPLEFT", 14, -56); ui.head:SetWidth(W - 28); ui.head:SetJustifyH("LEFT")
   -- 1.2.0: the Ledger's views (Farms, Debts, Gold flow, XP) as real buttons
   if C.PUBLIC and ui.LEDGER_VIEWS then
-    local vb = CreateFrame("Frame", nil, f); vb:SetSize(420, 24); vb.btns = {}
+    local vb = CreateFrame("Frame", nil, f); vb:SetSize(520, 24); vb.btns = {}
     local prev
     for i = #ui.LEDGER_VIEWS, 1, -1 do
       local v = ui.LEDGER_VIEWS[i]
-      local b = button(vb, ui.LEDGER_VIEWNAME[v], v == "flow" and 96 or 76, function()
+      local b = button(vb, ui.LEDGER_VIEWNAME[v], (v == "flow" or v == "collections") and 96 or 76, function()
         ui.ledgerView = v; ui.bookOf = nil; ui.offset = 0; ui.sort.Ledger = nil; C.Refresh() end)
       b:SetHeight(24)
       if prev then b:SetPoint("RIGHT", prev, "LEFT", -6, 0) else b:SetPoint("RIGHT", vb, "RIGHT", 0, 0) end
@@ -3118,7 +3174,9 @@ local function build()
     local row = CreateFrame("Button", nil, f)
     row:SetSize(W - 24, ROW_H); row:SetPoint("TOPLEFT", 12, -94 - (r - 1) * ROW_H)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    local hl = row:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.08)
+    local hl = row:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.45, 0.09)
+    -- 1.5.5: every other row a touch lighter, so long tables read across
+    row.zebra = row:CreateTexture(nil, "BACKGROUND"); row.zebra:SetAllPoints(); row.zebra:SetColorTexture(1, 0.9, 0.66, 0.035); row.zebra:Hide()
     row.cells = {}
     for i = 1, 10 do
       local t = C.Text(row, "OVERLAY", "GameFontHighlightSmall")
@@ -3286,6 +3344,7 @@ function C.Draw()
   local used, shown, full = 0, 0, false
   for r = 1, MAX_ROWS do
     local row, d = ui.rows[r], (not full) and data[(ui.offset or 0) + r] or nil
+    if row.zebra then if d and r % 2 == 1 then row.zebra:Show() else row.zebra:Hide() end end
     local h = ROW_H
     for i = 1, #row.cells do
       local t = row.cells[i]
@@ -3341,6 +3400,41 @@ function C.Refresh()
   opts = opts or {}
   -- 1.2.0: breathing room under the tab shelf in the iron look
   if C.Skin and C.Skin.On() then opts.top = (opts.top or 0) + 10 end
+  -- 1.5.5: a strip of summary tiles above a list (Session, Ledger)
+  do
+    local baseTop = opts.top or 0
+    ui.baseTop = baseTop
+    if opts.tiles and #opts.tiles > 0 then
+      opts.top = baseTop + 66
+      if not ui.tileStrip then
+        ui.tileStrip = CreateFrame("Frame", nil, ui.frame); ui.tileStrip.t = {}
+        for i = 1, 6 do
+          local t = CreateFrame("Frame", nil, ui.tileStrip)
+          if C.Skin and C.Skin.Panel then C.Skin.Panel(t) end
+          t.l = C.Text(t, "OVERLAY", "GameFontDisableSmall"); t.l:SetPoint("TOPLEFT", 12, -8); t.l:SetJustifyH("LEFT")
+          t.v = t:CreateFontString(nil, "OVERLAY"); t.v:SetPoint("TOPLEFT", 12, -22); t.v:SetJustifyH("LEFT")
+          if C.Cos then C.Cos.Font(t.v, 17, "") else t.v:SetFontObject(GameFontNormalLarge) end
+          t.s = C.Text(t, "OVERLAY", "GameFontDisableSmall"); t.s:SetPoint("BOTTOMLEFT", 12, 6); t.s:SetJustifyH("LEFT")
+          for _, fs in ipairs({ t.l, t.v, t.s }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
+          ui.tileStrip.t[i] = t
+        end
+      end
+      local n = math.min(6, #opts.tiles)
+      local wAll = (ui.w or 1000) - 28
+      local tw = math.floor((wAll - (n - 1) * 8) / n)
+      ui.tileStrip:ClearAllPoints(); ui.tileStrip:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", 14, -(78 + baseTop)); ui.tileStrip:SetSize(wAll, 58)
+      for i, t in ipairs(ui.tileStrip.t) do
+        local d = opts.tiles[i]
+        if d and i <= n then
+          t:ClearAllPoints(); t:SetPoint("TOPLEFT", ui.tileStrip, "TOPLEFT", (i - 1) * (tw + 8), 0); t:SetSize(tw, 58)
+          t.l:SetText(string.upper(d[1])); t.v:SetText(d[2] or ""); t.s:SetText(d[3] or "")
+          t.l:SetWidth(tw - 20); t.v:SetWidth(tw - 20); t.s:SetWidth(tw - 20)
+          t:Show()
+        else t:Hide() end
+      end
+      ui.tileStrip:Show()
+    elseif ui.tileStrip then ui.tileStrip:Hide() end
+  end
   ui.panelTop = 82 + (opts.top or 0)
   if C.ShowPanel then pcall(C.ShowPanel, opts.panel) end
   -- the Ledger's views as buttons
@@ -3353,7 +3447,7 @@ function C.Refresh()
         local fs = b.GetFontString and b:GetFontString()
         if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
       end
-      ui.viewBar:ClearAllPoints(); ui.viewBar:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (opts.top or 0))
+      ui.viewBar:ClearAllPoints(); ui.viewBar:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (ui.baseTop or 0))
     else ui.viewBar:Hide() end
   end
   if ui.youBar then
@@ -3365,14 +3459,14 @@ function C.Refresh()
         local fs = b.GetFontString and b:GetFontString()
         if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
       end
-      ui.youBar:ClearAllPoints(); ui.youBar:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", 16, -52 - (opts.top or 0))
+      ui.youBar:ClearAllPoints(); ui.youBar:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", 16, -52 - (ui.baseTop or 0))
     else ui.youBar:Hide() end
   end
   -- the header line leaves room for the view buttons on the Ledger
   if ui.head then ui.head:SetWidth(math.max(200, ui.w - ((tab == "Ledger" and ui.viewBar) and 470 or 28))) end
   layout(colX, opts.top or 0)
-  ui.head:ClearAllPoints(); ui.head:SetPoint("TOPLEFT", 14, -56 - (opts.top or 0))
-  if ui.headButton then ui.headButton:ClearAllPoints(); ui.headButton:SetPoint("TOPLEFT", 12, -54 - (opts.top or 0)) end
+  ui.head:ClearAllPoints(); ui.head:SetPoint("TOPLEFT", 14, -56 - (ui.baseTop or 0))
+  if ui.headButton then ui.headButton:ClearAllPoints(); ui.headButton:SetPoint("TOPLEFT", 12, -54 - (ui.baseTop or 0)) end
   ui.head:SetText(head)
   ui.headClick = opts.headClick
   -- public Ledger: the period button (7 days / 30 days / all time) only on the Ledger list
@@ -3460,7 +3554,7 @@ function C.Refresh()
   if ui.searchBox and ui.searchBox:GetText() ~= (ui.search[tab] or "") then ui.searchBox:SetText(ui.search[tab] or "") end
   for name, b in pairs(ui.tabButtons) do
     if name == tab then b:LockHighlight() else b:UnlockHighlight() end
-    if C.Skin then C.Skin.TabActive(b, name == tab) end
+    if C.Skin and C.Skin.TabActive then pcall(C.Skin.TabActive, b, name == tab) end
   end
   C.Draw()
 end
@@ -3471,7 +3565,7 @@ function C.Toggle(tab)
   if tab then ui.tab = tab end
   if ui.frame:IsShown() and not tab then ui.frame:Hide()
   else
-    if not ui.frame:IsShown() then C.DockToAH() end
+    if not ui.frame:IsShown() then C.DockToAH(); if C.Rules and C.Rules.Decay then pcall(C.Rules.Decay) end end
     ui.frame:Show(); if C.RaiseKina then C.RaiseKina() end; C.Refresh()
     if ui.tab == "Ledger" and C.Toast and C.Toast.ThemeOnLedger then pcall(C.Toast.ThemeOnLedger) end
   end

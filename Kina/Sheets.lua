@@ -49,9 +49,15 @@ local function bar(parent, r, g, b)
   return f
 end
 
-local function heading(parent, s)
+local function heading(parent, s, noRule)
   local t = text(parent, "GameFontNormal")
+  -- 1.5.5: panel titles in the Kina serif, with a fine rule under the first one
+  if C.Cos and C.Cos.Font then C.Cos.Font(t, 15, ""); t:SetTextColor(1, 0.84, 0.43) end
   t:SetText(s)
+  if not noRule then
+    local rule = parent:CreateTexture(nil, "ARTWORK"); rule:SetHeight(1); rule:SetColorTexture(0.47, 0.38, 0.20, 0.9)
+    rule:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -38); rule:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -38)
+  end
   return t
 end
 
@@ -77,68 +83,177 @@ end
 
 ------------------------------------------------------------------ You: a character sheet
 builders.you = function(p)
-  -- left: who you are
-  -- 1.4.4: a proper character card: a big ringed portrait (the standing ring, its title
-  -- and glow), the Mentor Star or leaf crowning it, the Kina level plate at its foot
-  local TOP_H = C.Cos and 170 or 128
-  local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetSize(300, TOP_H)
-  local portraitBox = CreateFrame("Frame", nil, idBox)
-  if C.Cos then portraitBox:SetPoint("TOPLEFT", 30, -44); portraitBox:SetSize(80, 80) else portraitBox:SetPoint("TOPLEFT", 12, -12); portraitBox:SetSize(80, 80) end
+  -- 1.5.4 (Taylor): the portrait takes the left half (about 4x bigger), the numbers the
+  -- right. The same page shows anyone else's profile (C.UI.youWho), with their data.
+  local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0); idBox:SetPoint("RIGHT", p, "CENTER", -6, 0)
+  local PW = C.Cos and 200 or 96
+  local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetSize(PW, PW); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -72)
   if iron() and not C.Cos then C.Skin.Tile(portraitBox, 6) end
   local portrait = portraitBox:CreateTexture(nil, "ARTWORK"); portrait:SetPoint("TOPLEFT", 7, -7); portrait:SetPoint("BOTTOMRIGHT", -7, 7)
-  local cos -- 1.4.0: standing ring, level plate, star/leaf (built on first refresh)
-  local name = text(idBox, "GameFontNormalLarge"); name:SetPoint("TOPLEFT", portraitBox, "TOPRIGHT", C.Cos and 30 or 12, 6); name:SetWidth(150)
-  local line = text(idBox, "GameFontHighlight"); line:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -5); line:SetWidth(150)
-  local standT = text(idBox, "GameFontNormal"); standT:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, -6); standT:SetWidth(150)
-  local lvl = text(idBox, "GameFontNormalLarge"); lvl:SetPoint("TOPLEFT", standT, "BOTTOMLEFT", 0, -6); lvl:SetWidth(150)
-  local share = text(idBox, "GameFontHighlightSmall")
-  if C.Cos then share:SetPoint("BOTTOMLEFT", idBox, "BOTTOMLEFT", 140, 12); share:SetWidth(150) else share:SetPoint("BOTTOMLEFT", 14, 14); share:SetWidth(272) end
+  local cos
+  local name = text(idBox, "GameFontNormalLarge", "CENTER"); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62); name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local line = text(idBox, "GameFontHighlight", "CENTER"); line:SetPoint("TOP", name, "BOTTOM", 0, -6); line:SetPoint("LEFT", idBox, "LEFT", 10, 0); line:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local standT = text(idBox, "GameFontNormal", "CENTER"); standT:SetPoint("TOP", line, "BOTTOM", 0, -6); standT:SetPoint("LEFT", idBox, "LEFT", 10, 0); standT:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local lvl = text(idBox, "GameFontNormalLarge", "CENTER"); lvl:SetPoint("TOP", standT, "BOTTOM", 0, -6); lvl:SetPoint("LEFT", idBox, "LEFT", 10, 0); lvl:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local share = text(idBox, "GameFontHighlightSmall"); share:SetPoint("BOTTOMLEFT", 14, 12)
+  -- someone else's page: back, commend / bad, whisper
+  local back = CreateFrame("Button", nil, idBox, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(back) end; back:SetSize(90, 22); back:SetPoint("TOPLEFT", 10, -10); back:SetText("< Back to me")
+  back:SetScript("OnClick", function() if C.UI then C.UI.youWho = nil end; if C.Refresh then C.Refresh() end end)
+  local wh = CreateFrame("Button", nil, idBox, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(wh) end; wh:SetSize(90, 24); wh:SetText("Whisper"); wh:SetPoint("BOTTOM", idBox, "BOTTOM", 0, 12)
 
-  -- middle: Kina level and standing
-  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(TOP_H)
-  -- heading and bar on one line each: "Kina level  I" [bar]
+  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(166)
   local h1 = heading(prog, "Kina level"); h1:SetPoint("TOPLEFT", 16, -14)
-  local xpBar = bar(prog, 0.85, 0.65, 0.15); xpBar:SetPoint("TOPLEFT", 16, -34); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -7); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local h2 = heading(prog, "Standing"); h2:SetPoint("TOPLEFT", 16, -72)
-  local stBar = bar(prog, 0.30, 0.62, 0.95); stBar:SetPoint("TOPLEFT", 16, -92); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local xpBar = bar(prog, 0.85, 0.65, 0.15); xpBar:SetPoint("TOPLEFT", 16, -48); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -6); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local h2 = heading(prog, "Standing", true); h2:SetPoint("TOPLEFT", 16, -90)
+  local stBar = bar(prog, 0.30, 0.62, 0.95); stBar:SetPoint("TOPLEFT", 16, -110); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -7); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
 
-  -- bottom left: professions
-  local profBox = box(p); profBox:SetPoint("TOPLEFT", idBox, "BOTTOMLEFT", 0, -12); profBox:SetWidth(300); profBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
-  local h3 = heading(profBox, "Professions"); h3:SetPoint("TOPLEFT", 16, -14)
-  local profBars = {}
-  for i = 1, 4 do
-    local ic = profBox:CreateTexture(nil, "ARTWORK"); ic:SetSize(26, 26); ic:SetPoint("TOPLEFT", 12, -34 - (i - 1) * 30)
-    local lb = text(profBox, "GameFontHighlightSmall"); lb:SetPoint("TOPLEFT", 44, -36 - (i - 1) * 30); lb:SetWidth(240)
-    local b = bar(profBox, 0.35, 0.75, 0.30); b:SetPoint("TOPLEFT", lb, "BOTTOMLEFT", 0, -3); b:SetWidth(240); b:SetHeight(14)
-    profBars[i] = { lb, b, ic }
-  end
-  local profNone = text(profBox, "GameFontHighlightSmall"); profNone:SetPoint("TOPLEFT", 16, -38); profNone:SetWidth(268)
-
-  -- bottom right: your record
-  local rec = box(p); rec:SetPoint("TOPLEFT", profBox, "TOPRIGHT", 12, 0); rec:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0, 0)
-  local h4 = heading(rec, "Your record"); h4:SetPoint("TOPLEFT", 16, -14)
-  -- 1.5.0: vouch for someone from a recent farm
-  local vb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); vb:SetSize(130, 22); vb:SetPoint("TOPRIGHT", -14, -10)
-  vb:SetText("Commend someone"); vb:SetScript("OnClick", function(self) if C.Vouch then C.Vouch.Picker(self) end end)
-  -- 1.5.1: look at someone else's Kina profile (your party first)
-  local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); pb:SetSize(110, 22); pb:SetPoint("RIGHT", vb, "LEFT", -6, 0)
+  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(204)
+  local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
+  -- (1.5.4: no "Commend someone": commending only happens in the end-of-farm window)
+  local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pb) end; pb:SetSize(110, 22); pb:SetPoint("TOPRIGHT", -14, -10)
   pb:SetText("Party profiles"); pb:SetScript("OnClick", function(self) if C.Profile then C.Profile.Picker(self) end end)
-  -- two columns of four, so the record fits the smallest window
   local recL, recR = {}, {}
-  local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -36); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
-  local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -36); colB:SetPoint("BOTTOMRIGHT", -16, 10)
-  for i = 1, 10 do -- 1.5.0: two columns of five (labels were being cut off)
-    local col = i <= 5 and colA or colB
-    local y = -((i - 1) % 5) * 24
+  local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -50); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
+  local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -50); colB:SetPoint("BOTTOMRIGHT", -16, 10)
+  for i = 1, 12 do -- (1.5.4: two columns of six)
+    local col = i <= 6 and colA or colB
+    local y = -((i - 1) % 6) * 24
+    if (i - 1) % 2 == 0 then -- 1.5.5: zebra rows
+      local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(22)
+      z:SetColorTexture(1, 0.9, 0.66, 0.04)
+    end
     local l = text(col, "GameFontHighlightSmall"); l:SetPoint("TOPLEFT", 0, y)
     local r = text(col, "GameFontHighlight", "RIGHT"); r:SetPoint("TOPRIGHT", 0, y)
     l:SetPoint("RIGHT", r, "LEFT", -6, 0)
     recL[i], recR[i] = l, r
   end
 
+  local profBox = box(p); profBox:SetPoint("TOPLEFT", rec, "BOTTOMLEFT", 0, -12); profBox:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0, 0)
+  local h3 = heading(profBox, "Professions"); h3:SetPoint("TOPLEFT", 16, -14)
+  local profBars = {}
+  for i = 1, 4 do
+    local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
+    local ic = profBox:CreateTexture(nil, "ARTWORK"); ic:SetSize(26, 26)
+    local lb = text(profBox, "GameFontHighlightSmall"); lb:SetWidth(220)
+    local b = bar(profBox, 0.35, 0.75, 0.30); b:SetWidth(220); b:SetHeight(14)
+    profBars[i] = { lb, b, ic, col, row }
+  end
+  local profNone = text(profBox, "GameFontHighlightSmall"); profNone:SetPoint("TOPLEFT", 16, -50); profNone:SetPoint("RIGHT", profBox, "RIGHT", -16, 0)
+
+  local function setRows(rows)
+    for i = 1, #recL do
+      local x = rows[i]
+      recL[i]:SetText(x and (GREY .. x[1] .. "|r") or ""); recR[i]:SetText(x and x[2] or "")
+    end
+  end
+  local function setProfs(profs, mine)
+    local list = {}
+    for n, sk in pairs(profs or {}) do if not mine or (C.TradeSkill and C.TradeSkill(n)) then list[#list + 1] = { n, sk } end end
+    table.sort(list, function(a, b) return a[2] > b[2] end)
+    local half = ((profBox:GetWidth() or 560) - 48) / 2
+    for i, pb in ipairs(profBars) do
+      local x = list[i]
+      local x0 = 12 + pb[4] * (half + 16)
+      local y0 = -48 - pb[5] * 40
+      pb[3]:ClearAllPoints(); pb[3]:SetPoint("TOPLEFT", x0, y0)
+      pb[1]:ClearAllPoints(); pb[1]:SetPoint("TOPLEFT", x0 + 32, y0 - 2); pb[1]:SetWidth(half - 32)
+      pb[2]:ClearAllPoints(); pb[2]:SetPoint("TOPLEFT", pb[1], "BOTTOMLEFT", 0, -3); pb[2]:SetWidth(half - 32)
+      if x then
+        pb[1]:SetText(string.format("%s  %s%d / 300|r", x[1], GREY, x[2])); pb[1]:Show(); pb[2]:Show(); pb[2]:Set(x[2] / 300, "")
+        if C.Cos then pb[3]:SetTexture(C.Cos.ProfIcon(x[1])); pb[3]:Show() else pb[3]:Hide() end
+      else pb[1]:Hide(); pb[2]:Hide(); pb[3]:Hide() end
+    end
+    if #list == 0 then profNone:SetText(ORANGE .. (mine and "None read yet: open your professions (skills) window once." or "None shared yet.") .. "|r"); profNone:Show() else profNone:Hide() end
+  end
+  local function makeCos()
+    if cos or not C.Cos then return end
+    cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 22, "OUTLINE"); C.Cos.Font(name, 30, "OUTLINE")
+    cos.plate:SetSize(PW * 0.36, PW * 0.36); C.Cos.Font(cos.num, math.floor(PW * 0.12), "OUTLINE")
+    cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
+    local pv = C.Cos.preview
+    local function redo() if p.refresh then p.refresh() end end
+    local rings = {}
+    for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent", "Disgraced", "Oathbreaker" }) do rings[#rings + 1] = { st, st } end
+    table.insert(rings, 1, { "(my real standing)", false })
+    local opts = {}
+    for _, x in ipairs(rings) do opts[#opts + 1] = { "Ring: " .. x[1], { "ring", x[2] } } end
+    for _, x in ipairs({ { "(real)", false }, { "none", "none" }, { "New player", "leaf" }, { "Mentor I", 1 }, { "Mentor II", 5 }, { "Mentor III", 10 }, { "Mentor IV", 20 }, { "Mentor V", 50 } }) do
+      opts[#opts + 1] = { "Badge: " .. x[1], { "badge", x[2] } }
+    end
+    for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
+    cos.try = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; if v[1] == "ring" and C.Cos.UpdateGlows then C.Cos.UpdateGlows() end; redo() end)
+    cos.try:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
+    cos.bars = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
+    cos.bars:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
+  end
+  local function standingLine(stName, pts, vn, vbad)
+    return C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (pts or 0) .. " rep|r"
+      .. ((vn or 0) > 0 and ("   |T" .. C.Vouch.UP_ICON .. ":16|t|cffffd100" .. vn .. "|r") or "")
+      .. ((vbad or 0) > 0 and ("  |T" .. C.Vouch.DOWN_ICON .. ":16|t" .. C.Vouch.RED .. vbad .. "|r") or "")
+  end
+
+  local function refreshThem(who)
+    makeCos()
+    back:Show(); pb:Hide(); share:Hide(); h4:SetText("You and " .. who)
+    if cos and cos.try then cos.try:Hide(); cos.bars:Hide() end
+    local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(who)
+    local ch = pr and pr.char
+    local u = C.Profile and C.Profile.UnitFor and C.Profile.UnitFor(who)
+    local set = false
+    if u and SetPortraitTexture then set = pcall(SetPortraitTexture, portrait, u) end
+    if not set then
+      if ch and ch.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[ch.class] then
+        portrait:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles"); portrait:SetTexCoord(unpack(CLASS_ICON_TCOORDS[ch.class]))
+      else portrait:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); portrait:SetTexCoord(0, 1, 0, 1) end
+    else portrait:SetTexCoord(0, 1, 0, 1) end
+    local stand = pr and pr.stand
+    local sname, sat, snext = "Unproven", 0, 100
+    if type(stand) == "number" and C.Rep then sname, sat, snext = C.Rep.StandingOf(stand) end
+    local klv = pr and pr.kinaLv
+    if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
+      cos.xpF:Hide(); cos.stF:Hide() end
+    name:SetText(who)
+    local cls = ch and ch.class and (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ch.class] or ch.class)
+    line:SetText(ch and string.format("Level %s %s", tostring(ch.level or "?"), cls or "") or (GREY .. "no Kina heard from them yet|r"))
+    local b = C.Profile and C.Profile.Between(who) or {}
+    standT:SetText((pr and stand and standingLine(sname, stand, b.got, b.gotBad) or (GREY .. "standing not shared yet|r"))
+      .. (pr and pr.scar and "\n|cff8a1010once Blacklisted|r" or ""))
+    if C.Rules then
+      C.Rules.Cover(portraitBox, type(stand) == "number" and stand <= (C.Rep.BLACKLIST or -1000))
+      local newest = math.max((C.Share and C.Share.newestBuild) or 0, C.BUILD or 0)
+      local old = pr and pr.ver and ((pr.build or 0) < newest)
+      C.Rules.Cover(p, old and true or false, "THEIR KINA IS OUT OF DATE\n\n|cffffffffThey earn no XP or standing until they update.|r")
+    end
+    lvl:SetText((klv == -1) and (ORANGE .. "Kina log damaged|r") or (GOLD .. "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1) .. "|r"))
+    xpBar:Set(1, "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1))
+    xpNote:SetText(GREY .. "Their XP and standing are what their Kina reports (unverified).|r")
+    if snext then stBar:Set(math.max(0, math.min(1, ((stand or 0) - sat) / math.max(1, snext - sat))), string.format("%s  %d / %d", sname, stand or 0, snext))
+    else stBar:Set((stand or 0) < 0 and 0 or 1, string.format("%s  %d", sname, stand or 0)) end
+    stNote:SetText(pr and pr.seen and (GREY .. "Kina " .. (pr.ver or "?") .. "  ·  last heard " .. math.floor((C.Now() - pr.seen) / 60) .. " min ago|r") or "")
+    setProfs(ch and ch.profs or {}, false)
+    local open = ((b.owe or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(b.owe)) .. "|r"))
+      or ((b.owed or 0) >= 1 and (GOLD .. "they owe you " .. C.Money(math.floor(b.owed)) .. "|r")) or (GREEN .. "all settled|r")
+    setRows({
+      { "Farms together", tostring(b.farms or 0) .. ((b.hours or 0) > 0 and (GREY .. string.format("  (%.1f h)", b.hours) .. "|r") or "") },
+      { "Open now", open },
+      { "You commended them", tostring(b.gave or 0) .. ((b.gaveBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gaveBad .. " bad|r") or "") },
+      { "They commended you", tostring(b.got or 0) .. ((b.gotBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
+      { "Kina version", pr and pr.ver or (GREY .. "?|r") },
+      { "Standing now", tostring(stand or "?") },
+    })
+    do
+      wh:Show(); wh:SetScript("OnClick", function() if ChatFrame_SendTell then pcall(ChatFrame_SendTell, who) end end)
+    end
+  end
+
   p.refresh = function()
+    local who = C.UI and C.UI.youWho
+    if who then return refreshThem(who) end
+    back:Hide(); pb:Show(); share:Show(); h4:SetText("Your record")
+    wh:Hide()
+    portrait:SetTexCoord(0, 1, 0, 1)
     local me = C.YouProfile and C.YouProfile() or { name = UnitName("player"), level = UnitLevel("player"), class = "?", profs = {} }
     if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
     name:SetText(me.name or "You")
@@ -146,88 +261,54 @@ builders.you = function(p)
     local m = C.Rep and C.Rep.Mine() or { level = 1, xp = 0, ok = true }
     lvl:SetText(m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
     if C.Cos then
-      if not cos then
-        cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 17, "OUTLINE"); C.Cos.Font(name, 19, "OUTLINE")
-        cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
-        -- 1.4.2: test pickers beside the pieces (preview only)
-        local pv = C.Cos.preview
-        local function redo() if p.refresh then p.refresh() end end
-        local rings = {}
-        for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent" }) do rings[#rings + 1] = { st .. (st == "Delinquent" and " / Disgraced" or ""), st } end
-        table.insert(rings, 1, { "(my real standing)", false })
-        local opts = {}
-        for _, x in ipairs(rings) do opts[#opts + 1] = { "Ring: " .. x[1], { "ring", x[2] } } end
-        for _, x in ipairs({ { "(real)", false }, { "none", "none" }, { "Starter leaf", "leaf" }, { "Mentor Star I", 1 }, { "Mentor Star II", 5 }, { "Mentor Star III", 10 }, { "Mentor Star IV", 20 }, { "Mentor Star V (wings)", 50 } }) do
-          opts[#opts + 1] = { "Badge: " .. x[1], { "badge", x[2] } }
-        end
-        for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
-        local pr = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; if v[1] == "ring" and C.Cos.UpdateGlows then C.Cos.UpdateGlows() end; redo() end)
-        pr:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
-        local pf = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
-        pf:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
-      end
+      makeCos()
+      if cos.try then cos.try:Show(); cos.bars:Show() end
       local pv = C.Cos.preview
-      local mm = C.Rep.Mine and C.Rep.Mine() or {}
-      local rec = C.YouRecord and C.YouRecord() or {}
-      local starter = (rec.farms or 0) == 0 or ((rec.farms or 0) == 1 and ((rec.oweNow or 0) >= 1 or (rec.owedNow or 0) >= 1))
+      local rec0 = C.YouRecord and C.YouRecord() or {}
+      local starter = (rec0.farms or 0) == 0 or ((rec0.farms or 0) == 1 and ((rec0.oweNow or 0) >= 1 or (rec0.owedNow or 0) >= 1))
       local recruits = 0
       if pv.badge == "leaf" then starter = true elseif pv.badge == "none" then starter = false
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
-      C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
-      local stName = pv.ring or mm.standing or "Unproven"
+      C.Cos.UpdatePortrait(cos, pv.ring or m.standing, pv.level or m.level, recruits, starter)
+      cos.plate:Show(); cos.num:Show()
+      local stName = pv.ring or m.standing or "Unproven"
       local vn, _, vbad = 0, nil, 0
       if C.Vouch then vn, _, vbad = C.Vouch.Counts() end
-      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep|r"
-        .. (vn > 0 and ("  |T" .. C.Vouch.UP_ICON .. ":14|t|cffffd100" .. vn .. "|r") or "")
-        .. ((vbad or 0) > 0 and ("  |T" .. C.Vouch.DOWN_ICON .. ":14|t" .. C.Vouch.RED .. vbad .. "|r") or ""))
-      -- (1.4.5: frames off by default, Taylor's call; Try > Bar frames still shows them)
+      standT:SetText(standingLine(stName, m.rep, vn, vbad) .. (m.everBlack and "\n|cff8a1010once Blacklisted|r" or ""))
       if pv.bars == "on" then cos.xpF:Show(); cos.stF:Show() else cos.xpF:Hide(); cos.stF:Hide() end
     end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
-    -- XP toward the next level
     local R = C.Rep
     local lo, hi = R.XPFor(m.level), R.XPFor(math.min(R.MAX_LEVEL, m.level + 1))
     if m.level >= R.MAX_LEVEL then xpBar:Set(1, m.xp .. " XP (top level)")
     else xpBar:Set((m.xp - lo) / math.max(1, hi - lo), string.format("%d / %d XP", m.xp, hi)) end
     xpNote:SetText(m.level >= R.MAX_LEVEL and "" or (GREY .. "to level " .. R.Roman(m.level + 1) .. ": pay what you owe and share farms of 15+ minutes" .. "|r"))
-    -- standing: not counted yet (it comes with the creditor actions and two-sided logs)
-    -- 1.3.0: standing points and title
-    local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
     local pts, at, nxt = m.rep or 0, m.standingAt or 0, m.standingNext
     if nxt then stBar:Set(math.max(0, math.min(1, (pts - at) / math.max(1, nxt - at))), string.format("%s  %d / %d", m.standing or "Unproven", pts, nxt))
     else stBar:Set(pts < 0 and 0 or 1, string.format("%s  %d", m.standing or "Unproven", pts)) end
-    stNote:SetText(GREY .. (pts < 0 and "Pay what you owe on time to climb back. " or "Pay debts fast, farm together (+5), get vouched (+15). A lapsed debt costs 50.") .. "|r")
-    -- professions
-    local list = {}
-    for n, sk in pairs(me.profs or {}) do if C.TradeSkill and C.TradeSkill(n) then list[#list + 1] = { n, sk } end end
-    table.sort(list, function(a, b) return a[2] > b[2] end)
-    for i, pb in ipairs(profBars) do
-      local x = list[i]
-      if x then
-        pb[1]:SetText(string.format("%s  %s%d / 300|r", x[1], GREY, x[2])); pb[1]:Show(); pb[2]:Show(); pb[2]:Set(x[2] / 300, "")
-        if pb[3] and C.Cos then pb[3]:SetTexture(C.Cos.ProfIcon(x[1])); pb[3]:Show() elseif pb[3] then pb[3]:Hide() end
-      else pb[1]:Hide(); pb[2]:Hide(); if pb[3] then pb[3]:Hide() end end
+    stNote:SetText(GREY .. (pts < 0 and "Pay what you owe on time to climb back. " or "Pay debts fast, farm together (+5), get commended (+10). A lapsed debt costs 50.") .. "|r")
+    setProfs(me.profs, true)
+    if C.Rules then
+      C.Rules.Cover(portraitBox, m.black and true or false)
+      C.Rules.Cover(p, (m.frozen and not C.session) and true or false, "ADDON OUT OF DATE\n\n|cffffffffUpdate Kina to continue earning XP and standing.|r")
     end
-    if #list == 0 then profNone:SetText(ORANGE .. "None read yet: open your professions (skills) window once.|r"); profNone:Show() else profNone:Hide() end
-    -- record
+    local mult = m.mult and m.mult ~= 1 and (m.mult < 1 and (ORANGE .. "gains x" .. m.mult .. "|r") or (GREEN .. "gains x" .. m.mult .. " until " .. (m.recoverTo or m.best or 0) .. "|r")) or nil
     local r = C.YouRecord and C.YouRecord() or {}
-    local rows = {
+    setRows({
       { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h)", r.hours) .. "|r") or "") },
       { "XP/h this week", (C.GameXPWeek and C.GameXPWeek()) and (BreakUpLargeNumbers and BreakUpLargeNumbers(C.GameXPWeek()) or tostring(C.GameXPWeek())) or (GREY .. "none yet|r") },
       { "Your share of farms", money(r.share) },
       { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
       { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
         .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or "") },
-      { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r") },
-      { "Debts you forgave", tostring(r.forgaveN or 0) },
-      { "Forgiven for you", tostring(r.forgivenN or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },
+      { "Standing", tostring(m.rep or 0) .. (mult and ("  " .. mult) or "") },
+      { "Best / lowest", tostring(m.best or 0) .. GREY .. "  /  |r" .. tostring(m.lowest or 0) },
+      { "Days positive / negative", string.format("%d%s  /  |r%d", math.floor(m.posDays or 0), GREY, math.floor(m.negDays or 0)) },
+      { "Forgave / forgiven", tostring(r.forgaveN or 0) .. GREY .. "  /  |r" .. tostring(r.forgivenN or 0) },
+      { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r") },
       { "Farmed with", r.partners or (GREY .. "nobody yet|r") },
-    }
-    for i = 1, #recL do
-      local x = rows[i]
-      recL[i]:SetText(x and (GREY .. x[1] .. "|r") or ""); recR[i]:SetText(x and x[2] or "")
-    end
+    })
   end
 end
 
@@ -245,7 +326,7 @@ builders.debts = function(p)
   local people = {}
   for i = 1, 9 do
     local b = CreateFrame("Button", nil, left)
-    b:SetPoint("TOPLEFT", 10, -36 - (i - 1) * 40); b:SetSize(230, 36)
+    b:SetPoint("TOPLEFT", 10, -46 - (i - 1) * 40); b:SetSize(230, 36)
     local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.07)
     b.sel = b:CreateTexture(nil, "BACKGROUND"); b.sel:SetAllPoints(); b.sel:SetColorTexture(0.85, 0.66, 0.25, 0.16); b.sel:Hide()
     b.name = text(b, "GameFontNormal"); b.name:SetPoint("TOPLEFT", 8, -3); b.name:SetWidth(214)
@@ -253,7 +334,7 @@ builders.debts = function(p)
     b:SetScript("OnClick", function(self) p.selected = self.who; p.refresh() end)
     people[i] = b
   end
-  local empty = text(left, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 16, -40); empty:SetWidth(220)
+  local empty = text(left, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 16, -50); empty:SetWidth(220)
   if empty.SetWordWrap then empty:SetWordWrap(true) end
 
   local card = box(p); card:SetPoint("TOPLEFT", left, "TOPRIGHT", 12, 0); card:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0, 0)
@@ -305,11 +386,15 @@ builders.debts = function(p)
     -- every open debt, grouped by person
     local byWho, order = {}, {}
     for _, d in ipairs(C.Debts()) do
+      local lap = d.s and d.s.split and d.s.split.lapsed and d.s.split.lapsed[d.key]
+      if lap then d = nil end -- (1.5.4: lapsed debts live in Collections)
+      if d then
       local who = C.Books.Name(d.who)
       if not byWho[who] then byWho[who] = { who = who, debts = {}, owe = 0, owed = 0 }; order[#order + 1] = who end
       local x = byWho[who]
       x.debts[#x.debts + 1] = d
       if d.dir == "owe" then x.owe = x.owe + d.amt else x.owed = x.owed + d.amt end
+      end
     end
     table.sort(order)
     if C.debtsWant then
@@ -360,7 +445,8 @@ builders.debts = function(p)
     for _, u in ipairs({ "party1", "party2", "party3", "party4", "target" }) do
       if UnitName and UnitExists and UnitExists(u) and (UnitName(u) or ""):lower() == tostring(x.who):lower():match("^[^%-]+") then unit = u end
     end
-    if unit and SetPortraitTexture then pcall(SetPortraitTexture, cPort, unit) else cPort:SetColorTexture(0.1, 0.1, 0.1, 1) end
+    if C.Profile and C.Profile.SetPortrait then C.Profile.SetPortrait(cPort, x.who)
+    elseif unit and SetPortraitTexture then pcall(SetPortraitTexture, cPort, unit) else cPort:SetColorTexture(0.1, 0.1, 0.1, 1) end
     local theirPts = C.Share and C.Share.StandingOf and C.Share.StandingOf(x.who)
     local theirSt = theirPts and C.Rep.StandingOf(theirPts) or "Unproven"
     if theirPts then cSub:SetText(cSub:GetText() .. GREY .. "  ·  " .. theirSt .. " (" .. theirPts .. ", unverified)|r") end
@@ -519,12 +605,12 @@ builders.youVouch = function(p)
   -- left: totals and every kind
   local L = box(p); L:SetPoint("TOPLEFT", 0, 0); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetWidth(300)
   local h = heading(L, "Commendations received"); h:SetPoint("TOPLEFT", 16, -14)
-  local big = text(L, "GameFontNormalHuge"); big:SetPoint("TOPLEFT", 16, -40)
+  local big = text(L, "GameFontNormalHuge"); big:SetPoint("TOPLEFT", 16, -50)
   if C.Cos then C.Cos.Font(big, 26, "OUTLINE") end
-  local bigSub = text(L, "GameFontHighlightSmall"); bigSub:SetPoint("TOPLEFT", 16, -96) -- (1.5.3: clear of the big icons)
+  local bigSub = text(L, "GameFontHighlightSmall"); bigSub:SetPoint("TOPLEFT", 16, -104) -- (1.5.3: clear of the big icons)
   local kindRows = {}
   for i = 1, 8 do
-    local y = -124 - (i - 1) * 26 - (i > 4 and 12 or 0)
+    local y = -130 - (i - 1) * 26 - (i > 4 and 12 or 0)
     local l = text(L, "GameFontHighlight"); l:SetPoint("TOPLEFT", 16, y)
     local n = text(L, "GameFontHighlight", "RIGHT"); n:SetPoint("TOPRIGHT", -16, y)
     kindRows[i] = { l, n }
@@ -533,7 +619,7 @@ builders.youVouch = function(p)
 
   -- middle: top 5 who commended you (click one)
   local M = box(p); M:SetPoint("TOPLEFT", L, "TOPRIGHT", 12, 0); M:SetPoint("BOTTOMLEFT", L, "BOTTOMRIGHT", 12, 0); M:SetWidth(300)
-  local h2 = heading(M, "Who commended you most"); h2:SetPoint("TOPLEFT", 16, -14)
+  local h2 = heading(M, "Who commended you most", true); h2:SetPoint("TOPLEFT", 16, -14)
   local h2s = text(M, "GameFontHighlightSmall"); h2s:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -3); h2s:SetText(GREY .. "click a name to see what they gave you|r")
   local top = {}
   for i = 1, 5 do
@@ -545,9 +631,9 @@ builders.youVouch = function(p)
 
   -- right: what the selected person gave you
   local R = box(p); R:SetPoint("TOPLEFT", M, "TOPRIGHT", 12, 0); R:SetPoint("BOTTOMRIGHT", 0, 0)
-  local h3 = heading(R, ""); h3:SetPoint("TOPLEFT", 16, -14)
+  local h3 = heading(R, "", true); h3:SetPoint("TOPLEFT", 16, -14)
   local h3s = text(R, "GameFontHighlightSmall"); h3s:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -3)
-  local prof = CreateFrame("Button", nil, R, "UIPanelButtonTemplate"); prof:SetSize(96, 20); prof:SetPoint("TOPRIGHT", -12, -10); prof:SetText("Profile")
+  local prof = CreateFrame("Button", nil, R, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(prof) end; prof:SetSize(96, 20); prof:SetPoint("TOPRIGHT", -12, -10); prof:SetText("Profile")
   local items = {}
   for i = 1, 12 do
     local y = -56 - (i - 1) * 22
@@ -617,10 +703,10 @@ builders.youFarms = function(p)
     sums[i] = { v, l }
   end
   local L = box(p); L:SetPoint("TOPLEFT", S, "BOTTOMLEFT", 0, -12); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetPoint("RIGHT", p, "CENTER", -6, 0)
-  local hl = heading(L, "Your characters"); hl:SetPoint("TOPLEFT", 16, -14)
+  local hl = heading(L, "Your characters", true); hl:SetPoint("TOPLEFT", 16, -14)
   local hls = text(L, "GameFontHighlightSmall"); hls:SetPoint("TOPLEFT", hl, "BOTTOMLEFT", 0, -3); hls:SetText(GREY .. "by time farmed|r")
   local R = box(p); R:SetPoint("TOPLEFT", S, "BOTTOM", 6, -12); R:SetPoint("BOTTOMRIGHT", 0, 0)
-  local hr = heading(R, "Farmed with most"); hr:SetPoint("TOPLEFT", 16, -14)
+  local hr = heading(R, "Farmed with most", true); hr:SetPoint("TOPLEFT", 16, -14)
   local hrs_ = text(R, "GameFontHighlightSmall"); hrs_:SetPoint("TOPLEFT", hr, "BOTTOMLEFT", 0, -3); hrs_:SetText(GREY .. "by time together  ·  click for their profile|r")
   local cRows, pRows = {}, {}
   for i = 1, 5 do
@@ -650,7 +736,7 @@ builders.youFarms = function(p)
           r.barW = (r:GetWidth() or 300) - 32
           r.rank:SetText(RANK[i] .. i .. "|r")
           local cc = isChar and x.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[x.class]
-          r.name:SetText(cc and string.format("|cff%02x%02x%02x%s|r", cc.r * 255, cc.g * 255, cc.b * 255, x.who) or x.who)
+          r.name:SetText(cc and string.format("|cff%02x%02x%02x%s|r", math.floor(cc.r * 255), math.floor(cc.g * 255), math.floor(cc.b * 255), x.who) or x.who)
           r.val:SetText(hrs(x.secs))
           r.sub:SetText(GREY .. x.farms .. (x.farms == 1 and " farm" or " farms") .. (isChar and ("  ·  " .. money(x.share)) or "") .. "|r")
           r:Bar(x.secs / maxS)
@@ -663,5 +749,100 @@ builders.youFarms = function(p)
     for _, c in ipairs(cl) do if c.who == "(not recorded)" then unrec = true end end
     note:SetText(unrec and (GREY .. "(not recorded): solo farms from before 1.5.2, when Kina didn't note the character.|r") or "")
     pnote:SetText(#pl == 0 and (GREY .. "No group farms yet.|r") or (#pl > 5 and (GREY .. "+" .. (#pl - 5) .. " more|r") or ""))
+  end
+end
+
+------------------------------------------------------------------ Ledger > Collections (1.5.4)
+-- Every debt that is no longer simply "open": lapsed (still payable / forgivable),
+-- refused, forgiven, settled. Last 60 days, newest first. What you can still do:
+-- pay a lapsed debt late (earns standing back), forgive a lapsed debt owed to you,
+-- and open the farm.
+function C.Collections()
+  local me = (UnitName and UnitName("player") or ""):match("^[^%-]+")
+  local out = {}
+  for _, s in ipairs(C.db.sessions or {}) do
+    if s.stop and C.Now() - s.stop > 60 * 86400 then break end
+    local sp = s.split
+    for _, t in ipairs(sp and sp.transfers or {}) do
+      local mineFrom = (t.from or ""):match("^[^%-]+") == me or t.from == "you"
+      local mineTo = (t.to or ""):match("^[^%-]+") == me or t.to == "you"
+      if (mineFrom or mineTo) and (t.amt or 0) >= 1 then
+        local who = mineFrom and t.to or t.from
+        local key = who
+        local map = mineFrom and sp.paid or sp.received
+        local v = map and map[key]
+        local rest = (v == true) and 0 or math.max(0, t.amt - (tonumber(v) or 0))
+        local stamp
+        if sp.forgiven and sp.forgiven[key] then stamp = "forgiven"
+        elseif sp.lapsed and sp.lapsed[key] and rest >= 1 then stamp = "lapsed"
+        elseif rest < 1 then stamp = "settled" end
+        if stamp then
+          out[#out + 1] = { stamp = stamp, dir = mineFrom and "owe" or "owed", who = who, amt = t.amt, rest = rest, s = s, key = key,
+            farm = s.label or "farm", t = s.stop or s.start, refused = sp.refusedSeen and sp.refusedSeen[key] or (sp.offered and sp.offered[key]) }
+        end
+      end
+    end
+  end
+  return out
+end
+builders.collections = function(p)
+  local L = box(p); L:SetAllPoints(p)
+  local filters, filter = {}, "all"
+  local FL = { { "all", "All" }, { "lapsed", "Lapsed" }, { "forgiven", "Forgiven" }, { "settled", "Settled" } }
+  for i, f in ipairs(FL) do
+    local b = CreateFrame("Button", nil, L, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(b) end; b:SetSize(86, 22); b:SetText(f[2])
+    b:SetPoint("TOPLEFT", 16 + (i - 1) * 92, -12)
+    b:SetScript("OnClick", function() filter = f[1]; p.refresh() end)
+    filters[i] = b
+  end
+  local STAMP = { lapsed = { "LAPSED", "|cffff4030" }, forgiven = { "FORGIVEN", "|cff9fd0ff" }, settled = { "SETTLED", "|cff7CFC00" } }
+  local rows = {}
+  for i = 1, 10 do
+    local r = CreateFrame("Frame", nil, L); r:SetPoint("TOPLEFT", 14, -46 - (i - 1) * 44); r:SetPoint("RIGHT", L, "RIGHT", -14, 0); r:SetHeight(40)
+    local sep = r:CreateTexture(nil, "BACKGROUND"); sep:SetPoint("BOTTOMLEFT"); sep:SetPoint("BOTTOMRIGHT"); sep:SetHeight(1); sep:SetColorTexture(0.85, 0.66, 0.25, 0.2)
+    r.port = r:CreateTexture(nil, "ARTWORK"); r.port:SetSize(30, 30); r.port:SetPoint("LEFT", 2, 0)
+    if r.port.SetMask then pcall(r.port.SetMask, r.port, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
+    r.stamp = text(r, "GameFontNormalSmall"); r.stamp:SetPoint("LEFT", 40, 8); r.stamp:SetWidth(80)
+    r.what = text(r, "GameFontHighlight"); r.what:SetPoint("LEFT", 124, 8); r.what:SetWidth(360)
+    r.sub = text(r, "GameFontHighlightSmall"); r.sub:SetPoint("LEFT", 124, -9); r.sub:SetWidth(360)
+    r.amt = text(r, "GameFontNormal", "RIGHT"); r.amt:SetPoint("RIGHT", -250, 0); r.amt:SetWidth(120)
+    r.b1 = CreateFrame("Button", nil, r, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(r.b1) end; r.b1:SetSize(110, 22); r.b1:SetPoint("RIGHT", -4, 0)
+    r.b2 = CreateFrame("Button", nil, r, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(r.b2) end; r.b2:SetSize(110, 22); r.b2:SetPoint("RIGHT", r.b1, "LEFT", -6, 0)
+    rows[i] = r
+  end
+  local empty = text(L, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 18, -52)
+  p.refresh = function()
+    for i, b in ipairs(filters) do if FL[i][1] == filter then b:LockHighlight() else b:UnlockHighlight() end end
+    local list = {}
+    for _, c in ipairs(C.Collections()) do if filter == "all" or c.stamp == filter then list[#list + 1] = c end end
+    empty:SetText(#list == 0 and (GREY .. "Nothing here yet.|r") or "")
+    for i, r in ipairs(rows) do
+      local c = list[i]
+      if c then
+        local st = STAMP[c.stamp]
+        r.stamp:SetText(st[2] .. st[1] .. "|r")
+        if C.Profile and C.Profile.SetPortrait then C.Profile.SetPortrait(r.port, c.who) end
+        local nm = C.Books and C.Books.Name(c.who) or c.who
+        r.what:SetText((c.dir == "owe" and ("You owed " .. nm) or (nm .. " owed you")) .. GREY .. "  ·  " .. c.farm .. "|r")
+        r.sub:SetText(GREY .. (c.t and date("%b %d", c.t) or "") .. (c.stamp == "lapsed" and ("  ·  " .. C.Money(math.floor(c.rest)) .. " still open") or "") .. "|r")
+        r.amt:SetText((c.dir == "owe" and ORANGE or GOLD) .. C.Money(math.floor(c.amt)) .. "|r")
+        r.b1:Hide(); r.b2:Hide()
+        if c.stamp == "lapsed" and c.dir == "owe" then
+          r.b1:SetText("Pay late"); r.b1:Show()
+          r.b1:SetScript("OnClick", function() if C.PayStart then C.PayStart({ to = c.who, amt = math.floor(c.rest), s = c.s }) end end)
+        elseif c.stamp == "lapsed" and c.dir == "owed" then
+          r.b1:SetText("Forgive"); r.b1:Show()
+          r.b1:SetScript("OnClick", function()
+            for _, d in ipairs(C.Debts()) do if d.s == c.s and d.key == c.key and d.dir == "owed" then C.Forgive(d) end end
+            p.refresh()
+          end)
+        end
+        if C.OpenLedgerFarm then
+          local b = r.b1:IsShown() and r.b2 or r.b1
+          b:SetText("Farm details"); b:Show(); b:SetScript("OnClick", function() C.OpenLedgerFarm(c.s) end)
+        end
+        r:Show()
+      else r:Hide() end
+    end
   end
 end

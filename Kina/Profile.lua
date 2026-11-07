@@ -27,6 +27,19 @@ local function unitFor(name)
   end
 end
 P.UnitFor = unitFor
+-- 1.5.4: the best picture we have of someone: their live portrait when they're near,
+-- otherwise their class crest (the game can't save a portrait for later)
+function P.SetPortrait(tex, name)
+  local u = unitFor(name)
+  if u and UnitIsVisible and UnitIsVisible(u) and SetPortraitTexture then
+    tex:SetTexCoord(0, 1, 0, 1); if pcall(SetPortraitTexture, tex, u) then return end
+  end
+  local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(name)
+  local cls = pr and pr.char and pr.char.class
+  if cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
+    tex:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles"); tex:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
+  else tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); tex:SetTexCoord(0, 1, 0, 1) end
+end
 
 -- people worth listing: your group first (Kina or not), then recent farm partners
 function P.People()
@@ -43,7 +56,7 @@ function P.People()
     end
   end
   local sess = C.db and C.db.sessions or {}
-  for i = #sess, math.max(1, #sess - 40), -1 do
+  for i = 1, math.min(#sess, 40) do
     local s = sess[i]
     for who in pairs(s and s.split and s.split.incomes or {}) do
       local k = lower(who)
@@ -116,16 +129,26 @@ local function build()
   -- 1.5.2: thumbs up (commend) and thumbs down (bad commendation, red)
   o.up = C.Vouch.ThumbButton(card, false, 100, 26, "Commend"); o.up:SetPoint("BOTTOMLEFT", 12, 12)
   o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Bad"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
-  o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); o.whisper:SetSize(82, 24); o.whisper:SetPoint("BOTTOMRIGHT", -12, 13)
+  o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(o.whisper) end; o.whisper:SetSize(82, 24); o.whisper:SetPoint("BOTTOMRIGHT", -12, 13)
   o.whisper:SetText("Whisper")
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaProfile") end
   P.card = o
 end
 
+-- 1.5.4 (Taylor): a profile opens as the full You page (same layout as your own), in the
+-- main window; P.ShowCard is the old small card (kept for when the window can't open)
 function P.Show(name)
   name = first(name)
   name = name:sub(1, 1):upper() .. name:sub(2)
   if name == "" then C.Print("profile: /kina profile Name (or target someone)."); return end
+  if C.UI and C.Toggle and not (C.IsMyChar and C.IsMyChar(name)) then
+    C.UI.youWho = name; C.UI.youView = "you"
+    local ok = pcall(C.Toggle, "You")
+    if ok then return true end
+  end
+  return P.ShowCard(name)
+end
+function P.ShowCard(name)
   if not P.card then build() end
   local o = P.card
   local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(name)
@@ -186,18 +209,7 @@ function P.Show(name)
   for i, r in ipairs(rows) do o.rows[i][1]:SetText(GREY .. r[1] .. "|r"); o.rows[i][2]:SetText(r[2]) end
   o.note:SetText(GREY .. "Standing and Kina level are what their Kina reports (unverified until the Kina server checks both logs).|r")
   -- buttons
-  local function pick(i) if C.Vouch.Give(name, i) then P.Show(name) end end
-  for _, btn in ipairs({ o.up, o.down }) do
-    local bad = btn == o.down
-    local can, why = false, "Kina isn't ready"
-    if C.Vouch then can, why = C.Vouch.CanVouch(name, bad and 5 or 1) end
-    btn:SetAlpha(can and 1 or 0.35)
-    btn:SetScript("OnClick", function(self) if can then C.Vouch.OpenReasons(self, name, bad, pick) end end)
-    btn:SetScript("OnEnter", function(self)
-      if GameTooltip and not can then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(tostring(why), 1, 1, 1, true); GameTooltip:Show() end
-    end)
-    btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  end
+  o.up:Hide(); o.down:Hide() -- (1.5.4: commending only happens in the end-of-farm window)
   o.whisper:SetScript("OnClick", function()
     if ChatFrame_SendTell then pcall(ChatFrame_SendTell, name) end
   end)

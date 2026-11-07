@@ -213,7 +213,7 @@ function F.View()
     paused = t.paused, byLooter = t.byLooter, members = t.members, noSplit = t.noSplit,
     behind = (s.leaderHead or 0) > s.head or next(s.outbox) ~= nil }, s.leader
 end
-function F.Totals(s) return Core.Totals(s) end
+function F.Totals(s, reprice) return Core.Totals(s, reprice) end
 function F.Split(by) return Core.Split(by) end
 
 -- the clock

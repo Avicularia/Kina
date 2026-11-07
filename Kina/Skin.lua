@@ -161,7 +161,8 @@ function S.Frame(f, border, bg)
   if bg ~= false then
     local fill = f:CreateTexture(nil, "BACKGROUND", nil, -7)
     fill:SetPoint("TOPLEFT", 2, -2); fill:SetPoint("BOTTOMRIGHT", -2, 2)
-    fill:SetColorTexture(0.055, 0.055, 0.06, 1) -- 1.2.0: solid (the world showed through)
+    -- 1.5.5: a textured dark background (leather and stone), still solid
+    fill:SetTexture("Interface\\AddOns\\Kina\\Media\\Cos\\bg_texture"); fill:SetVertexColor(1, 1, 1, 1)
     f.kinaFill = fill
   end
   local holder = CreateFrame("Frame", nil, f)
@@ -183,26 +184,54 @@ local function hideRegions(b)
 end
 
 -- a button: 4 states (normal / hover / pressed / disabled)
+-- 1.5.5 (Taylor: "all bars and buttons get the same pass"): one look everywhere: a dark
+-- bronze fill with a soft vertical gradient, a fine gold rim, a light top edge; brighter
+-- on hover, gold-filled when selected (tabs and page buttons), dim when disabled.
+local BTN = { normal = { 0.13, 0.10, 0.06, 0.07, 0.055, 0.035 }, over = { 0.22, 0.17, 0.09, 0.12, 0.09, 0.05 },
+  down = { 0.06, 0.05, 0.03, 0.10, 0.08, 0.045 }, sel = { 0.36, 0.27, 0.10, 0.20, 0.15, 0.06 } }
+local function grad(t, c)
+  if t.SetGradient and CreateColor then
+    pcall(t.SetGradient, t, "VERTICAL", CreateColor(c[4], c[5], c[6], 0.96), CreateColor(c[1], c[2], c[3], 0.96))
+  else t:SetColorTexture(c[1], c[2], c[3], 0.96) end
+end
 function S.Button(b, border)
   if not S.On() or not b or b.kinaSkin then return end
   hideRegions(b)
-  local h = b:GetHeight() or 22
-  local n = S.Nine(b, "btn_normal", border or math.max(3, math.min(6, math.floor(h / 4))), { layer = "BACKGROUND" })
-  b.kinaSkin = n
-  local function state()
-    if b.IsEnabled and not b:IsEnabled() then n:SetPiece("btn_disabled")
-    elseif b.kinaDown then n:SetPiece("btn_pressed")
-    elseif b.kinaOver then n:SetPiece("btn_hover")
-    else n:SetPiece("btn_normal") end
+  local fill = b:CreateTexture(nil, "BACKGROUND", nil, 1); fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMRIGHT", -1, 1)
+  fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+  local rim = {}
+  for i, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+    local t = b:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.78, 0.62, 0.30, 0.95)
+    t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
+    rim[i] = t
   end
+  local shine = b:CreateTexture(nil, "BORDER", nil, 1); shine:SetPoint("TOPLEFT", 2, -2); shine:SetPoint("TOPRIGHT", -2, -2); shine:SetHeight(1)
+  shine:SetColorTexture(1, 0.9, 0.6, 0.22)
+  b.kinaSkin = { fill = fill, rim = rim }
+  local function state()
+    hideRegions(b)
+    local c = BTN.normal
+    if b.kinaSel then c = BTN.sel elseif b.kinaDown then c = BTN.down elseif b.kinaOver then c = BTN.over end
+    grad(fill, c)
+    local bright = (b.kinaOver or b.kinaSel) and 1 or 0.8
+    for _, t in ipairs(rim) do t:SetColorTexture(0.98 * bright, 0.78 * bright, 0.36 * bright, 0.95) end
+    local fs = b.GetFontString and b:GetFontString()
+    local off = b.IsEnabled and not b:IsEnabled()
+    b:SetAlpha(off and 0.45 or 1)
+    if fs then if b.kinaSel then fs:SetTextColor(1, 0.86, 0.35) else fs:SetTextColor(0.92, 0.84, 0.62) end end
+  end
+  b.kinaState = state
   b:HookScript("OnEnter", function() b.kinaOver = true; state() end)
   b:HookScript("OnLeave", function() b.kinaOver = false; b.kinaDown = false; state() end)
   b:HookScript("OnMouseDown", function() b.kinaDown = true; state() end)
   b:HookScript("OnMouseUp", function() b.kinaDown = false; state() end)
   pcall(b.HookScript, b, "OnEnable", state)
   pcall(b.HookScript, b, "OnDisable", state)
-  -- the template puts its textures back on some updates
-  b:HookScript("OnShow", function() hideRegions(b); state() end)
+  if hooksecurefunc then
+    pcall(hooksecurefunc, b, "LockHighlight", function() b.kinaSel = true; state() end)
+    pcall(hooksecurefunc, b, "UnlockHighlight", function() b.kinaSel = nil; state() end)
+  end
+  b:HookScript("OnShow", state)
   state()
 end
 
@@ -210,10 +239,17 @@ end
 -- centre only works small; stretched to a panel it looked like a pit)
 function S.Panel(f, border)
   if not S.On() or f.kinaSkin then return end
+  -- 1.5.5: a dark glass panel over the textured window, fine gold rim, light top line
   local fill = f:CreateTexture(nil, "BACKGROUND", nil, 1)
-  fill:SetPoint("TOPLEFT", 4, -4); fill:SetPoint("BOTTOMRIGHT", -4, 4)
-  fill:SetColorTexture(0.085, 0.085, 0.095, 1)
-  f.kinaSkin = S.Nine(f, "tile", border or 6, { layer = "BORDER", noCenter = true })
+  fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMRIGHT", -1, 1)
+  fill:SetColorTexture(0.035, 0.03, 0.025, 0.66)
+  for _, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+    local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.47, 0.38, 0.20, 1)
+    t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
+  end
+  local top = f:CreateTexture(nil, "BORDER", nil, 1); top:SetPoint("TOPLEFT", 8, -2); top:SetPoint("TOPRIGHT", -8, -2); top:SetHeight(1)
+  top:SetColorTexture(0.85, 0.68, 0.36, 0.55)
+  f.kinaSkin = { fill = fill }
 end
 
 -- a stat tile (the recessed tray)

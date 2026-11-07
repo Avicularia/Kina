@@ -95,6 +95,7 @@ local function countKill(guid, fromParty)
   end
   if C.session then
     C.session.last = C.Now()
+    C.session.lastKill = C.Now() -- 1.5.4: an hour with no kill ends the farm
     C.session.kills = C.session.kills + 1
     C.session.byNpc[id] = (C.session.byNpc[id] or 0) + 1
     C.SessionLog("kill", id, fromParty and 1 or 0)
@@ -563,11 +564,26 @@ local CUES = { start = "farm_start", stop = "farm_stop", paid = "paid", settled 
 function C.PlayClick()
   if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON) end
 end
+-- 1.5.4 (Taylor): a volume slider. The game can't play one addon's sounds quieter, so
+-- every Kina sound ships at 100/75/50/25%; the slider picks the file. 0 = muted.
+function C.Volume()
+  local v = C.settings.kinaVolume
+  if v == nil then v = (C.settings.farmSound == false) and 0 or 4 end
+  return math.max(0, math.min(4, math.floor(v)))
+end
+function C.SetVolume(v)
+  v = math.max(0, math.min(4, math.floor(v or 4)))
+  C.settings.kinaVolume = v
+  C.settings.farmSound = v > 0
+  if C.Toast and C.Toast.ThemeStop and v == 0 then pcall(C.Toast.ThemeStop) end
+end
+local VSUF = { "_25", "_50", "_75", "" }
+function C.SoundFile(base) return SOUND .. base .. (VSUF[C.Volume()] or "") .. ".ogg" end
 function C.PlayCue(which)
-  if C.settings.farmSound == false or not PlaySoundFile then return end
+  if C.Volume() == 0 or not PlaySoundFile then return end
   if cueHandle and StopSound then pcall(StopSound, cueHandle, 200) end
   cueHandle = nil
-  local file = (CUES[which] or "farm_start") .. ".ogg"
+  local file = (CUES[which] or "farm_start") .. (VSUF[C.Volume()] or "") .. ".ogg"
   local ok, willPlay, handle = pcall(PlaySoundFile, SOUND .. file, "SFX")
   if ok and willPlay then cueHandle = handle end
 end
@@ -604,6 +620,7 @@ end
 
 function C.StartSession(label, fromParty, campKey)
   if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end -- 1.5.2: a new farm ends the theme
+  if C.Rules and C.Rules.Decay then pcall(C.Rules.Decay) end -- 1.5.4: idle weeks
   if C.session then C.StopSession() end
   lastMoney = GetMoney()
   local now = C.Now()
@@ -816,7 +833,7 @@ function C.StopSession(at, why, silent, fromParty)
       return
     end
     if C.FlushUse then pcall(C.FlushUse, true) end
-    C.FarmSync.Observe("S")
+    C.FarmSync.Observe("S", why == "no kills for an hour" and "idle" or nil)
     C.Print("stopping the group farm: filing the last loot (about 8 seconds)...")
     return
   end
@@ -830,6 +847,8 @@ function C.StopSession(at, why, silent, fromParty)
     if t.noSplit then transfers = {}; s.noSplit = true end
     s.split = { total = total, each = each, incomes = by, transfers = transfers, loot = true }
     s.settled, s.gsplitShown = true, true
+    -- 0.9.0 (Taylor): the split waits for fresh AH scans (or everyone skipping)
+    if #transfers > 0 and C.PriceHold and C.PriceHold.Begin then pcall(C.PriceHold.Begin, s) end
     s.kills = math.max(s.kills or 0, t.kills)
     if C.RecordFloors then pcall(C.RecordFloors, s) end
     C.Print(string.format("|cffffd100Farm split|r (%s): the group looted %s, %s each (from the shared log, the same on every widget).",
@@ -952,7 +971,10 @@ function C.SessionTick()
   if s.limit and C.SessionSecs(s) >= s.limit then
     C.StopSession(nil, "timer done"); return
   end
-  -- no idle stop: a farm runs until you press Stop (or its timer ends)
+  -- 1.5.4 (Taylor): an hour after the last kill (anyone's, in a group farm) the farm
+  -- ends, as of that last kill, so the empty hour never counts
+  local lk = s.lastKill or s.start
+  if now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
   -- group farm: the leader tells everyone the group's numbers every 5 seconds
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then
     local _, lead = C.FarmLeader()
@@ -1018,9 +1040,10 @@ C.On("INIT", function()
   if type(s) ~= "table" or not s.start then C.db.activeSession = nil; return end
   C.session = s
   s.items = s.items or {}; s.money = s.money or {}; s.byNpc = s.byNpc or {}; s.kills = s.kills or 0
-  -- logged off for over 2 hours: end it where it stopped
-  if C.Now() - (s.last or s.start) >= 7200 then
-    C.StopSession((s.last or s.start) + 60, "logged off", true)
+  -- 1.5.4: everyone logged off and an hour passed since the last kill: it ended there
+  local lk = s.lastKill or s.last or s.start
+  if C.Now() - lk >= 3600 then
+    C.StopSession(lk + 60, "no kills for an hour", true)
   else
     C.Print("farm resumed: " .. tostring(s.label))
   end

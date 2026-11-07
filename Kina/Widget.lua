@@ -32,7 +32,7 @@ local function text(parent, font, justify)
 end
 local function tip(btn, title, body) if C.ButtonTip then C.ButtonTip(btn, title, body) end end
 local function smallButton(parent, label, width, onClick, height)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(b) end
   b:SetSize(width, height or 18); b:SetText(label); b:SetScript("OnClick", onClick)
   if b.GetFontString and b:GetFontString() then b:GetFontString():SetFontObject(C.Font and C.Font("GameFontHighlightSmall") or "GameFontHighlightSmall") end
   if C.Skin then C.Skin.Button(b) end
@@ -202,7 +202,11 @@ local function partyStrip()
     if m then
       c:ClearAllPoints(); c:SetPoint("TOP", strip, "TOPLEFT", cw * (i - 0.5) + (4 - #mates) * cw / 2, -4)
       c.who = m.name
-      if c.lastUnit ~= m.u .. m.name and SetPortraitTexture then pcall(SetPortraitTexture, c.portrait, m.u); c.lastUnit = m.u .. m.name end
+      local vis = UnitIsVisible and UnitIsVisible(m.u) and "v" or "f"
+      if c.lastUnit ~= m.u .. m.name .. vis then
+        if C.Profile and C.Profile.SetPortrait then C.Profile.SetPortrait(c.portrait, m.name) elseif SetPortraitTexture then pcall(SetPortraitTexture, c.portrait, m.u) end
+        c.lastUnit = m.u .. m.name .. vis
+      end
       local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(m.name)
       local stand = pr and pr.stand
       local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
@@ -235,7 +239,7 @@ function C.RefreshWidget()
     else w.scan:Hide() end
   end
   local s = C.session
-  if w.sndIcon then w.sndIcon:SetTexture(C.Cos.Tex(C.settings.farmSound == false and "sound_off" or "sound_on"))
+  if w.sndIcon then w.sndIcon:SetTexture(C.Cos.Tex(C.Volume() == 0 and "sound_off" or "sound_on"))
   elseif chipIron then w.snd:SetText(C.settings.farmSound == false and "|cff888888Muted|r" or "Sound")
   else w.snd:SetText(C.settings.farmSound == false and "|cff888888SND|r" or "SND") end
   if w.rep and C.RepLine then pcall(function() w.rep.text:SetText(C.RepLine() .. (C.ShareData() and "" or " |cff888888paused|r")) end) end
@@ -258,7 +262,7 @@ function C.RefreshWidget()
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
         -- 1.4.6: the kills tile's second line is game XP per hour (falls back to kills/h)
         local xph = C.GameXPPerHour and C.GameXPPerHour(s)
-        setTile(w.tKills, tostring(v.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", (v.kills or 0) * 3600 / secs) or ""))
+        setTile(w.tKills, tostring(v.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", math.floor((v.kills or 0) * 3600 / secs)) or ""))
         if s.sync then
           local bw = select(4, bestDrop(s))
           w.status:SetText(bw and ("|cff9d9d9dbest drop: " .. (bw == "the group" and "the group's" or (bw .. "'s")) .. "|r") or "|cff9d9d9dshared with the group|r")
@@ -290,7 +294,8 @@ function C.RefreshWidget()
     if (s.nodes or 0) > 0 then extra[#extra + 1] = s.nodes .. " nodes" end
     setTile(w.tLoot, C.Money(sum.items or 0), table.concat(extra, ", "))
     local xph = C.GameXPPerHour and C.GameXPPerHour(s)
-    setTile(w.tKills, tostring(sum.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", (sum.kills or 0) * 3600 / secs) or ""))
+    setTile(w.tKills, tostring(sum.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", math.floor((sum.kills or 0) * 3600 / secs)) or ""))
+    if w.idle then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end
     w.status:SetText(s.limit and ("|cffbbbbbbtimer ends in " .. clock(s.limit - secs) .. "|r") or "")
     w.go:SetText("|cffff8080Stop|r"); w.pause:SetText(s.paused and "Resume" or "Pause")
     showBest(s)
@@ -342,6 +347,7 @@ function C.RefreshWidget()
     else w.status:SetText("") end
     w.go:SetText("|cff7CFC00Start|r")
     showBest(nil)
+    if w.idle then local okI, eI = pcall(w.idle.fill, last); if not okI then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end end
   end
 end
 
@@ -437,12 +443,38 @@ local function build()
     C.settings.widgetAlpha = a; applyAlpha()
   end); alpha:SetPoint("RIGHT", close, "LEFT", -2, 0)
   tip(alpha, "Background", "Click to make the background more or less see-through.")
-  w.snd = smallButton(w, "SND", 36, function()
-    C.settings.farmSound = (C.settings.farmSound == false)
-    if C.settings.farmSound then C.PlayClick() end
-    C.RefreshWidget()
-  end); w.snd:SetPoint("RIGHT", alpha, "LEFT", -2, 0)
-  tip(w.snd, "Sound", "Turns the start and stop fanfares on or off.")
+  -- 1.5.4 (Taylor): the speaker opens a volume slider (top loud, bottom muted)
+  local vpop
+  local function volumePopup(anchor)
+    if vpop and vpop:IsShown() then vpop:Hide(); return end
+    if not vpop then
+      vpop = CreateFrame("Frame", nil, w, BackdropTemplateMixin and "BackdropTemplate" or nil)
+      vpop:SetSize(46, 150); vpop:SetFrameStrata("TOOLTIP"); vpop:EnableMouse(true)
+      if vpop.SetBackdrop then
+        vpop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        vpop:SetBackdropColor(0.06, 0.05, 0.04, 0.96); vpop:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
+      end
+      vpop.pct = vpop:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); vpop.pct:SetPoint("BOTTOM", 0, 8)
+      local sb = C.Skin and C.Skin.Scrollbar and C.Skin.Scrollbar(vpop, function(v)
+        C.SetVolume(4 - v); vpop.pct:SetText(C.Volume() == 0 and "|cff888888mute|r" or ((C.Volume() * 25) .. "%"))
+        if C.Volume() > 0 then C.PlayCue("paid") end
+        C.RefreshWidget()
+      end)
+      if sb then sb:SetPoint("TOP", 0, -10); sb:SetHeight(108) end
+      vpop.sb = sb
+      vpop:SetScript("OnUpdate", function(self)
+        -- close when the mouse leaves both the slider and the speaker for a moment
+        if self:IsMouseOver(8, -8, -8, 8) or (anchor and anchor:IsMouseOver()) then self.away = 0
+        else self.away = (self.away or 0) + 1; if self.away > 90 then self:Hide() end end
+      end)
+    end
+    vpop:ClearAllPoints(); vpop:SetPoint("TOP", anchor, "BOTTOM", 0, -2)
+    if vpop.sb then vpop.sb:KinaSet(4, 4 - C.Volume()) end
+    vpop.pct:SetText(C.Volume() == 0 and "|cff888888mute|r" or ((C.Volume() * 25) .. "%"))
+    vpop.away = 0; vpop:Show()
+  end
+  w.snd = smallButton(w, "SND", 36, function(self) volumePopup(self) end); w.snd:SetPoint("RIGHT", alpha, "LEFT", -2, 0)
+  tip(w.snd, "Volume", "Kina's sound volume: drag the slider down to quiet it, all the way down to mute.")
 
   -- hero: gold per hour
   w.rate = text(w, "GameFontNormalLarge", "LEFT"); w.rate:SetPoint("TOPLEFT", 10, -30); w.rate:SetWidth(180)
@@ -473,7 +505,7 @@ local function build()
   for _, fs in ipairs({ w.rate, w.rateSub, w.clock, w.best, w.status }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
 
   -- buttons
-  w.go = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+  w.go = CreateFrame("Button", nil, w, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(w.go) end
   w.go:SetSize(ironLook and 100 or 96, 26); w.go:SetPoint("BOTTOMLEFT", 8, 8)
   if C.Skin then C.Skin.Button(w.go) end
   w.go:SetScript("OnClick", function()
@@ -558,6 +590,7 @@ local function build()
     local pw = plate:CreateTexture(nil, "ARTWORK"); pw:SetSize(100, 25); pw:SetPoint("CENTER", plate, "CENTER", 11, 0)
     pw:SetTexture(C.Cos and C.Cos.Tex("kina_word") or nil)
     if C.DragBy then C.DragBy(w, plate) end
+    if C.Cos and C.Cos.PlaqueFX then pcall(C.Cos.PlaqueFX, plate, 190, 48, 14) end -- 1.5.5
     -- hovering the plate shows your Kina level (what the little level button did)
     plate:SetScript("OnEnter", function(self)
       if not GameTooltip then return end
@@ -574,6 +607,8 @@ local function build()
     if w.snd.GetNormalTexture and w.snd:GetNormalTexture() then w.snd:GetNormalTexture():SetAlpha(0) end
     if w.snd.GetPushedTexture and w.snd:GetPushedTexture() then w.snd:GetPushedTexture():SetAlpha(0) end
     w.sndIcon = w.snd:CreateTexture(nil, "OVERLAY"); w.sndIcon:SetSize(20, 20); w.sndIcon:SetPoint("CENTER")
+    local sk = w.snd.kinaSkin
+    if type(sk) == "table" and rawget(sk, "fill") then sk.fill:Hide(); for _, t in ipairs(rawget(sk, "rim") or {}) do t:Hide() end end
     if w.snd:GetFontString() then w.snd:GetFontString():Hide() end
     if handle then
       handle:EnableMouse(true)
@@ -614,6 +649,55 @@ local function build()
     w.go:ClearAllPoints(); w.go:SetPoint("BOTTOMLEFT", 10, 10)
     local bw = math.floor((W - 20 - 3 * 4) / 4)
     for _, b in ipairs({ w.go, w.pause, runs, hide }) do b:SetSize(bw, 26) end
+    -- 1.5.4 (Taylor): between farms, a "last farm" card instead of a lone status line
+    local card = CreateFrame("Frame", nil, w, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    card:SetPoint("TOPLEFT", w, "TOPLEFT", 10, -146); card:SetPoint("RIGHT", w, "RIGHT", -10, 0); card:SetHeight(66)
+    if card.SetBackdrop then
+      card:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+      card:SetBackdropColor(0.14, 0.12, 0.10, 0.95); card:SetBackdropBorderColor(0.6, 0.48, 0.24, 1)
+    end
+    local kick = card:CreateFontString(nil, "OVERLAY"); fx(kick, 8); kick:SetPoint("TOPLEFT", 8, -6); kick:SetText("|cff9a8f7aLAST FARM|r")
+    local zone = card:CreateFontString(nil, "OVERLAY"); if C.Cos then C.Cos.Font(zone, 14, "OUTLINE") end
+    zone:SetPoint("TOPLEFT", 8, -17); zone:SetTextColor(1, 0.84, 0.47); zone:SetWidth(W - 130); zone:SetJustifyH("LEFT")
+    local l1 = card:CreateFontString(nil, "OVERLAY"); fx(l1, 10); l1:SetPoint("TOPLEFT", 8, -36); l1:SetWidth(W - 40); l1:SetJustifyH("LEFT")
+    local l2 = card:CreateFontString(nil, "OVERLAY"); fx(l2, 10); l2:SetPoint("TOPLEFT", 8, -50); l2:SetWidth(W - 40); l2:SetJustifyH("LEFT")
+    for _, fs in ipairs({ zone, l1, l2 }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
+    local pill = CreateFrame("Frame", nil, card, BackdropTemplateMixin and "BackdropTemplate" or nil); pill:SetSize(86, 18); pill:SetPoint("TOPRIGHT", -7, -7)
+    if pill.SetBackdrop then pill:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } }) end
+    local pt = pill:CreateFontString(nil, "OVERLAY"); fx(pt, 9, "CENTER"); pt:SetPoint("CENTER", 0, 0)
+    local PILL = { settled = { "SETTLED", 0.12, 0.35, 0.16, 0.45, 0.86, 0.48 }, owe = { "YOU OWE", 0.40, 0.18, 0.06, 1, 0.55, 0.25 },
+      owed = { "OWED TO YOU", 0.35, 0.28, 0.05, 1, 0.82, 0.3 }, waiting = { "WAITING", 0.2, 0.2, 0.2, 0.6, 0.6, 0.6 }, solo = { "SOLO", 0.16, 0.16, 0.2, 0.55, 0.55, 0.65 } }
+    card.fill = function(last)
+      if not last then card:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show(); return end
+      w.best:Hide(); w.bestIcon:Hide(); w.status:Hide()
+      zone:SetText(last.label or last.zone or "Farm")
+      local g = last.gview or last.result or {}
+      local who = {}
+      for n in pairs(last.split and last.split.incomes or {}) do if not (C.IsMyChar and C.IsMyChar(n)) then who[#who + 1] = C.Books and C.Books.Name(n) or n end end
+      local mins = math.floor((g.secs or 0) / 60 + 0.5)
+      l1:SetText("|cffcfcfcf" .. (mins >= 60 and string.format("%.1f h", mins / 60) or (mins .. " min")) .. "  ·  " .. (g.kills or 0) .. " kills"
+        .. (#who > 0 and ("  ·  with " .. table.concat(who, ", ")) or "") .. "|r")
+      local st = w.status:GetText() or ""
+      local state = (st:find("settled") and "settled") or (st:find("you owe") and "owe") or (st:find("owes you") and "owed") or (st:find("waiting") and "waiting") or (#who == 0 and "solo") or "settled"
+      local share
+      local ok, r = pcall(function() return C.Books and C.Books.Farm(last) end)
+      if ok and r and r.share then share = r.share end
+      if state == "owe" or state == "owed" or state == "waiting" then l2:SetText(st)
+      else l2:SetText(share and share >= 1 and ("|cff7CFC00your share " .. C.Money(math.floor(share)) .. "|r") or "|cff9d9d9dpress Start for the next farm|r") end
+      local p = PILL[state]
+      pt:SetText(string.format("|cff%02x%02x%02x%s|r", math.floor(p[5] * 255), math.floor(p[6] * 255), math.floor(p[7] * 255), p[1]))
+      if pill.SetBackdropColor then pill:SetBackdropColor(p[2], p[3], p[4], 0.95); pill:SetBackdropBorderColor(p[5], p[6], p[7], 1) end
+      pill:SetWidth(math.max(64, (pt:GetStringWidth() or 50) + 18))
+      -- the Pay / Scan button sits under it when it's showing
+      local compact = w.pay:IsShown() or w.scan:IsShown()
+      card:SetHeight(compact and 46 or 66)
+      -- compact (the Pay / Scan button is under it): the line that matters most
+      local owing = state == "owe" or state == "owed" or state == "waiting"
+      l2:ClearAllPoints(); l2:SetPoint("TOPLEFT", 8, (compact and owing) and -36 or -50)
+      if compact then if owing then l1:Hide(); l2:Show() else l1:Show(); l2:Hide() end else l1:Show(); l2:Show() end
+      card:Show()
+    end
+    card:Hide(); w.idle = card
   end
 
   local acc, tick = 0, 0

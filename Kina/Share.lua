@@ -238,7 +238,7 @@ local function hello(channel, target, force)
   local msg = table.concat({ "H", d.uid, b36(PROTO), clean(myName()), clean(C.MarketKey()),
     b36(share and C.market.scanTime or 0), b36(share and S.StampLoot() or 0), b36(share and vendorTime() or 0), b36(share and offerTime() or 0),
     (cls:gsub("%A", "")), b36((UnitLevel and UnitLevel("player")) or 0), table.concat(profs, ","), b36(S.CommStamp()),
-    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or "") }, "|")
+    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or ""), S.MyFlags and S.MyFlags() or "", tostring(C.BUILD or 0) }, "|")
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -375,6 +375,11 @@ local function inMyGroup(name)
   return C.InGroupName and C.InGroupName(name) or false
 end
 -- 1.4.0: standing points told to the group in the hello (shown "unverified" on their card)
+-- 1.5.4: flags others see on my profile: b = was Blacklisted once (the scar)
+function S.MyFlags()
+  local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
+  return (ok and m and m.everBlack) and "b" or ""
+end
 local standCache, standAt = nil, 0
 function S.MyStanding()
   if GetTime and GetTime() - standAt < 60 and standCache then return standCache end
@@ -400,7 +405,7 @@ function S.ProfileOf(name)
     if nm and tostring(nm):lower():match("^[^%-]+") == want and (not best or (a.seen or 0) > (best.seen or 0)) then best = a end
   end
   if not best then return nil end
-  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver }
+  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver, build = best.build, scar = best.flags and best.flags:find("b") and true or nil }
 end
 function S.CharOf(name)
   local d = db()
@@ -481,8 +486,13 @@ local function onHello(from, rest, channel)
   if S.syncHeard then S.syncHeard[from] = true end
   if f[15] and f[15]:match("^%-?%d+$") then a.stand = tonumber(f[15]) end
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") then a.ver = f[14] end
+  -- 1.5.4/0.9.0: the newest Kina anyone runs, by build number (older Kinas sent none:
+  -- they are older than this one). An older Kina stops earning until it updates.
+  a.build = tonumber(f[17]) or a.build
+  if a.build and a.build > (S.newestBuild or C.BUILD or 0) then S.newestBuild = a.build; S.newestVer = a.ver end
+  a.flags = f[16] or a.flags
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
-  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and C.VersionNewer and C.VersionNewer(f[14], C.version) then
+  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) then
     S.newerSeen = S.newerSeen or {}
     if not S.newerSeen[f[14]] then
       S.newerSeen[f[14]] = true
@@ -825,6 +835,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnForgiveAck(from, label)
         elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and C.FirstName and C.FirstName(to) == mine and C.OnDebtNote then
           C.OnDebtNote(action, from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and (action == "prh" or action == "prs") and C.PriceHold then
+          C.PriceHold.OnMessage(from, action, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "clk" and C.FirstName and C.FirstName(to) == mine and C.OnDebtClock then
+          C.OnDebtClock(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "vch" and C.FirstName and C.FirstName(to) == mine and C.Vouch then
           C.Vouch.OnVouch(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and (action == "pla" or action == "exa") and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
@@ -1031,6 +1045,22 @@ function S.SendForgive(to, amt, ref, kind)
   local ch = groupChannel()
   local msg = table.concat({ "T", db().uid, to or "", kind or "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
   if ch then enqueue(msg, ch, nil, true) end -- not grouped: re-sent when you group up again
+end
+-- 0.9.0: the post-farm price hold: my answer (1 scanned, 2 skipped) and the leader's
+-- re-priced incomes ("Name=copper,...")
+function S.SendHold(action, n, label, members)
+  if not db().opts.enabled then return end
+  local msg = table.concat({ "T", db().uid, "", action, tostring(math.floor(n or 0)), ((tostring(label or "")):gsub("|", "")) }, "|")
+  local ch = groupChannel()
+  if ch then enqueue(msg, ch, nil, true)
+  else for _, who in ipairs(members or {}) do enqueue(msg, "WHISPER", who) end end
+end
+-- 1.5.4: how long my Kina has counted on our debt (the play-time clock)
+function S.SendClock(to, secs, ref)
+  if not db().opts.enabled then return end
+  local ch = groupChannel()
+  if not ch then return end
+  enqueue(table.concat({ "T", db().uid, to or "", "clk", tostring(math.floor(secs or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|"), ch, nil, false)
 end
 -- 1.5.0: a vouch (kind 1-4) for someone in a recent farm; answered with "vca"
 function S.SendVouch(to, kind, ref)
