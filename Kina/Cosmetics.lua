@@ -28,29 +28,48 @@ function K.Font(fs, size, flags)
   end
 end
 
--- the portrait: a round portrait inside the standing ring, the Kina level plate below it
+-- the portrait: a round portrait inside the standing ring (with a glow from Honored
+-- up, a slow pulse at Exalted), the badge crowning the ring, the level plate at its foot
+local COLOR = { Unproven = "|cffbfbfbf", Vouched = "|cffd8d8d8", Reliable = "|cffd9a35a", Trusted = "|cffe0b060",
+  Honored = "|cffe8d8a0", Revered = "|cfff2e6b8", Exalted = "|cffffd34d", Delinquent = "|cffff6040", Disgraced = "|cffff4030", Oathbreaker = "|cffd02020" }
+function K.StandingColor(st) return COLOR[st or "Unproven"] or "|cffbfbfbf" end
+local GLOW = { Honored = { 0.9, 0.85, 0.6, 0.30 }, Revered = { 1, 0.95, 0.75, 0.40 }, Exalted = { 1, 0.80, 0.25, 0.55 },
+  Delinquent = { 0.8, 0.15, 0.1, 0.30 }, Disgraced = { 0.8, 0.1, 0.05, 0.40 }, Oathbreaker = { 0.7, 0.05, 0.05, 0.5 } }
 function K.Portrait(box, portrait)
   local o = {}
   if portrait.SetMask then pcall(portrait.SetMask, portrait, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
+  portrait:ClearAllPoints(); portrait:SetPoint("TOPLEFT", 4, -4); portrait:SetPoint("BOTTOMRIGHT", -4, 4)
+  local W = box:GetWidth() or 80
+  o.glow = box:CreateTexture(nil, "BACKGROUND", nil, -2)
+  o.glow:SetPoint("CENTER", portrait, "CENTER"); o.glow:SetSize(W * 1.45, W * 1.45); o.glow:SetBlendMode("ADD")
   o.ring = box:CreateTexture(nil, "OVERLAY", nil, 2)
-  o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0)
-  o.ring:SetSize((box:GetWidth() or 80) + 18, (box:GetHeight() or 80) + 18)
+  o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
   o.plate = box:CreateTexture(nil, "OVERLAY", nil, 4)
-  o.plate:SetSize(34, 34); o.plate:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 10, -10)
+  o.plate:SetSize(36, 36); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, 4)
   o.plate:SetTexture(P .. "level_plate")
   o.num = box:CreateFontString(nil, "OVERLAY")
   K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, 1); o.num:SetTextColor(1, 0.86, 0.45)
-  o.badge = box:CreateTexture(nil, "OVERLAY", nil, 4)
-  o.badge:SetSize(30, 30); o.badge:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", -10, -10)
+  o.badge = box:CreateTexture(nil, "OVERLAY", nil, 5)
+  o.badge:SetPoint("CENTER", o.ring, "TOP", 0, 2)
+  local t = 0
+  local pulser = CreateFrame("Frame", nil, box)
+  pulser:SetScript("OnUpdate", function(_, el)
+    if not o.pulse then return end
+    t = t + el
+    o.glow:SetAlpha(0.35 + 0.25 * math.sin(t * 2.2))
+  end)
   return o
 end
 function K.UpdatePortrait(o, standing, level, recruits, starter)
   if not o then return end
   o.ring:SetTexture(K.RingFor(standing))
+  local g = GLOW[standing or ""]
+  if g then o.glow:SetTexture(K.RingFor(standing)); o.glow:SetVertexColor(g[1], g[2], g[3]); o.glow:SetAlpha(g[4]); o.glow:Show() else o.glow:Hide() end
+  o.pulse = standing == "Exalted"
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
   local star, wide = K.StarFor(recruits)
-  if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(26, 26); o.badge:Show()
-  elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(60, 30) else o.badge:SetSize(30, 30) end; o.badge:Show()
+  if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(30, 30); o.badge:Show()
+  elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(72, 36) else o.badge:SetSize(32, 32) end; o.badge:Show()
   else o.badge:Hide() end
 end
 -- a forged frame over a status bar

@@ -2821,6 +2821,21 @@ local function build()
   if f.TitleText and not ui.ironTitle then f.TitleText:SetText("Kina " .. C.version) end
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaFrame") end
   f:HookScript("OnHide", function() if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end end)
+  -- 1.4.4: the X works in combat. If the game won't let Kina hide its window mid-fight,
+  -- it fades out and lets clicks through at once, and really closes when combat ends.
+  local hideLater = false
+  local function closeKina()
+    pcall(f.Hide, f)
+    if f:IsShown() then
+      hideLater = true
+      f:SetAlpha(0)
+      pcall(f.EnableMouse, f, false)
+    end
+  end
+  C.CloseKina = closeKina
+  if f.CloseButton then f.CloseButton:SetScript("OnClick", closeKina) end
+  f:HookScript("OnShow", function() f:SetAlpha(1); pcall(f.EnableMouse, f, true); hideLater = false end)
+  C.On("PLAYER_REGEN_ENABLED", function() if hideLater then hideLater = false; f:Hide(); f:SetAlpha(1); pcall(f.EnableMouse, f, true) end end)
   ui.frame = f
   ui.tabButtons = {}
   local x = 10

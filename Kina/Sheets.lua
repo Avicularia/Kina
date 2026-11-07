@@ -78,16 +78,21 @@ end
 ------------------------------------------------------------------ You: a character sheet
 builders.you = function(p)
   -- left: who you are
-  local TOP_H = 128
+  -- 1.4.4: a proper character card: a big ringed portrait (the standing ring, its title
+  -- and glow), the Mentor Star or leaf crowning it, the Kina level plate at its foot
+  local TOP_H = C.Cos and 170 or 128
   local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetSize(300, TOP_H)
-  local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetPoint("TOPLEFT", 12, -12); portraitBox:SetSize(80, 80)
+  local portraitBox = CreateFrame("Frame", nil, idBox)
+  if C.Cos then portraitBox:SetPoint("TOPLEFT", 30, -44); portraitBox:SetSize(80, 80) else portraitBox:SetPoint("TOPLEFT", 12, -12); portraitBox:SetSize(80, 80) end
   if iron() and not C.Cos then C.Skin.Tile(portraitBox, 6) end
   local portrait = portraitBox:CreateTexture(nil, "ARTWORK"); portrait:SetPoint("TOPLEFT", 7, -7); portrait:SetPoint("BOTTOMRIGHT", -7, 7)
   local cos -- 1.4.0: standing ring, level plate, star/leaf (built on first refresh)
-  local name = text(idBox, "GameFontNormalLarge"); name:SetPoint("TOPLEFT", portraitBox, "TOPRIGHT", 12, -4); name:SetWidth(170)
-  local line = text(idBox, "GameFontHighlight"); line:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -6); line:SetWidth(170)
-  local lvl = text(idBox, "GameFontNormalLarge"); lvl:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, -12); lvl:SetWidth(170)
-  local share = text(idBox, "GameFontHighlightSmall"); share:SetPoint("BOTTOMLEFT", 14, 14); share:SetWidth(272)
+  local name = text(idBox, "GameFontNormalLarge"); name:SetPoint("TOPLEFT", portraitBox, "TOPRIGHT", C.Cos and 30 or 12, 6); name:SetWidth(150)
+  local line = text(idBox, "GameFontHighlight"); line:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -5); line:SetWidth(150)
+  local standT = text(idBox, "GameFontNormal"); standT:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, -6); standT:SetWidth(150)
+  local lvl = text(idBox, "GameFontNormalLarge"); lvl:SetPoint("TOPLEFT", standT, "BOTTOMLEFT", 0, -6); lvl:SetWidth(150)
+  local share = text(idBox, "GameFontHighlightSmall")
+  if C.Cos then share:SetPoint("BOTTOMLEFT", idBox, "BOTTOMLEFT", 140, 12); share:SetWidth(150) else share:SetPoint("BOTTOMLEFT", 14, 14); share:SetWidth(272) end
 
   -- middle: Kina level and standing
   local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(TOP_H)
@@ -136,7 +141,7 @@ builders.you = function(p)
     lvl:SetText(m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
     if C.Cos then
       if not cos then
-        cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 18, "OUTLINE")
+        cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 17, "OUTLINE"); C.Cos.Font(name, 19, "OUTLINE")
         cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
         -- 1.4.2: test pickers beside the pieces (preview only)
         local pv = C.Cos.preview
@@ -144,12 +149,14 @@ builders.you = function(p)
         local rings = {}
         for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent" }) do rings[#rings + 1] = { st .. (st == "Delinquent" and " / Disgraced" or ""), st } end
         table.insert(rings, 1, { "(my real standing)", false })
-        local pr = C.Cos.Picker(idBox, "Portrait ring", rings, function(v) pv.ring = v or nil; redo() end); pr:SetPoint("TOPLEFT", portraitBox, "BOTTOMLEFT", -4, -18)
-        local pb = C.Cos.Picker(idBox, "Badge", { { "(real)", false }, { "none", "none" }, { "Starter leaf", "leaf" }, { "Mentor Star I (1)", 1 }, { "Mentor Star II (5)", 5 },
-          { "Mentor Star III (10)", 10 }, { "Mentor Star IV (20)", 20 }, { "Mentor Star V (50, wings)", 50 } }, function(v) pv.badge = v or nil; redo() end)
-        pb:SetPoint("LEFT", pr, "RIGHT", 4, 0)
-        local pl = C.Cos.Picker(idBox, "Level plate", { { "(real)", false }, { "I", 1 }, { "V", 5 }, { "IX", 9 }, { "XII", 12 }, { "XVIII", 18 }, { "XX", 20 } }, function(v) pv.level = v or nil; redo() end)
-        pl:SetPoint("LEFT", pb, "RIGHT", 4, 0)
+        local opts = {}
+        for _, x in ipairs(rings) do opts[#opts + 1] = { "Ring: " .. x[1], { "ring", x[2] } } end
+        for _, x in ipairs({ { "(real)", false }, { "none", "none" }, { "Starter leaf", "leaf" }, { "Mentor Star I", 1 }, { "Mentor Star II", 5 }, { "Mentor Star III", 10 }, { "Mentor Star IV", 20 }, { "Mentor Star V (wings)", 50 } }) do
+          opts[#opts + 1] = { "Badge: " .. x[1], { "badge", x[2] } }
+        end
+        for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
+        local pr = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; redo() end)
+        pr:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
         local pf = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
         pf:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
       end
@@ -161,6 +168,8 @@ builders.you = function(p)
       if pv.badge == "leaf" then starter = true elseif pv.badge == "none" then starter = false
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
+      local stName = pv.ring or mm.standing or "Unproven"
+      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep|r")
       if pv.bars == "off" then cos.xpF:Hide(); cos.stF:Hide() else cos.xpF:Show(); cos.stF:Show() end
     end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
