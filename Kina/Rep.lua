@@ -142,6 +142,8 @@ function R.Replay(lines, st, gains)
       local rp = tonumber(f[7]) or 0
       st.rep = st.rep + rp
       if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "vouched", who = f[4] or "?", rep = rp, vk = tonumber(f[5]) } end
+    elseif kind == "vouch" and f[3] == "gave" and (tonumber(f[5]) or 1) > 4 then
+      -- 1.5.2: giving a bad commendation earns nothing
     elseif kind == "vouch" and f[3] == "gave" then
       local got = st.share and capped("vouch:" .. day(t), 15, 5) or 0
       st.xp = st.xp + got

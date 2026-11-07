@@ -37,7 +37,7 @@ function P.People()
   for i = 1, n do
     local u = raid and ("raid" .. i) or ("party" .. i)
     local ok, un = pcall(UnitName, u)
-    if ok and un and safe(un) and lower(un) ~= me and not seen[lower(un)] then
+    if ok and un and safe(un) and lower(un) ~= me and not (C.IsMyChar and C.IsMyChar(un)) and not seen[lower(un)] then
       seen[lower(un)] = true
       out[#out + 1] = { who = first(un), group = true, kina = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(un) ~= nil }
     end
@@ -47,7 +47,7 @@ function P.People()
     local s = sess[i]
     for who in pairs(s and s.split and s.split.incomes or {}) do
       local k = lower(who)
-      if k ~= me and not seen[k] then seen[k] = true; out[#out + 1] = { who = first(who), kina = true } end
+      if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] then seen[k] = true; out[#out + 1] = { who = first(who), kina = true } end
     end
   end
   return out
@@ -69,11 +69,12 @@ local function between(who)
   for _, d in ipairs(ok and list or {}) do
     if lower(d.who) == k then if d.dir == "owe" then owe = owe + d.amt else owed = owed + d.amt end end
   end
-  local gave, got = 0, 0
+  local gave, got, gaveBad, gotBad = 0, 0, 0, 0
   local v = C.db and C.db.vouch
-  for _, g in ipairs(v and v.given or {}) do if lower(g.who) == k then gave = gave + 1 end end
-  for _, g in ipairs(v and v.got or {}) do if lower(g.who) == k then got = got + 1 end end
-  return { farms = farms, hours = secs / 3600, owe = owe, owed = owed, gave = gave, got = got }
+  local isBad = C.Vouch and C.Vouch.IsBad or function() return false end
+  for _, g in ipairs(v and v.given or {}) do if lower(g.who) == k then if isBad(g.kind) then gaveBad = gaveBad + 1 else gave = gave + 1 end end end
+  for _, g in ipairs(v and v.got or {}) do if lower(g.who) == k then if isBad(g.kind) then gotBad = gotBad + 1 else got = got + 1 end end end
+  return { farms = farms, hours = secs / 3600, owe = owe, owed = owed, gave = gave, got = got, gaveBad = gaveBad, gotBad = gotBad }
 end
 P.Between = between
 
@@ -112,8 +113,10 @@ local function build()
   o.rows = {}
   for i = 1, 4 do local l, r = row(card, -252 - (i - 1) * 20); o.rows[i] = { l, r } end
   o.note = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); o.note:SetPoint("BOTTOMLEFT", 16, 44); o.note:SetWidth(288); o.note:SetJustifyH("LEFT")
-  o.vouch = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); o.vouch:SetSize(140, 24); o.vouch:SetPoint("BOTTOMLEFT", 14, 12)
-  o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); o.whisper:SetSize(140, 24); o.whisper:SetPoint("BOTTOMRIGHT", -14, 12)
+  -- 1.5.2: thumbs up (commend) and thumbs down (bad commendation, red)
+  o.up = C.Vouch.ThumbButton(card, false, 100, 26, "Commend"); o.up:SetPoint("BOTTOMLEFT", 12, 12)
+  o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Bad"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
+  o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); o.whisper:SetSize(82, 24); o.whisper:SetPoint("BOTTOMRIGHT", -12, 13)
   o.whisper:SetText("Whisper")
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaProfile") end
   P.card = o
@@ -177,22 +180,23 @@ function P.Show(name)
   local rows = {
     { "Farms together", b.farms .. (b.hours > 0 and (GREY .. string.format("  (%.1f h)", b.hours) .. "|r") or "") },
     { "Open now", open },
-    { "You vouched for them", tostring(b.gave) },
-    { "They vouched for you", tostring(b.got) },
+    { "You commended them", tostring(b.gave) .. (b.gaveBad > 0 and ("  " .. C.Vouch.RED .. b.gaveBad .. " bad|r") or "") },
+    { "They commended you", tostring(b.got) .. (b.gotBad > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
   }
   for i, r in ipairs(rows) do o.rows[i][1]:SetText(GREY .. r[1] .. "|r"); o.rows[i][2]:SetText(r[2]) end
   o.note:SetText(GREY .. "Standing and Kina level are what their Kina reports (unverified until the Kina server checks both logs).|r")
   -- buttons
-  local can = C.Vouch and C.Vouch.CanVouch(name)
-  if can then
-    o.vouch:SetText("Commend"); o.vouch:Enable()
-    o.vouch:SetScript("OnClick", function(self)
-      local opts = {}
-      for i, k in ipairs(C.Vouch.KINDS) do opts[#opts + 1] = { k, i } end
-      if C.Cos then C.Cos.OpenList(self, "Commend " .. name .. " for", opts, function(i) if C.Vouch.Give(name, i) then P.Show(name) end end) end
+  local can, why = false, "Kina isn't ready"
+  if C.Vouch then can, why = C.Vouch.CanVouch(name) end
+  local function pick(i) if C.Vouch.Give(name, i) then P.Show(name) end end
+  for _, btn in ipairs({ o.up, o.down }) do
+    local bad = btn == o.down
+    btn:SetAlpha(can and 1 or 0.35)
+    btn:SetScript("OnClick", function(self) if can then C.Vouch.OpenReasons(self, name, bad, pick) end end)
+    btn:SetScript("OnEnter", function(self)
+      if GameTooltip and not can then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(tostring(why), 1, 1, 1, true); GameTooltip:Show() end
     end)
-  else
-    o.vouch:SetText(GREY .. "Commend|r"); o.vouch:Disable()
+    btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   end
   o.whisper:SetScript("OnClick", function()
     if ChatFrame_SendTell then pcall(ChatFrame_SendTell, name) end

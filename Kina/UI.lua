@@ -1154,6 +1154,7 @@ if C.PUBLIC then
           elseif g.kind == "pay" then what = string.format("paid %s %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.paidOff), g.via)
           elseif g.kind == "forgive" then what = string.format("forgave %s's debt", C.Books.Name(g.who))
           elseif g.kind == "extend" then what = string.format("gave %s more time", C.Books.Name(g.who))
+          elseif g.kind == "vouched" and (g.vk or 1) > 4 then what = string.format("|cffff4030%s gave you a bad commendation: %s (%d rep)|r", C.Books.Name(g.who), C.Vouch and C.Vouch.KINDS[g.vk] or "", g.rep or 0)
           elseif g.kind == "vouched" then what = string.format("|cff4fc3f7%s vouched for you: %s (+%d rep)|r", C.Books.Name(g.who), C.Vouch and C.Vouch.KINDS[g.vk or 1] or "", g.rep or 0)
           elseif g.kind == "vouchgave" then what = string.format("vouched for %s", C.Books.Name(g.who))
           elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
@@ -2361,7 +2362,11 @@ end
 
 ------------------------------------------------------------------ settings tab
 -- Every option that used to need a slash command, as switches, boxes and buttons.
-tabs.You = function() return "", {}, {}, {}, { panel = "you" } end
+-- 1.5.2: the You tab has three pages: Overview, Commendations, Farm stats
+tabs.You = function()
+  local v = ui.youView or "you"
+  return "", {}, {}, {}, { panel = v }
+end
 
 tabs.Settings = function()
   return "Settings: click a switch to flip it, type in a box and press Enter. Everything is saved per account.",
@@ -2531,7 +2536,7 @@ local function buildSettings(f)
     "Off: group farms you start still share their numbers, but nobody owes anyone (for questing apart while grouped). The person who presses Start decides.")
   toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) st.farmSound = v; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayClick then C.PlayClick() end end)
   toggle("Post farm stats to group chat (every 15 min)", function() return st.groupAd ~= false end, function(v) st.groupAd = v end)
-  toggle("Play the Kina theme after a farm (in the Ledger)", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end)
+  toggle("Play the Kina theme when a farm ends", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end)
   toggle("Leave cloth for our tailor (Kina loots for you)", function() return st.leaveCloth == true end, function(v) if C.SetLeaveCloth then C.SetLeaveCloth(v) else st.leaveCloth = v end end)
   box("Farm timer (hours, 0 = none)", function() return tostring((st.farmPreset or 0) / 3600) end,
     function(t) local h = num(t, 0, 24); if h then st.farmPreset = math.floor(h * 3600) end; if C.RefreshWidget then C.RefreshWidget() end end, 50)
@@ -2818,7 +2823,6 @@ local function build()
   end
   if f.TitleText and not ui.ironTitle then f.TitleText:SetText("Kina " .. C.version) end
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaFrame") end
-  f:HookScript("OnHide", function() if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end end)
   -- 1.4.4: the X works in combat. If the game won't let Kina hide its window mid-fight,
   -- it fades out and lets clicks through at once, and really closes when combat ends.
   local hideLater = false
@@ -3057,6 +3061,20 @@ local function build()
     end
     vb:SetFrameLevel(f:GetFrameLevel() + 12)
     vb:Hide(); ui.viewBar = vb
+  end
+  -- 1.5.2: the You tab's pages
+  do
+    local yb = CreateFrame("Frame", nil, f); yb:SetSize(420, 24); yb.btns = {}
+    local pages = { { "you", "Overview", 86 }, { "youVouch", "Commendations", 124 }, { "youFarms", "Farm stats", 96 } }
+    local prev
+    for _, pg in ipairs(pages) do
+      local b = button(yb, pg[2], pg[3], function() ui.youView = pg[1]; C.Refresh() end)
+      b:SetHeight(24)
+      if prev then b:SetPoint("LEFT", prev, "RIGHT", 6, 0) else b:SetPoint("LEFT", yb, "LEFT", 0, 0) end
+      prev = b; yb.btns[pg[1]] = b
+    end
+    yb:SetFrameLevel(f:GetFrameLevel() + 12)
+    yb:Hide(); ui.youBar = yb
   end
   if ui.head.SetWordWrap then ui.head:SetWordWrap(false) end
   -- sortable column headers
@@ -3336,6 +3354,18 @@ function C.Refresh()
       end
       ui.viewBar:ClearAllPoints(); ui.viewBar:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (opts.top or 0))
     else ui.viewBar:Hide() end
+  end
+  if ui.youBar then
+    if tab == "You" then
+      ui.youBar:Show()
+      for v, b in pairs(ui.youBar.btns) do
+        local on = (ui.youView or "you") == v
+        if on then b:LockHighlight() else b:UnlockHighlight() end
+        local fs = b.GetFontString and b:GetFontString()
+        if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
+      end
+      ui.youBar:ClearAllPoints(); ui.youBar:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", 16, -52 - (opts.top or 0))
+    else ui.youBar:Hide() end
   end
   -- the header line leaves room for the view buttons on the Ledger
   if ui.head then ui.head:SetWidth(math.max(200, ui.w - ((tab == "Ledger" and ui.viewBar) and 470 or 28))) end

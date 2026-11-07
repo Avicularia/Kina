@@ -108,7 +108,7 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "vouch" then
     local who, k = rest:match("^(%S+)%s*(%d*)$")
     if who and C.Vouch then C.Vouch.Give(who, tonumber(k) or 1)
-    else C.Print("vouch: /kina vouch Name [1-4]  (1 pulled their weight, 2 great leader, 3 profession support, 4 good company), or the Vouch button on the You tab") end
+    else C.Print("commend: /kina vouch Name [1-8]  (good: 1 pulled their weight, 2 great leader, 3 profession support, 4 good company; |cffff4030bad: 5 didn't pull their weight, 6 left early, 7 greedy with loot, 8 rude or toxic|r), or Commend someone on the You tab") end
   elseif cmd == "preview" and rest == "commend" then if C.Vouch then C.Vouch.ShowPrompt(true) end
   elseif cmd == "preview" then if C.Toast and C.Toast.Preview then C.Toast.Preview(rest) end
   elseif cmd == "sound" then

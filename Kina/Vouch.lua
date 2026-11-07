@@ -8,8 +8,16 @@ local _, C = ...
 -- rep), the same two-sided way payments are confirmed.
 local V = {}
 C.Vouch = V
-V.KINDS = { "Pulled their weight", "Great leader", "Profession support", "Good company" }
+V.KINDS = { "Pulled their weight", "Great leader", "Profession support", "Good company",
+  -- 1.5.2 (Taylor): bad commendations (5-8), always shown in red with a thumbs down
+  "Didn't pull their weight", "Left the group early", "Greedy with loot", "Rude or toxic" }
+V.GOOD_N = 4
 V.REP, V.REPEAT_REP, V.GIVE_XP = 15, 3, 5
+V.BAD_REP, V.BAD_REPEAT_REP, V.BAD_PER_DAY = -10, -3, 3
+function V.IsBad(k) return (tonumber(k) or 1) > V.GOOD_N end
+V.RED = "|cffff4030"
+local UP, DOWN = "Interface\\AddOns\\Kina\\Media\\Cos\\thumb_up", "Interface\\AddOns\\Kina\\Media\\Cos\\thumb_down"
+V.UP_ICON, V.DOWN_ICON = UP, DOWN
 local DAY = 86400
 local function first(n) return n and (tostring(n):match("^([^%-]+)") or n) or "" end
 local function lower(n) return first(n):lower() end
@@ -25,7 +33,7 @@ function V.Eligible()
       if secs >= 900 and n >= 2 then
         for who in pairs(s.split.incomes) do
           local k = lower(who)
-          if k ~= me and not seen[k] then seen[k] = true; out[#out + 1] = { who = first(who), ref = (s.sync.sid or ("t" .. tostring(s.start))), farm = s.label } end
+          if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] then seen[k] = true; out[#out + 1] = { who = first(who), ref = (s.sync.sid or ("t" .. tostring(s.start))), farm = s.label } end
         end
       end
     end
@@ -39,26 +47,36 @@ local function vdb()
   for _, t in ipairs({ d.given, d.got }) do for i = #t, 1, -1 do if C.Now() - (t[i].t or 0) > 30 * DAY then table.remove(t, i) end end end
   return d
 end
-function V.CanVouch(who)
+function V.CanVouch(who, kind)
   local k = lower(who)
+  if C.IsMyChar and C.IsMyChar(who) then return false, "you can't commend yourself or your own characters" end
   local okFarm
   for _, e in ipairs(V.Eligible()) do if lower(e.who) == k then okFarm = e end end
   if not okFarm then return false, "only for someone in a qualifying farm with you in the last 24 hours" end
   for _, g in ipairs(vdb().given) do
     if lower(g.who) == k and C.Now() - g.t < DAY then return false, "you already vouched for them today" end
   end
+  if kind and V.IsBad(kind) then
+    local n = 0
+    for _, g in ipairs(vdb().given) do if V.IsBad(g.kind) and C.Now() - g.t < DAY then n = n + 1 end end
+    if n >= V.BAD_PER_DAY then return false, "you've given " .. V.BAD_PER_DAY .. " bad commendations today" end
+  end
   return true, okFarm
 end
 function V.Give(who, kind)
-  local ok, e = V.CanVouch(who)
-  if not ok then C.Print("can't vouch: " .. e .. "."); return false end
   kind = math.max(1, math.min(#V.KINDS, tonumber(kind) or 1))
+  local ok, e = V.CanVouch(who, kind)
+  if not ok then C.Print("can't commend: " .. e .. "."); return false end
   local d = vdb()
   table.insert(d.given, { who = first(who), kind = kind, t = C.Now(), ref = e.ref })
   if C.Log then C.Log("vouch", "gave", first(who), kind, e.ref) end
   if C.Share and C.Share.SendVouch then C.Share.SendVouch(first(who), kind, e.ref) end
-  C.Print(string.format("|cff7CFC00you vouched for %s: %s.|r", first(who), V.KINDS[kind]))
-  if C.PlayCue then C.PlayCue("paid") end
+  if V.IsBad(kind) then
+    C.Print(string.format("%syou gave %s a bad commendation: %s.|r", V.RED, first(who), V.KINDS[kind]))
+  else
+    C.Print(string.format("|cff7CFC00you vouched for %s: %s.|r", first(who), V.KINDS[kind]))
+    if C.PlayCue then C.PlayCue("paid") end
+  end
   return true
 end
 -- their Kina told mine they vouched for me
@@ -69,32 +87,43 @@ function V.OnVouch(from, kind, ref)
   for _, g in ipairs(d.got) do
     if lower(g.who) == lower(from) and C.Now() - g.t < DAY then return end -- one a day per person
   end
+  if C.IsMyChar and C.IsMyChar(from) then return end -- 1.5.2: never from your own characters
+  local bad = V.IsBad(kind)
   local repeatV = false
-  for _, g in ipairs(d.got) do if lower(g.who) == lower(from) and C.Now() - g.t < 7 * DAY then repeatV = true end end
-  local rep = repeatV and V.REPEAT_REP or V.REP
-  local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
-  if (m.rep or 0) < 0 then rep = math.floor(rep / 2) end
+  for _, g in ipairs(d.got) do if lower(g.who) == lower(from) and V.IsBad(g.kind) == bad and C.Now() - g.t < 7 * DAY then repeatV = true end end
+  local rep
+  if bad then
+    rep = repeatV and V.BAD_REPEAT_REP or V.BAD_REP
+    -- a bad commendation from someone who is in bad standing themselves costs nothing
+    local theirs = C.Share and C.Share.StandingOf and C.Share.StandingOf(from)
+    if type(theirs) == "number" and theirs < 0 then rep = 0 end
+  else
+    rep = repeatV and V.REPEAT_REP or V.REP
+    local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
+    if (m.rep or 0) < 0 then rep = math.floor(rep / 2) end
+  end
   table.insert(d.got, { who = first(from), kind = kind, t = C.Now(), ref = ref, rep = rep })
   if C.Log then C.Log("vouch", "got", first(from), kind, ref or "", rep) end
-  if C.Toast and C.Toast.Vouched then C.Toast.Vouched(first(from), V.KINDS[kind], rep) end
+  if C.Toast and C.Toast.Vouched then C.Toast.Vouched(first(from), V.KINDS[kind], rep, bad) end
 end
 -- counts for the You tab
 function V.Counts()
   local d = vdb()
-  local byKind, total = {}, 0
-  for _, g in ipairs(d.got) do byKind[g.kind] = (byKind[g.kind] or 0) + 1; total = total + 1 end
-  return total, byKind
+  local byKind, total, bad = {}, 0, 0
+  for _, g in ipairs(d.got) do
+    byKind[g.kind] = (byKind[g.kind] or 0) + 1
+    if V.IsBad(g.kind) then bad = bad + 1 else total = total + 1 end
+  end
+  return total, byKind, bad
 end
 
 -- the vouch picker: who (from the farms) and what for
 local function picker(anchor)
   local list = V.Eligible()
-  if #list == 0 then C.Print("vouch: nobody to vouch for. It's for people in a qualifying shared farm with you in the last 24 hours."); return end
+  if #list == 0 then C.Print("commend: nobody to commend. It's for people in a qualifying shared farm with you in the last 24 hours."); return end
   local opts = {}
-  for _, e in ipairs(list) do
-    for i, k in ipairs(V.KINDS) do opts[#opts + 1] = { e.who .. ": " .. k, { e.who, i } } end
-  end
-  if C.Cos and C.Cos.OpenList then C.Cos.OpenList(anchor, "Vouch for", opts, function(v) V.Give(v[1], v[2]) end) end
+  for _, e in ipairs(list) do opts[#opts + 1] = { e.who, e.who } end
+  if C.Cos and C.Cos.OpenList then C.Cos.OpenList(anchor, "Commend who?", opts, function(w) if C.Profile then C.Profile.Show(w) end end) end
 end
 V.Picker = picker
 
@@ -117,6 +146,33 @@ local function unitFor(name)
     if ok and un and not (issecretvalue and issecretvalue(un)) and lower(un) == k then return u end
   end
 end
+-- 1.5.2: a thumbs up (gold) or thumbs down (red, outlined and filled red) button
+function V.ThumbButton(parent, bad, w, h, label)
+  local b = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  b:SetSize(w, h)
+  if b.SetBackdrop then
+    b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
+    if bad then b:SetBackdropColor(0.40, 0.04, 0.03, 0.95); b:SetBackdropBorderColor(1, 0.18, 0.12, 1)
+    else b:SetBackdropColor(0.16, 0.12, 0.04, 0.95); b:SetBackdropBorderColor(0.95, 0.75, 0.30, 1) end
+  end
+  local ic = b:CreateTexture(nil, "ARTWORK"); ic:SetSize(h - 4, h - 4); ic:SetPoint("LEFT", 4, 0); ic:SetTexture(bad and DOWN or UP)
+  local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); t:SetPoint("LEFT", ic, "RIGHT", 4, 0); t:SetPoint("RIGHT", -4, 0)
+  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Bad") .. "|r") or ("|cffffd100" .. (label or "Commend") .. "|r"))
+  local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetPoint("TOPLEFT", 2, -2); hl:SetPoint("BOTTOMRIGHT", -2, 2)
+  hl:SetColorTexture(bad and 1 or 1, bad and 0.2 or 0.85, bad and 0.15 or 0.4, 0.18)
+  b:SetMotionScriptsWhileDisabled(true)
+  return b
+end
+-- the reasons list for one side (the bad list is red throughout)
+function V.OpenReasons(anchor, who, bad, onPick)
+  local opts = {}
+  for i, k in ipairs(V.KINDS) do
+    if V.IsBad(i) == bad then opts[#opts + 1] = { bad and (V.RED .. k .. "|r") or k, i } end
+  end
+  if C.Cos and C.Cos.OpenList then
+    C.Cos.OpenList(anchor, bad and (V.RED .. "Bad commendation for " .. who .. "|r") or ("Commend " .. who .. " for"), opts, onPick, bad and "bad" or nil)
+  end
+end
 local function makeCard(parent)
   local c = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   c:SetSize(CARD_W, CARD_H)
@@ -132,9 +188,9 @@ local function makeCard(parent)
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); c.name:SetPoint("TOP", c.box, "BOTTOM", 0, -14)
   if C.Cos then C.Cos.Font(c.name, 15, "OUTLINE") end
   c.stand = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.stand:SetPoint("TOP", c.name, "BOTTOM", 0, -3)
-  c.kindB = CreateFrame("Button", nil, c, "UIPanelButtonTemplate"); c.kindB:SetSize(CARD_W - 16, 20); c.kindB:SetPoint("BOTTOM", 0, 36)
-  local fs = c.kindB:GetFontString(); if fs then fs:SetFont(STANDARD_TEXT_FONT, 10, "") end
-  c.go = CreateFrame("Button", nil, c, "UIPanelButtonTemplate"); c.go:SetSize(CARD_W - 16, 24); c.go:SetPoint("BOTTOM", 0, 9)
+  c.up = V.ThumbButton(c, false, CARD_W - 16, 26, "Commend"); c.up:SetPoint("BOTTOM", 0, 40)
+  c.down = V.ThumbButton(c, true, CARD_W - 16, 26, "Bad"); c.down:SetPoint("BOTTOM", 0, 9)
+  c.result = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.result:SetPoint("BOTTOM", 0, 22); c.result:SetWidth(CARD_W - 12)
   return c
 end
 local function fillCard(c, e)
@@ -147,25 +203,27 @@ local function fillCard(c, e)
   c.name:SetText(e.who)
   c.stand:SetText(sname and ((C.Cos and C.Cos.StandingColor(sname) or "") .. sname .. "|r") or "|cff9d9d9dno Kina standing yet|r")
   local function paint()
-    c.kindB:SetText(V.KINDS[c.kind] .. "  v")
     if c.done then
-      c.go:SetText("|cff7CFC00Commended|r"); c.go:Disable(); c.kindB:Disable()
-      if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.82, 0.3, 1) end
+      c.up:Hide(); c.down:Hide(); c.result:Show()
+      if c.gaveKind and V.IsBad(c.gaveKind) then
+        c.result:SetText(V.RED .. "|T" .. DOWN .. ":16|t " .. V.KINDS[c.gaveKind] .. "|r")
+        if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.18, 0.12, 1) end
+      else
+        c.result:SetText(c.gaveKind and ("|cff7CFC00|T" .. UP .. ":16|t " .. V.KINDS[c.gaveKind] .. "|r") or "|cff9d9d9ddone today|r")
+        if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.82, 0.3, 1) end
+      end
     else
-      c.go:SetText("Commend"); c.go:Enable(); c.kindB:Enable()
+      c.up:Show(); c.down:Show(); c.result:Hide()
       if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.55, 0.45, 0.25, 1) end
     end
   end
+  c.gaveKind = nil
   if not c.preview and not V.CanVouch(e.who) then c.done = true end
-  c.kindB:SetScript("OnClick", function(self)
-    local opts = {}
-    for i, k in ipairs(V.KINDS) do opts[#opts + 1] = { k, i } end
-    if C.Cos then C.Cos.OpenList(self, "Commend " .. e.who .. " for", opts, function(i) c.kind = i; paint() end) end
-  end)
-  c.go:SetScript("OnClick", function()
-    if c.preview then c.done = true; paint(); return end
-    if V.Give(e.who, c.kind) then c.done = true; paint() end
-  end)
+  local function give(i)
+    if c.preview or V.Give(e.who, i) then c.done = true; c.gaveKind = i; paint() end
+  end
+  c.up:SetScript("OnClick", function(self) V.OpenReasons(self, e.who, false, give) end)
+  c.down:SetScript("OnClick", function(self) V.OpenReasons(self, e.who, true, give) end)
   paint()
 end
 function V.ShowPrompt(preview)

@@ -89,7 +89,7 @@ end
 -- opens a list; picking one shows it right away (preview only, nothing is saved).
 K.preview = {}
 local menu
-function K.OpenList(anchor, label, options, onPick)
+function K.OpenList(anchor, label, options, onPick, style)
   if menu and menu:IsShown() and menu.owner == anchor then menu:Hide(); return end
   if not menu then
     menu = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -109,15 +109,21 @@ function K.OpenList(anchor, label, options, onPick)
     if not r then
       r = CreateFrame("Button", nil, menu); r:SetSize(230, 18)
       r.t = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); r.t:SetPoint("LEFT", 6, 0)
-      r:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+      r.hl = r:CreateTexture(nil, "HIGHLIGHT"); r.hl:SetAllPoints()
       menu.rows[i] = r
     end
     r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * 18)
+    -- 1.5.2: "bad" lists (bad commendations) are red: red border, red tint, red highlight
+    if style == "bad" then r.hl:SetColorTexture(1, 0.15, 0.1, 0.30) else r.hl:SetColorTexture(1, 0.85, 0.4, 0.16) end
     r.t:SetText(opt[1])
     r:SetScript("OnClick", function() menu:Hide(); onPick(opt[2]) end)
     r:Show()
   end
   menu:SetSize(244, 34 + #options * 18)
+  if menu.SetBackdropBorderColor then
+    if style == "bad" then menu:SetBackdropColor(0.22, 0.03, 0.02, 0.97); menu:SetBackdropBorderColor(1, 0.18, 0.12, 1)
+    else menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96); menu:SetBackdropBorderColor(0.85, 0.68, 0.25, 1) end
+  end
   menu:ClearAllPoints(); menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
   menu:Show()
 end

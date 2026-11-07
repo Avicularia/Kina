@@ -603,12 +603,14 @@ function C.PauseSession(fromParty, want)
 end
 
 function C.StartSession(label, fromParty, campKey)
+  if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end -- 1.5.2: a new farm ends the theme
   if C.session then C.StopSession() end
   lastMoney = GetMoney()
   local now = C.Now()
   C.session = { start = now, last = now, label = label or (GetZoneText and GetZoneText()) or "session",
     startMoney = lastMoney, startCounts = C.Holdings(true), posted = {}, party = C.GroupMates and C.GroupMates() or {}, kills = 0, byNpc = {}, items = {}, money = {}, zone = GetZoneText and GetZoneText(),
-    limit = (C.settings.farmPreset or 0) > 0 and C.settings.farmPreset or nil }
+    limit = (C.settings.farmPreset or 0) > 0 and C.settings.farmPreset or nil,
+    char = C.charKey, class = UnitClass and select(2, UnitClass("player")) or nil } -- 1.5.2: which of my characters farmed
   C.db.activeSession = C.session
   seenLoot = {}
   C.PlayCue("start")
@@ -888,7 +890,7 @@ function C.StopSession(at, why, silent, fromParty)
   C.session = nil
   C.db.activeSession = nil
   if C.FarmEnded then pcall(C.FarmEnded, s) end
-  if not silent then C.PlayCue("stop") end
+  if not silent and not (C.Toast and C.Toast.ThemeAtFarmEnd and C.Toast.ThemeAtFarmEnd()) then C.PlayCue("stop") end
   -- 1.5.0: a qualifying group farm just ended: remind about vouching
   if not silent and s.sync then
     C.After(4, function()

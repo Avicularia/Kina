@@ -3,7 +3,7 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.5.1"
+C.version = "1.5.2"
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -333,6 +333,17 @@ function C.RestorePos(f, key, ...)
 end
 
 -- handle: an extra region that also starts a drag (a title strip above child widgets)
+-- 1.5.2: is this one of my own characters (any I've logged in with Kina on this account)?
+function C.IsMyChar(name)
+  local want = tostring(name or ""):match("^([^%-]+)")
+  if not want or want == "" then return false end
+  want = want:lower()
+  if UnitName and tostring(UnitName("player") or ""):lower() == want then return true end
+  for k in pairs(C.db and C.db.chars or {}) do
+    if tostring(k):match("^([^%-]+)"):lower() == want then return true end
+  end
+  return false
+end
 local dragFns = setmetatable({}, { __mode = "k" })
 -- 1.5.1: another piece of a window that moves it (the KINA banner sits over the title band)
 function C.DragBy(f, piece)

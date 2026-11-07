@@ -251,24 +251,30 @@ do
   if GameTooltip and GameTooltip.HookScript then GameTooltip:HookScript("OnTooltipCleared", function(self) added[self] = nil end) end
 end
 
--- 1.4.1 (Taylor's idea, Nov 6): the Kina theme, once, when you open the Ledger within
--- 10 minutes of a farm ending. Off by default (Settings > "Play the Kina theme after a
--- farm"); it plays on the Music channel and stops when the window closes.
+-- 1.4.1 / 1.5.2 (Taylor): the Kina theme plays when a farm ends (it replaces the short
+-- farm-end sting). Off by default (Settings > "Play the Kina theme when a farm ends").
+-- (1.5.2: it used to wait for the Ledger and looked at the OLDEST farm, so it never played.)
 do
-  local handle, playedFor
-  function T.ThemeOnLedger()
-    if not (C.settings and C.settings.themeMusic == true and PlaySoundFile) then return end
-    local last = C.db and C.db.sessions and C.db.sessions[1]
-    if not (last and last.stop and C.Now() - last.stop < 600) or playedFor == last.stop then return end
-    playedFor = last.stop
-    local ok, will, h = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\kina_theme.ogg", "Music")
-    if ok and will then handle = h end
-  end
+  local handle
   function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil end
+  function T.ThemeAtFarmEnd()
+    if not (C.settings and C.settings.themeMusic == true and PlaySoundFile) then return false end
+    T.ThemeStop()
+    local ok, will, h = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\kina_theme.ogg", "SFX")
+    if ok and will then handle = h; return true end
+    return false
+  end
+  function T.ThemeOnLedger() end -- kept for older callers
 end
 
 -- 1.5.0: someone vouched for you
-function T.Vouched(from, kindName, rep)
+function T.Vouched(from, kindName, rep, bad)
+  if bad then -- 1.5.2: a bad commendation
+    show({ head = "|cffff4030" .. from .. " gave you a bad commendation|r", sub = "|cffff4030" .. (kindName or "") .. "|r", gains = "|cffff4030" .. (rep or 0) .. " rep|r" })
+    if C.PlayCue then C.PlayCue("repdown") end
+    C.Print(string.format("|cffff4030%s gave you a bad commendation: %s (%d rep).|r", from, kindName or "", rep or 0))
+    return
+  end
   show({ head = from .. " vouched for you!", sub = "|cffffd100" .. (kindName or "") .. "|r", gains = "|cff4fc3f7+" .. (rep or 0) .. " rep|r" })
   if C.PlayCue then C.PlayCue("standing") end
   C.Print(string.format("|cff4fc3f7%s vouched for you: %s (+%d rep).|r", from, kindName or "", rep or 0))
@@ -285,6 +291,8 @@ function T.Preview(kind)
     show({ head = "Debt lapsed: Tri", sub = GREY .. "(preview)|r", gains = "|cffff4040-50 rep|r" }); if C.PlayCue then C.PlayCue("repdown") end
   elseif kind == "vouch" then
     T.Vouched("Tri", "Pulled their weight", 15)
+  elseif kind == "badvouch" then
+    T.Vouched("Tri", "Greedy with loot", -10, true)
   elseif kind == "paid" then
     show({ head = "Tri paid you 11s 26c", sub = GREY .. "(preview)|r", gains = "You " .. GREEN .. "+5 XP|r  ·  Tri " .. GREEN .. "+44 XP|r" }); if C.PlayCue then C.PlayCue("paid") end
   elseif kind == "settled" then

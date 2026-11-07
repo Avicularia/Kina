@@ -121,7 +121,7 @@ builders.you = function(p)
   local h4 = heading(rec, "Your record"); h4:SetPoint("TOPLEFT", 16, -14)
   -- 1.5.0: vouch for someone from a recent farm
   local vb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); vb:SetSize(130, 22); vb:SetPoint("TOPRIGHT", -14, -10)
-  vb:SetText("Vouch for someone"); vb:SetScript("OnClick", function(self) if C.Vouch then C.Vouch.Picker(self) end end)
+  vb:SetText("Commend someone"); vb:SetScript("OnClick", function(self) if C.Vouch then C.Vouch.Picker(self) end end)
   -- 1.5.1: look at someone else's Kina profile (your party first)
   local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); pb:SetSize(110, 22); pb:SetPoint("RIGHT", vb, "LEFT", -6, 0)
   pb:SetText("Party profiles"); pb:SetScript("OnClick", function(self) if C.Profile then C.Profile.Picker(self) end end)
@@ -175,8 +175,11 @@ builders.you = function(p)
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
       local stName = pv.ring or mm.standing or "Unproven"
-      local vn = C.Vouch and select(1, C.Vouch.Counts()) or 0
-      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep" .. (vn > 0 and ("  ·  " .. vn .. (vn == 1 and " vouch" or " vouches")) or "") .. "|r")
+      local vn, _, vbad = 0, nil, 0
+      if C.Vouch then vn, _, vbad = C.Vouch.Counts() end
+      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep|r"
+        .. (vn > 0 and ("  |T" .. C.Vouch.UP_ICON .. ":14|t|cffffd100" .. vn .. "|r") or "")
+        .. ((vbad or 0) > 0 and ("  |T" .. C.Vouch.DOWN_ICON .. ":14|t" .. C.Vouch.RED .. vbad .. "|r") or ""))
       -- (1.4.5: frames off by default, Taylor's call; Try > Bar frames still shows them)
       if pv.bars == "on" then cos.xpF:Show(); cos.stF:Show() else cos.xpF:Hide(); cos.stF:Hide() end
     end
@@ -398,5 +401,266 @@ builders.debts = function(p)
       else l:Hide() end
     end
     note:SetText(GREY .. "Pay opens a trade (stand next to them) and puts the money in; at a mailbox Kina can also pay by mail. Both Kinas confirm every payment.|r")
+  end
+end
+
+------------------------------------------------------------------ You > Commendations and You > Farm stats (1.5.2)
+-- Taylor: "which vouches I got and how many, who vouched for me (click a name to see what
+-- they gave me), a top 5 of who vouched for me most, and top 5 farm stats: which of my
+-- characters farmed and who with, with time". Two pages beside the overview, each a few
+-- clean boxes; everything is worked out from the event log and the farm history.
+local RED = "|cffff4030"
+local function first(n) return n and (tostring(n):match("^([^%-]+)") or tostring(n)) or "?" end
+local function hrs(secs)
+  secs = secs or 0
+  if secs < 3600 then return string.format("%d min", math.floor(secs / 60 + 0.5)) end
+  return string.format("%.1f h", secs / 3600)
+end
+local function icon(bad, size) return "|T" .. (bad and C.Vouch.DOWN_ICON or C.Vouch.UP_ICON) .. ":" .. (size or 14) .. "|t" end
+local function dateOf(t) return (date and date("%b %d", t)) or "" end
+
+-- every commendation in the log (the log is kept for good; the vouch list is pruned)
+function C.VouchStats()
+  local st = { got = 0, gotBad = 0, gave = 0, gaveBad = 0, byKind = {}, from = {}, list = {} }
+  local lines = C.db and C.db.log and C.db.log.lines or {}
+  local isBad = C.Vouch and C.Vouch.IsBad or function() return false end
+  for _, line in ipairs(lines) do
+    local e = line.e or ""
+    if e:find("|vouch|", 1, true) then
+      local f = {}
+      for v in (e .. "|"):gmatch("([^|]*)|") do f[#f + 1] = v end
+      local t, k = tonumber(f[1]) or 0, tonumber(f[5]) or 1
+      if f[3] == "got" then
+        local who = first(f[4])
+        local bad = isBad(k)
+        if bad then st.gotBad = st.gotBad + 1 else st.got = st.got + 1 end
+        st.byKind[k] = (st.byKind[k] or 0) + 1
+        local p = st.from[who]
+        if not p then p = { who = who, good = 0, bad = 0, items = {} }; st.from[who] = p; st.list[#st.list + 1] = p end
+        if bad then p.bad = p.bad + 1 else p.good = p.good + 1 end
+        table.insert(p.items, 1, { t = t, kind = k, rep = tonumber(f[7]) or 0 })
+        p.last = math.max(p.last or 0, t)
+      elseif f[3] == "gave" then
+        if isBad(k) then st.gaveBad = st.gaveBad + 1 else st.gave = st.gave + 1 end
+      end
+    end
+  end
+  table.sort(st.list, function(a, b)
+    if a.good ~= b.good then return a.good > b.good end
+    return (a.last or 0) > (b.last or 0)
+  end)
+  return st
+end
+
+-- farm totals per character of mine and per partner
+function C.FarmStats()
+  local chars, partners, cl, pl = {}, {}, {}, {}
+  local tot = { farms = 0, secs = 0, share = 0 }
+  local gains = C.Rep and C.Rep.History and C.Rep.History() or {}
+  local bySid = {}
+  for _, s in ipairs(C.db and C.db.sessions or {}) do
+    if type(s) == "table" and s.start and s.stop then
+      local secs = (s.result and s.result.secs) or math.max(0, s.stop - s.start - (s.pausedSecs or 0))
+      local share = 0
+      local ok, fr = pcall(C.Books.Farm, s, gains, bySid)
+      if ok and fr then share = fr.share or 0 end
+      if share <= 0 and not s.sync and s.result then share = s.result.total or 0 end
+      -- which of my characters: recorded since 1.5.2, else the one of mine in the split
+      local mine = s.char and first(s.char)
+      local inc = s.split and s.split.incomes or {}
+      if not mine then for n in pairs(inc) do if C.IsMyChar and C.IsMyChar(n) then mine = first(n) end end end
+      mine = mine or "(not recorded)"
+      local c = chars[mine]
+      if not c then c = { who = mine, farms = 0, secs = 0, share = 0, class = s.class }; chars[mine] = c; cl[#cl + 1] = c end
+      c.farms, c.secs, c.share = c.farms + 1, c.secs + secs, c.share + share
+      c.class = c.class or s.class
+      tot.farms, tot.secs, tot.share = tot.farms + 1, tot.secs + secs, tot.share + share
+      for n in pairs(inc) do
+        if not (C.IsMyChar and C.IsMyChar(n)) then
+          local k = first(n)
+          local p = partners[k]
+          if not p then p = { who = k, farms = 0, secs = 0 }; partners[k] = p; pl[#pl + 1] = p end
+          p.farms, p.secs = p.farms + 1, p.secs + secs
+        end
+      end
+      if not tot.best or (s.result and (s.result.perHour or 0) > (tot.best.perHour or 0)) then
+        if s.result and (s.result.perHour or 0) > 0 then tot.best = { label = s.label, perHour = s.result.perHour } end
+      end
+    end
+  end
+  table.sort(cl, function(a, b) return a.secs > b.secs end)
+  table.sort(pl, function(a, b) return a.secs > b.secs end)
+  return cl, pl, tot
+end
+
+-- a ranked row: rank, name, value on the right, and a thin bar under it
+local function rankRow(parent, i, w, clickable)
+  local r = CreateFrame(clickable and "Button" or "Frame", nil, parent)
+  r:SetSize(w, 34)
+  r.rank = text(r, "GameFontNormalLarge", "CENTER"); r.rank:SetPoint("LEFT", 0, 2); r.rank:SetWidth(22)
+  if C.Cos then C.Cos.Font(r.rank, 15, "OUTLINE") end
+  r.name = text(r, "GameFontHighlight"); r.name:SetPoint("TOPLEFT", 28, -3)
+  r.val = text(r, "GameFontHighlight", "RIGHT"); r.val:SetPoint("TOPRIGHT", -4, -3)
+  r.sub = text(r, "GameFontHighlightSmall", "RIGHT"); r.sub:SetPoint("TOPRIGHT", r.val, "BOTTOMRIGHT", 0, -2)
+  local tray = r:CreateTexture(nil, "BACKGROUND"); tray:SetPoint("BOTTOMLEFT", 28, 3); tray:SetPoint("BOTTOMRIGHT", -4, 3); tray:SetHeight(3)
+  tray:SetColorTexture(1, 1, 1, 0.06)
+  r.fill = r:CreateTexture(nil, "ARTWORK"); r.fill:SetPoint("BOTTOMLEFT", 28, 3); r.fill:SetHeight(3); r.fill:SetColorTexture(0.95, 0.75, 0.3, 0.85)
+  r.barW = w - 32
+  if clickable then
+    local hl = r:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.4, 0.08)
+    r.sel = r:CreateTexture(nil, "BACKGROUND", nil, -1); r.sel:SetAllPoints(); r.sel:SetColorTexture(0.85, 0.66, 0.25, 0.16); r.sel:Hide()
+  end
+  function r:Bar(frac) if frac and frac > 0 then self.fill:Show(); self.fill:SetWidth(math.max(2, self.barW * math.min(1, frac))) else self.fill:Hide() end end
+  return r
+end
+local RANK = { "|cffffd100", "|cffd9d9d9", "|cffd08a4a", "|cff9d9d9d", "|cff9d9d9d" }
+
+builders.youVouch = function(p)
+  -- left: totals and every kind
+  local L = box(p); L:SetPoint("TOPLEFT", 0, 0); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetWidth(330)
+  local h = heading(L, "Commendations received"); h:SetPoint("TOPLEFT", 16, -14)
+  local big = text(L, "GameFontNormalHuge"); big:SetPoint("TOPLEFT", 16, -40)
+  if C.Cos then C.Cos.Font(big, 26, "OUTLINE") end
+  local bigSub = text(L, "GameFontHighlightSmall"); bigSub:SetPoint("TOPLEFT", big, "BOTTOMLEFT", 0, -4)
+  local kindRows = {}
+  for i = 1, 8 do
+    local y = -100 - (i - 1) * 24 - (i > 4 and 12 or 0)
+    local l = text(L, "GameFontHighlight"); l:SetPoint("TOPLEFT", 16, y)
+    local n = text(L, "GameFontHighlight", "RIGHT"); n:SetPoint("TOPRIGHT", -16, y)
+    kindRows[i] = { l, n }
+  end
+  local gaveT = text(L, "GameFontHighlightSmall"); gaveT:SetPoint("BOTTOMLEFT", 16, 14); gaveT:SetPoint("RIGHT", L, "RIGHT", -16, 0)
+
+  -- middle: top 5 who commended you (click one)
+  local M = box(p); M:SetPoint("TOPLEFT", L, "TOPRIGHT", 12, 0); M:SetPoint("BOTTOMLEFT", L, "BOTTOMRIGHT", 12, 0); M:SetWidth(330)
+  local h2 = heading(M, "Who commended you most"); h2:SetPoint("TOPLEFT", 16, -14)
+  local h2s = text(M, "GameFontHighlightSmall"); h2s:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -3); h2s:SetText(GREY .. "click a name to see what they gave you|r")
+  local top = {}
+  for i = 1, 5 do
+    local r = rankRow(M, i, 298, true); r:SetPoint("TOPLEFT", 16, -56 - (i - 1) * 40); top[i] = r
+  end
+  local more = text(M, "GameFontHighlightSmall"); more:SetPoint("BOTTOMLEFT", 16, 14)
+  local empty = text(M, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 16, -60); empty:SetWidth(290)
+  if empty.SetWordWrap then empty:SetWordWrap(true) end
+
+  -- right: what the selected person gave you
+  local R = box(p); R:SetPoint("TOPLEFT", M, "TOPRIGHT", 12, 0); R:SetPoint("BOTTOMRIGHT", 0, 0)
+  local h3 = heading(R, ""); h3:SetPoint("TOPLEFT", 16, -14)
+  local h3s = text(R, "GameFontHighlightSmall"); h3s:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -3)
+  local prof = CreateFrame("Button", nil, R, "UIPanelButtonTemplate"); prof:SetSize(96, 20); prof:SetPoint("TOPRIGHT", -12, -10); prof:SetText("Profile")
+  local items = {}
+  for i = 1, 12 do
+    local y = -56 - (i - 1) * 22
+    local d = text(R, "GameFontHighlightSmall"); d:SetPoint("TOPLEFT", 16, y); d:SetWidth(52)
+    local k = text(R, "GameFontHighlight"); k:SetPoint("TOPLEFT", 70, y + 1)
+    local rp = text(R, "GameFontHighlightSmall", "RIGHT"); rp:SetPoint("TOPRIGHT", -16, y)
+    k:SetPoint("RIGHT", rp, "LEFT", -6, 0)
+    items[i] = { d, k, rp }
+  end
+
+  p.refresh = function()
+    local st = C.VouchStats()
+    local V = C.Vouch
+    big:SetText(icon(false, 26) .. " |cffffd100" .. st.got .. "|r     " .. icon(true, 26) .. " " .. RED .. st.gotBad .. "|r")
+    bigSub:SetText(GREY .. "from " .. #st.list .. (#st.list == 1 and " player" or " players") .. "|r")
+    for i = 1, 8 do
+      local bad = V.IsBad(i)
+      local n = st.byKind[i] or 0
+      kindRows[i][1]:SetText(icon(bad) .. " " .. (bad and (RED .. V.KINDS[i] .. "|r") or V.KINDS[i]))
+      kindRows[i][2]:SetText(n > 0 and ((bad and RED or GOLD) .. n .. "|r") or (GREY .. "0|r"))
+    end
+    gaveT:SetText(GREY .. "You've given " .. st.gave .. " " .. icon(false, 12) .. "  and  " .. st.gaveBad .. " " .. icon(true, 12) .. "|r")
+    -- top 5
+    local maxN = 1
+    for _, x in ipairs(st.list) do maxN = math.max(maxN, x.good) end
+    if not p.sel or not st.from[p.sel] then p.sel = st.list[1] and st.list[1].who end
+    for i = 1, 5 do
+      local r, x = top[i], st.list[i]
+      if x then
+        r:Show()
+        r.rank:SetText(RANK[i] .. i .. "|r"); r.name:SetText(x.who)
+        r.val:SetText(GOLD .. x.good .. "|r " .. icon(false, 13) .. (x.bad > 0 and ("  " .. RED .. x.bad .. "|r " .. icon(true, 13)) or ""))
+        r.sub:SetText(GREY .. "last " .. dateOf(x.last) .. "|r")
+        r:Bar(x.good / maxN)
+        if x.who == p.sel then r.sel:Show() else r.sel:Hide() end
+        r:SetScript("OnClick", function() p.sel = x.who; p.refresh() end)
+      else r:Hide() end
+    end
+    more:SetText(#st.list > 5 and (GREY .. "+" .. (#st.list - 5) .. " more players|r") or "")
+    empty:SetText(#st.list == 0 and (GREY .. "No commendations yet. When a group farm ends, the people you farmed with can commend you.|r") or "")
+    -- the selected person
+    local x = p.sel and st.from[p.sel]
+    if x then
+      h3:SetText("From " .. x.who); h3s:SetText(GOLD .. x.good .. "|r " .. icon(false, 12) .. (x.bad > 0 and ("   " .. RED .. x.bad .. "|r " .. icon(true, 12)) or "") .. GREY .. "   newest first|r")
+      prof:Show(); prof:SetScript("OnClick", function() if C.Profile then C.Profile.Show(x.who) end end)
+    else h3:SetText("From ..."); h3s:SetText(""); prof:Hide() end
+    for i = 1, 12 do
+      local it = x and x.items[i]
+      local row = items[i]
+      if it then
+        local bad = V.IsBad(it.kind)
+        row[1]:SetText(GREY .. dateOf(it.t) .. "|r")
+        row[2]:SetText(icon(bad) .. " " .. (bad and (RED .. (V.KINDS[it.kind] or "?") .. "|r") or (V.KINDS[it.kind] or "?")))
+        row[3]:SetText(it.rep ~= 0 and ((it.rep > 0 and ("|cff4fc3f7+" .. it.rep) or (RED .. it.rep)) .. " rep|r") or "")
+      else row[1]:SetText(""); row[2]:SetText(""); row[3]:SetText("") end
+    end
+  end
+end
+
+builders.youFarms = function(p)
+  local S = box(p); S:SetPoint("TOPLEFT", 0, 0); S:SetPoint("TOPRIGHT", 0, 0); S:SetHeight(64)
+  local sums = {}
+  for i = 1, 4 do
+    local v = text(S, "GameFontNormalLarge"); if C.Cos then C.Cos.Font(v, 18, "OUTLINE") end
+    local l = text(S, "GameFontHighlightSmall")
+    sums[i] = { v, l }
+  end
+  local L = box(p); L:SetPoint("TOPLEFT", S, "BOTTOMLEFT", 0, -12); L:SetPoint("BOTTOMLEFT", 0, 0); L:SetPoint("RIGHT", p, "CENTER", -6, 0)
+  local hl = heading(L, "Your characters"); hl:SetPoint("TOPLEFT", 16, -14)
+  local hls = text(L, "GameFontHighlightSmall"); hls:SetPoint("TOPLEFT", hl, "BOTTOMLEFT", 0, -3); hls:SetText(GREY .. "by time farmed|r")
+  local R = box(p); R:SetPoint("TOPLEFT", S, "BOTTOM", 6, -12); R:SetPoint("BOTTOMRIGHT", 0, 0)
+  local hr = heading(R, "Farmed with most"); hr:SetPoint("TOPLEFT", 16, -14)
+  local hrs_ = text(R, "GameFontHighlightSmall"); hrs_:SetPoint("TOPLEFT", hr, "BOTTOMLEFT", 0, -3); hrs_:SetText(GREY .. "by time together  ·  click for their profile|r")
+  local cRows, pRows = {}, {}
+  for i = 1, 5 do
+    local a = rankRow(L, i, 10, false); a:SetPoint("TOPLEFT", 16, -56 - (i - 1) * 44); a:SetPoint("RIGHT", L, "RIGHT", -16, 0); cRows[i] = a
+    local b = rankRow(R, i, 10, true); b:SetPoint("TOPLEFT", 16, -56 - (i - 1) * 44); b:SetPoint("RIGHT", R, "RIGHT", -16, 0); pRows[i] = b
+  end
+  local note = text(L, "GameFontHighlightSmall"); note:SetPoint("BOTTOMLEFT", 16, 14); note:SetPoint("RIGHT", L, "RIGHT", -16, 0)
+  local pnote = text(R, "GameFontHighlightSmall"); pnote:SetPoint("BOTTOMLEFT", 16, 14)
+  p.refresh = function()
+    local cl, pl, tot = C.FarmStats()
+    local w = (S:GetWidth() or 1000) - 32
+    local vals = {
+      { tostring(tot.farms), "farms" }, { hrs(tot.secs), "farmed" }, { money(tot.share), "your share" },
+      { tot.best and (C.Money(math.floor(tot.best.perHour)) .. GREY .. "/h|r") or (GREY .. "-|r"), "best farm" .. (tot.best and tot.best.label and (": " .. tot.best.label) or "") },
+    }
+    for i, s in ipairs(sums) do
+      s[1]:ClearAllPoints(); s[1]:SetPoint("TOPLEFT", 16 + (i - 1) * (w / 4), -12); s[1]:SetText(GOLD .. vals[i][1] .. "|r")
+      s[2]:ClearAllPoints(); s[2]:SetPoint("TOPLEFT", s[1], "BOTTOMLEFT", 0, -4); s[2]:SetText(GREY .. vals[i][2] .. "|r"); s[2]:SetWidth(w / 4 - 12)
+    end
+    local function fill(rows, list, isChar)
+      local maxS = 1
+      for _, x in ipairs(list) do maxS = math.max(maxS, x.secs) end
+      for i = 1, 5 do
+        local r, x = rows[i], list[i]
+        if x then
+          r:Show()
+          r.barW = (r:GetWidth() or 300) - 32
+          r.rank:SetText(RANK[i] .. i .. "|r")
+          local cc = isChar and x.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[x.class]
+          r.name:SetText(cc and string.format("|cff%02x%02x%02x%s|r", cc.r * 255, cc.g * 255, cc.b * 255, x.who) or x.who)
+          r.val:SetText(hrs(x.secs))
+          r.sub:SetText(GREY .. x.farms .. (x.farms == 1 and " farm" or " farms") .. (isChar and ("  ·  " .. money(x.share)) or "") .. "|r")
+          r:Bar(x.secs / maxS)
+          if not isChar then r:SetScript("OnClick", function() if C.Profile then C.Profile.Show(x.who) end end) end
+        else r:Hide() end
+      end
+    end
+    fill(cRows, cl, true); fill(pRows, pl, false)
+    local unrec = false
+    for _, c in ipairs(cl) do if c.who == "(not recorded)" then unrec = true end end
+    note:SetText(unrec and (GREY .. "(not recorded): solo farms from before 1.5.2, when Kina didn't note the character.|r") or "")
+    pnote:SetText(#pl == 0 and (GREY .. "No group farms yet.|r") or (#pl > 5 and (GREY .. "+" .. (#pl - 5) .. " more|r") or ""))
   end
 end
