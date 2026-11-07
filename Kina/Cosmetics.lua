@@ -78,7 +78,7 @@ function K.Picker(parent, label, options, onPick)
     if menu and menu:IsShown() and menu.owner == self then menu:Hide(); return end
     if not menu then
       menu = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-      menu:SetFrameStrata("DIALOG"); menu:SetClampedToScreen(true)
+      menu:SetFrameStrata("TOOLTIP"); menu:SetClampedToScreen(true) -- (1.4.3: above the Kina window, which sits at FULLSCREEN_DIALOG)
       if menu.SetBackdrop then
         menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
         menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96); menu:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
