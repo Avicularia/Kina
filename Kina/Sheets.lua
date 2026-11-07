@@ -203,7 +203,7 @@ builders.you = function(p)
     local r = C.YouRecord and C.YouRecord() or {}
     local rows = {
       { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h%s)", r.hours,
-        (C.Rep and C.Rep.XPPerHour) and (function() local v = C.Rep.XPPerHour(7); return v and string.format(", %d XP/h this week", v) or "" end)() or "") .. "|r") or "") },
+        (C.GameXPWeek and C.GameXPWeek()) and string.format(", %s XP/h this week", BreakUpLargeNumbers and BreakUpLargeNumbers(C.GameXPWeek()) or C.GameXPWeek()) or "") .. "|r") or "") },
       { "Your share of farms", money(r.share) },
       { "Debts you paid" .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " pending|r") or ""), tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
       { "Paid to you" .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " pending|r") or ""), tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")

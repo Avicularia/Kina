@@ -1432,3 +1432,47 @@ do
     end
   end
 end
+
+-- 1.4.6 (Taylor): XP per hour means the GAME's experience, not Kina XP. Every farm counts
+-- the character XP you gain while it runs (mob kills, quests turned in, across level-ups),
+-- shown as XP/h on the widget and in the Session list, and as "XP/h this week" on You.
+do
+  local lastXP, lastMax, lastLvl
+  local function snapshot() lastXP, lastMax, lastLvl = UnitXP and UnitXP("player") or 0, UnitXPMax and UnitXPMax("player") or 0, UnitLevel and UnitLevel("player") or 0 end
+  C.On("PLAYER_ENTERING_WORLD", snapshot)
+  C.On("PLAYER_XP_UPDATE", function(_, unit)
+    if unit and unit ~= "player" then return end
+    local xp, mx, lv = UnitXP("player") or 0, UnitXPMax("player") or 0, UnitLevel("player") or 0
+    if lastXP then
+      local gained = (lv > (lastLvl or lv)) and ((lastMax or 0) - (lastXP or 0) + xp) or (xp - lastXP)
+      local s = C.session
+      if s and gained > 0 and gained < 1e7 and not s.paused then s.gameXP = (s.gameXP or 0) + gained end
+    end
+    lastXP, lastMax, lastLvl = xp, mx, lv
+  end)
+  function C.FmtXPH(n)
+    if not n then return "" end
+    if n >= 1000 then return string.format("%.1fk XP/h", n / 1000) end
+    return string.format("%d XP/h", n)
+  end
+  function C.GameXPPerHour(s)
+    if not s or not s.gameXP then return nil end
+    local secs = (s.stop or C.Now()) - (s.start or C.Now()) - (s.pausedSecs or 0)
+    if secs < 120 then return nil end
+    return math.floor(s.gameXP * 3600 / secs)
+  end
+  function C.GameXPWeek()
+    local xp, secs = 0, 0
+    local since = C.Now() - 7 * 86400
+    local function add(s)
+      if s and s.gameXP and (s.start or 0) >= since then
+        xp = xp + s.gameXP
+        secs = secs + math.max(0, (s.stop or C.Now()) - (s.start or 0) - (s.pausedSecs or 0))
+      end
+    end
+    for _, s in ipairs(C.db.sessions or {}) do add(s) end
+    add(C.session)
+    if secs < 600 then return nil end
+    return math.floor(xp * 3600 / secs)
+  end
+end

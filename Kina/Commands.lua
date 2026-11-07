@@ -102,6 +102,7 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "kph" then
     local n = tonumber(rest); if n and n > 0 then C.settings.killsPerHour = n; C.Print("default kills/hour = " .. n) end
   elseif cmd == "hud" or cmd == "widget" then C.ShowWidget(not C.settings.hudShown)
+  elseif cmd == "preview" then if C.Toast and C.Toast.Preview then C.Toast.Preview(rest) end
   elseif cmd == "sound" then
     C.settings.farmSound = (C.settings.farmSound == false)
     C.Print("farm fanfares: " .. (C.settings.farmSound and "on" or "off"))

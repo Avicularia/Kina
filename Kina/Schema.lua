@@ -69,7 +69,7 @@ local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, c
   req = { "sid" } }
 local session = { t = T, f = { start = N, stop = N, last = N, label = S, kills = N, money = NUMMAP, items = NUMMAP, byNpc = NUMMAP,
   party = list({ t = T, f = { name = S } }), split = split, sync = sync, log = list(T), g = T, posted = NUMMAP, startCounts = NUMMAP,
-  paused = B, pauseAt = N, pausedSecs = N, endGold = N, endItems = N, endUsed = N, endWorth = N, startMoney = N, limit = N,
+  paused = B, pauseAt = N, pausedSecs = N, gameXP = N, endGold = N, endItems = N, endUsed = N, endWorth = N, startMoney = N, limit = N,
   result = { t = T, f = { secs = N, cash = N, items = N, used = N, total = N, perHour = N, coin = N, pickpocket = N, vendor = N,
     spent = N, kills = N, net = B, income = B } },
   gview = { t = T, f = { secs = N, net = N, coin = N, items = N, used = N, kills = N, paused = B } }, why = S, zone = S, skins = N, nodes = N,

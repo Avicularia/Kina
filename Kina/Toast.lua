@@ -192,7 +192,7 @@ do
       return (g > 0 and (g .. "g ") or "") .. sv .. "s"
     end
     local where = (GetInstanceInfo and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
-    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), math.floor(math.min(C.Rep and C.Rep.FARM_MAX or 120, math.floor(secs / 60)) * 3600 / secs), where)
+    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), (C.GameXPPerHour and C.GameXPPerHour(s)) or 0, where)
     local chan = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
     pcall(SendChatMessage, msg, chan)
   end
@@ -265,4 +265,23 @@ do
     if ok and will then handle = h end
   end
   function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil end
+end
+
+-- 1.4.6: /kina preview levelup | repup | repdown | paid | settled: see and hear a toast
+-- without changing anything
+function T.Preview(kind)
+  kind = tostring(kind or ""):lower()
+  if kind == "levelup" or kind == "level" then
+    show({ head = "Kina level XII!", sub = GREY .. "(preview)|r", gains = GREEN .. "28,350 XP|r" }); if C.PlayCue then C.PlayCue("level") end
+  elseif kind == "repup" or kind == "standing" then
+    show({ head = "Standing: Honored!", sub = GREY .. "(preview)|r", gains = "|cff4fc3f71,000 rep|r" }); if C.PlayCue then C.PlayCue("standing") end
+  elseif kind == "repdown" or kind == "lapsed" then
+    show({ head = "Debt lapsed: Tri", sub = GREY .. "(preview)|r", gains = "|cffff4040-50 rep|r" }); if C.PlayCue then C.PlayCue("repdown") end
+  elseif kind == "paid" then
+    show({ head = "Tri paid you 11s 26c", sub = GREY .. "(preview)|r", gains = "You " .. GREEN .. "+5 XP|r  ·  Tri " .. GREEN .. "+44 XP|r" }); if C.PlayCue then C.PlayCue("paid") end
+  elseif kind == "settled" then
+    show({ head = "Tri paid you 11s 26c", sub = GREY .. "(preview)|r", gains = "You " .. GREEN .. "+5 XP|r", closed = true }); if C.PlayCue then C.PlayCue("settled") end
+  else
+    C.Print("/kina preview levelup | repup | repdown | paid | settled")
+  end
 end

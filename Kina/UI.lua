@@ -1203,7 +1203,7 @@ tabs.Session = function()
   local function add(label, r, live, ref)
     out[#out + 1] = { slog = ref, cols = { (live and "|cff7CFC00" or "") .. label .. (live and "|r" or ""), string.format("%d min", math.floor(r.secs / 60)),
       C.Money(r.total), C.Money(r.perHour), string.format("coin %s, pickpocket %s, vendor %s, items %s", C.Money(r.coin),
-      C.Money(r.pickpocket), C.Money(r.vendor), C.Money(r.items)), tostring(r.kills) },
+      C.Money(r.pickpocket), C.Money(r.vendor), C.Money(r.items)), tostring(r.kills) .. ((ref and C.GameXPPerHour and C.GameXPPerHour(ref)) and ("  |cff9d9d9d" .. C.FmtXPH(C.GameXPPerHour(ref)) .. "|r") or "") },
       sort = { label, r.secs, r.total, r.perHour, r.coin + r.pickpocket, r.kills } }
   end
   local s = C.SessionSummary()
