@@ -1154,6 +1154,8 @@ if C.PUBLIC then
           elseif g.kind == "pay" then what = string.format("paid %s %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.paidOff), g.via)
           elseif g.kind == "forgive" then what = string.format("forgave %s's debt", C.Books.Name(g.who))
           elseif g.kind == "extend" then what = string.format("gave %s more time", C.Books.Name(g.who))
+          elseif g.kind == "vouched" then what = string.format("|cff4fc3f7%s vouched for you: %s (+%d rep)|r", C.Books.Name(g.who), C.Vouch and C.Vouch.KINDS[g.vk or 1] or "", g.rep or 0)
+          elseif g.kind == "vouchgave" then what = string.format("vouched for %s", C.Books.Name(g.who))
           elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           elseif g.kind == "lapsed" then what = string.format("%sa debt to %s lapsed unpaid (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           else what = string.format("%s paid you %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.cameIn), g.via) end
@@ -2791,26 +2793,20 @@ local function build()
       ui.ironTitle = title
       -- 1.4.0: the brand: forged title plate, the K coin, KINA in Cinzel and a version chip
       if C.Cos then
+        -- 1.5.0 (Taylor: the plate was opaque and the font basic): no plate box any more.
+        -- A soft dark shade so it reads on the iron, the K coin, and a pre-rendered KINA
+        -- wordmark (Cinzel, metallic gold with a bevel and outline) in Media/Cos/kina_word.
         local plateF = CreateFrame("Frame", nil, f)
-        -- (1.4.2: the coin sits in the plate's socket; the plate is dimmed so the gold
-        -- KINA reads on it; a Try button switches the plate off to compare)
-        plateF:SetSize(240, 60); plateF:SetPoint("TOP", f, "TOP", 0, 28); plateF:SetFrameLevel(f:GetFrameLevel() + 45)
-        local plate = plateF:CreateTexture(nil, "ARTWORK"); plate:SetAllPoints(); plate:SetTexture(C.Cos.Tex("title_plate"))
-        plate:SetVertexColor(0.42, 0.40, 0.38)
-        local coin = plateF:CreateTexture(nil, "OVERLAY"); coin:SetSize(40, 40); coin:SetPoint("CENTER", plateF, "LEFT", 27, 1)
+        plateF:SetSize(250, 56); plateF:SetPoint("TOP", f, "TOP", 0, 24); plateF:SetFrameLevel(f:GetFrameLevel() + 45)
+        local shade = plateF:CreateTexture(nil, "BACKGROUND"); shade:SetSize(270, 68); shade:SetPoint("CENTER", 0, 0)
+        shade:SetTexture(C.Cos.Tex("kina_shade"))
+        local coin = plateF:CreateTexture(nil, "OVERLAY"); coin:SetSize(42, 42); coin:SetPoint("CENTER", plateF, "CENTER", -80, 0)
         coin:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo")
-        local word = plateF:CreateFontString(nil, "OVERLAY"); C.Cos.Font(word, 24, "OUTLINE"); word:SetPoint("LEFT", plateF, "LEFT", 62, 1)
-        word:SetText("KINA"); word:SetTextColor(1, 0.82, 0.38)
-        if word.SetShadowOffset then word:SetShadowOffset(2, -2); word:SetShadowColor(0, 0, 0, 0.9) end
-        local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE"); ver:SetPoint("LEFT", word, "RIGHT", 8, -2)
-        ver:SetText("|cffffe9a8v" .. C.version .. "|r")
+        local word = plateF:CreateTexture(nil, "ARTWORK"); word:SetSize(160, 40); word:SetPoint("CENTER", plateF, "CENTER", -2, 0)
+        word:SetTexture(C.Cos.Tex("kina_word"))
+        local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE"); ver:SetPoint("BOTTOMLEFT", word, "BOTTOMRIGHT", -14, 6)
+        ver:SetText("|cffc9b27av" .. C.version .. "|r")
         title:Hide()
-        if C.Cos.Picker then
-          local tp = C.Cos.Picker(plateF, "Title plate", { { "Plate (dimmed)", "dim" }, { "Plate (bright)", "bright" }, { "No plate", "off" } }, function(v)
-            if v == "off" then plate:Hide() else plate:Show(); if v == "bright" then plate:SetVertexColor(1, 1, 1) else plate:SetVertexColor(0.42, 0.40, 0.38) end end
-          end)
-          tp:SetPoint("LEFT", plateF, "RIGHT", 2, -4)
-        end
       end
     end
     -- the shelf the tabs stand on (A-36), so they don't float
@@ -2837,6 +2833,7 @@ local function build()
   f:HookScript("OnShow", function() f:SetAlpha(1); pcall(f.EnableMouse, f, true); hideLater = false end)
   C.On("PLAYER_REGEN_ENABLED", function() if hideLater then hideLater = false; f:Hide(); f:SetAlpha(1); pcall(f.EnableMouse, f, true) end end)
   ui.frame = f
+  if C.Cos and C.Cos.Glow then pcall(C.Cos.Glow, f, 16) end -- 1.5.0: standing glow on the window
   ui.tabButtons = {}
   local x = 10
   for _, name in ipairs(tabOrder) do

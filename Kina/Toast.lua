@@ -267,6 +267,12 @@ do
   function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil end
 end
 
+-- 1.5.0: someone vouched for you
+function T.Vouched(from, kindName, rep)
+  show({ head = from .. " vouched for you!", sub = "|cffffd100" .. (kindName or "") .. "|r", gains = "|cff4fc3f7+" .. (rep or 0) .. " rep|r" })
+  if C.PlayCue then C.PlayCue("standing") end
+  C.Print(string.format("|cff4fc3f7%s vouched for you: %s (+%d rep).|r", from, kindName or "", rep or 0))
+end
 -- 1.4.6: /kina preview levelup | repup | repdown | paid | settled: see and hear a toast
 -- without changing anything
 function T.Preview(kind)
@@ -277,6 +283,8 @@ function T.Preview(kind)
     show({ head = "Standing: Honored!", sub = GREY .. "(preview)|r", gains = "|cff4fc3f71,000 rep|r" }); if C.PlayCue then C.PlayCue("standing") end
   elseif kind == "repdown" or kind == "lapsed" then
     show({ head = "Debt lapsed: Tri", sub = GREY .. "(preview)|r", gains = "|cffff4040-50 rep|r" }); if C.PlayCue then C.PlayCue("repdown") end
+  elseif kind == "vouch" then
+    T.Vouched("Tri", "Pulled their weight", 15)
   elseif kind == "paid" then
     show({ head = "Tri paid you 11s 26c", sub = GREY .. "(preview)|r", gains = "You " .. GREEN .. "+5 XP|r  ·  Tri " .. GREEN .. "+44 XP|r" }); if C.PlayCue then C.PlayCue("paid") end
   elseif kind == "settled" then

@@ -119,13 +119,16 @@ builders.you = function(p)
   -- bottom right: your record
   local rec = box(p); rec:SetPoint("TOPLEFT", profBox, "TOPRIGHT", 12, 0); rec:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0, 0)
   local h4 = heading(rec, "Your record"); h4:SetPoint("TOPLEFT", 16, -14)
+  -- 1.5.0: vouch for someone from a recent farm
+  local vb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); vb:SetSize(130, 22); vb:SetPoint("TOPRIGHT", -14, -10)
+  vb:SetText("Vouch for someone"); vb:SetScript("OnClick", function(self) if C.Vouch then C.Vouch.Picker(self) end end)
   -- two columns of four, so the record fits the smallest window
   local recL, recR = {}, {}
   local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -36); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
   local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -36); colB:SetPoint("BOTTOMRIGHT", -16, 10)
-  for i = 1, 8 do
-    local col = i <= 4 and colA or colB
-    local y = -((i - 1) % 4) * 24
+  for i = 1, 10 do -- 1.5.0: two columns of five (labels were being cut off)
+    local col = i <= 5 and colA or colB
+    local y = -((i - 1) % 5) * 24
     local l = text(col, "GameFontHighlightSmall"); l:SetPoint("TOPLEFT", 0, y)
     local r = text(col, "GameFontHighlight", "RIGHT"); r:SetPoint("TOPRIGHT", 0, y)
     l:SetPoint("RIGHT", r, "LEFT", -6, 0)
@@ -155,7 +158,7 @@ builders.you = function(p)
           opts[#opts + 1] = { "Badge: " .. x[1], { "badge", x[2] } }
         end
         for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
-        local pr = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; redo() end)
+        local pr = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; if v[1] == "ring" and C.Cos.UpdateGlows then C.Cos.UpdateGlows() end; redo() end)
         pr:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
         local pf = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
         pf:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
@@ -169,7 +172,8 @@ builders.you = function(p)
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       C.Cos.UpdatePortrait(cos, pv.ring or mm.standing, pv.level or m.level, recruits, starter)
       local stName = pv.ring or mm.standing or "Unproven"
-      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep|r")
+      local vn = C.Vouch and select(1, C.Vouch.Counts()) or 0
+      standT:SetText(C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (mm.rep or 0) .. " rep" .. (vn > 0 and ("  ·  " .. vn .. (vn == 1 and " vouch" or " vouches")) or "") .. "|r")
       -- (1.4.5: frames off by default, Taylor's call; Try > Bar frames still shows them)
       if pv.bars == "on" then cos.xpF:Show(); cos.stF:Show() else cos.xpF:Hide(); cos.stF:Hide() end
     end
@@ -186,7 +190,7 @@ builders.you = function(p)
     local pts, at, nxt = m.rep or 0, m.standingAt or 0, m.standingNext
     if nxt then stBar:Set(math.max(0, math.min(1, (pts - at) / math.max(1, nxt - at))), string.format("%s  %d / %d", m.standing or "Unproven", pts, nxt))
     else stBar:Set(pts < 0 and 0 or 1, string.format("%s  %d", m.standing or "Unproven", pts)) end
-    stNote:SetText(GREY .. (pts < 0 and "Pay what you owe on time to climb back. " or "Pay debts fast (+rep), farm together (+5 a farm); a lapsed debt costs 50. ") .. "Unverified until the Kina server checks both logs.|r")
+    stNote:SetText(GREY .. (pts < 0 and "Pay what you owe on time to climb back. " or "Pay debts fast, farm together (+5), get vouched (+15). A lapsed debt costs 50.") .. "|r")
     -- professions
     local list = {}
     for n, sk in pairs(me.profs or {}) do if C.TradeSkill and C.TradeSkill(n) then list[#list + 1] = { n, sk } end end
@@ -202,12 +206,13 @@ builders.you = function(p)
     -- record
     local r = C.YouRecord and C.YouRecord() or {}
     local rows = {
-      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h%s)", r.hours,
-        (C.GameXPWeek and C.GameXPWeek()) and string.format(", %s XP/h this week", BreakUpLargeNumbers and BreakUpLargeNumbers(C.GameXPWeek()) or C.GameXPWeek()) or "") .. "|r") or "") },
+      { "Shared farms", tostring(r.farms or 0) .. (r.hours and r.hours > 0 and (GREY .. string.format("  (%.1f h)", r.hours) .. "|r") or "") },
+      { "XP/h this week", (C.GameXPWeek and C.GameXPWeek()) and (BreakUpLargeNumbers and BreakUpLargeNumbers(C.GameXPWeek()) or tostring(C.GameXPWeek())) or (GREY .. "none yet|r") },
       { "Your share of farms", money(r.share) },
-      { "Debts you paid" .. ((r.paidPend or 0) > 0 and (ORANGE .. " +" .. r.paidPend .. " pending|r") or ""), tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
-      { "Paid to you" .. ((r.recvPend or 0) > 0 and (ORANGE .. " +" .. r.recvPend .. " pending|r") or ""), tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
+      { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
+      { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
         .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or "") },
+      { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r") },
       { "Debts you forgave", tostring(r.forgaveN or 0) },
       { "Forgiven for you", tostring(r.forgivenN or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },

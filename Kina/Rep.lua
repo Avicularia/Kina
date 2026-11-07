@@ -137,6 +137,15 @@ function R.Replay(lines, st, gains)
       local got = st.share and capped("extend:" .. day(t), R.EXTEND_XP * 3, R.EXTEND_XP) or 0
       st.xp = st.xp + got
       if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.EXTEND_XP, kind = "extend", who = f[4] or "?" } end
+    elseif kind == "vouch" and f[3] == "got" then
+      -- 1.5.0: someone vouched for me (the rep was set when it arrived)
+      local rp = tonumber(f[7]) or 0
+      st.rep = st.rep + rp
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "vouched", who = f[4] or "?", rep = rp, vk = tonumber(f[5]) } end
+    elseif kind == "vouch" and f[3] == "gave" then
+      local got = st.share and capped("vouch:" .. day(t), 15, 5) or 0
+      st.xp = st.xp + got
+      if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = 5, kind = "vouchgave", who = f[4] or "?" } end
     elseif kind == "refused" then
       -- 1.3.0: I turned down a full payment and the debt ran out: -50, -100 if again within 30 days
       local hit = (st.lastRefused and t - st.lastRefused < 30 * DAY) and -100 or -50

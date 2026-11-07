@@ -102,6 +102,11 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "kph" then
     local n = tonumber(rest); if n and n > 0 then C.settings.killsPerHour = n; C.Print("default kills/hour = " .. n) end
   elseif cmd == "hud" or cmd == "widget" then C.ShowWidget(not C.settings.hudShown)
+  elseif cmd == "vouch" then
+    local who, k = rest:match("^(%S+)%s*(%d*)$")
+    if who and C.Vouch then C.Vouch.Give(who, tonumber(k) or 1)
+    else C.Print("vouch: /kina vouch Name [1-4]  (1 pulled their weight, 2 great leader, 3 profession support, 4 good company), or the Vouch button on the You tab") end
+  elseif cmd == "preview" and rest == "commend" then if C.Vouch then C.Vouch.ShowPrompt(true) end
   elseif cmd == "preview" then if C.Toast and C.Toast.Preview then C.Toast.Preview(rest) end
   elseif cmd == "sound" then
     C.settings.farmSound = (C.settings.farmSound == false)

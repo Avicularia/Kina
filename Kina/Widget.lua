@@ -306,6 +306,7 @@ local function build()
   local DY = ironLook and 8 or 0 -- 1.1.1: taller tiles in the iron look
   w:SetSize(W, H + DY); w:SetFrameStrata("MEDIUM")
   C.RestorePos(w, "widget", "TOP", UIParent, "TOP", 0, -120)
+  if C.Cos and C.Cos.Glow then pcall(C.Cos.Glow, w, 10) end -- 1.5.0: standing glow on the widget
   -- 1.1.1: with the iron look the widget moves by its title area only
   local handle
   if ironLook then

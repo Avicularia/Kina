@@ -889,6 +889,12 @@ function C.StopSession(at, why, silent, fromParty)
   C.db.activeSession = nil
   if C.FarmEnded then pcall(C.FarmEnded, s) end
   if not silent then C.PlayCue("stop") end
+  -- 1.5.0: a qualifying group farm just ended: remind about vouching
+  if not silent and s.sync then
+    C.After(4, function()
+      if C.Vouch and C.Vouch.ShowPrompt then pcall(C.Vouch.ShowPrompt) end -- 1.5.0: commendation window
+    end)
+  end
   C.Print(string.format("farm ended (%s): %s total (%s/hour), %d kills.", s.why, C.Money(sum.total), C.Money(sum.perHour), sum.kills))
   if C.OnSessionChange then C.OnSessionChange() end
 end

@@ -89,41 +89,109 @@ end
 -- opens a list; picking one shows it right away (preview only, nothing is saved).
 K.preview = {}
 local menu
+function K.OpenList(anchor, label, options, onPick)
+  if menu and menu:IsShown() and menu.owner == anchor then menu:Hide(); return end
+  if not menu then
+    menu = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    menu:SetFrameStrata("TOOLTIP"); menu:SetClampedToScreen(true)
+    if menu.SetBackdrop then
+      menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+      menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96); menu:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
+    end
+    menu.rows = {}
+  end
+  menu.owner = anchor
+  for _, r in ipairs(menu.rows) do r:Hide() end
+  local title = menu.title or menu:CreateFontString(nil, "OVERLAY", "GameFontNormal"); menu.title = title
+  title:SetPoint("TOPLEFT", 10, -8); title:SetText(label)
+  for i, opt in ipairs(options) do
+    local r = menu.rows[i]
+    if not r then
+      r = CreateFrame("Button", nil, menu); r:SetSize(230, 18)
+      r.t = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); r.t:SetPoint("LEFT", 6, 0)
+      r:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+      menu.rows[i] = r
+    end
+    r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * 18)
+    r.t:SetText(opt[1])
+    r:SetScript("OnClick", function() menu:Hide(); onPick(opt[2]) end)
+    r:Show()
+  end
+  menu:SetSize(244, 34 + #options * 18)
+  menu:ClearAllPoints(); menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+  menu:Show()
+end
 function K.Picker(parent, label, options, onPick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(46, 18); b:SetText("Try"); b:SetFrameLevel((parent:GetFrameLevel() or 1) + 20)
   local fs = b:GetFontString(); if fs then fs:SetFont(STANDARD_TEXT_FONT, 10, "") end
-  b:SetScript("OnClick", function(self)
-    if menu and menu:IsShown() and menu.owner == self then menu:Hide(); return end
-    if not menu then
-      menu = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-      menu:SetFrameStrata("TOOLTIP"); menu:SetClampedToScreen(true) -- (1.4.3: above the Kina window, which sits at FULLSCREEN_DIALOG)
-      if menu.SetBackdrop then
-        menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-        menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96); menu:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
-      end
-      menu.rows = {}
-    end
-    menu.owner = self
-    for _, r in ipairs(menu.rows) do r:Hide() end
-    local title = menu.title or menu:CreateFontString(nil, "OVERLAY", "GameFontNormal"); menu.title = title
-    title:SetPoint("TOPLEFT", 10, -8); title:SetText(label)
-    for i, opt in ipairs(options) do
-      local r = menu.rows[i]
-      if not r then
-        r = CreateFrame("Button", nil, menu); r:SetSize(170, 18)
-        r.t = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); r.t:SetPoint("LEFT", 6, 0)
-        r:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-        menu.rows[i] = r
-      end
-      r:SetPoint("TOPLEFT", 6, -26 - (i - 1) * 18)
-      r.t:SetText(opt[1])
-      r:SetScript("OnClick", function() menu:Hide(); onPick(opt[2]) end)
-      r:Show()
-    end
-    menu:SetSize(184, 34 + #options * 18)
-    menu:ClearAllPoints(); menu:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
-    menu:Show()
-  end)
+  b:SetScript("OnClick", function(self) K.OpenList(self, label, options, onPick) end)
   return b
 end
+
+------------------------------------------------------------------ standing glow on windows
+-- 1.5.0: the Kina window and the farm widget take on your standing: a soft golden edge
+-- glow from Honored up (brighter at Revered, slowly pulsing at Exalted), a dull red one
+-- when your standing is below 0. Nothing below Honored, so it means something.
+local EDGE = { Honored = { 0.95, 0.85, 0.55, 0.35 }, Revered = { 1, 0.92, 0.70, 0.50 }, Exalted = { 1, 0.80, 0.25, 0.65 },
+  Delinquent = { 0.8, 0.15, 0.1, 0.35 }, Disgraced = { 0.8, 0.1, 0.05, 0.45 }, Oathbreaker = { 0.7, 0.05, 0.05, 0.55 } }
+local glows = {}
+local function edge(f, p1, p2, w, h, x1, y1, x2, y2, horiz, flip)
+  local t = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+  t:SetTexture("Interface\\Buttons\\WHITE8X8"); t:SetBlendMode("ADD")
+  t:SetPoint(p1, f, p1, x1, y1); t:SetPoint(p2, f, p2, x2, y2)
+  if w then t:SetWidth(w) end; if h then t:SetHeight(h) end
+  t.horiz, t.flip = horiz, flip
+  return t
+end
+local function paint(t, c, a)
+  local inner, outer = a, 0
+  if t.flip then inner, outer = outer, inner end
+  local o = t.horiz and "HORIZONTAL" or "VERTICAL"
+  if CreateColor and t.SetGradient then
+    pcall(t.SetGradient, t, o, CreateColor(c[1], c[2], c[3], inner), CreateColor(c[1], c[2], c[3], outer))
+  elseif t.SetGradientAlpha then
+    pcall(t.SetGradientAlpha, t, o, c[1], c[2], c[3], inner, c[1], c[2], c[3], outer)
+  else t:SetVertexColor(c[1], c[2], c[3], a * 0.5) end
+end
+function K.Glow(f, size)
+  if not f or glows[f] then return end
+  size = size or 14
+  local g = {
+    edge(f, "BOTTOMLEFT", "BOTTOMRIGHT", nil, size, -size, 0, size, 0, false, false),   -- top band, above the frame
+    edge(f, "TOPLEFT", "TOPRIGHT", nil, size, -size, 0, size, 0, false, true),          -- bottom band
+    edge(f, "TOPRIGHT", "BOTTOMRIGHT", size, nil, 0, 0, 0, 0, true, true),              -- left band
+    edge(f, "TOPLEFT", "BOTTOMLEFT", size, nil, 0, 0, 0, 0, true, false),               -- right band
+  }
+  g[1]:ClearAllPoints(); g[1]:SetPoint("BOTTOMLEFT", f, "TOPLEFT", -size, 0); g[1]:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", size, 0)
+  g[2]:ClearAllPoints(); g[2]:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -size, 0); g[2]:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", size, 0)
+  g[3]:ClearAllPoints(); g[3]:SetPoint("TOPRIGHT", f, "TOPLEFT", 0, 0); g[3]:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", 0, 0)
+  g[4]:ClearAllPoints(); g[4]:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, 0); g[4]:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 0, 0)
+  glows[f] = g
+  K.UpdateGlows()
+end
+local pulse, t0 = false, 0
+function K.UpdateGlows(standing)
+  if not standing then
+    local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
+    standing = (K.preview and K.preview.ring) or (ok and m and m.standing) or "Unproven"
+  end
+  local c = EDGE[standing]
+  pulse = standing == "Exalted"
+  for _, g in pairs(glows) do
+    for _, t in ipairs(g) do
+      if c then paint(t, c, c[4]); t:Show() else t:Hide() end
+    end
+  end
+end
+local pf = CreateFrame("Frame")
+local acc = 0
+pf:SetScript("OnUpdate", function(_, el)
+  acc = acc + el
+  if acc > 60 then acc = 0; pcall(K.UpdateGlows) end -- standing can change
+  if pulse then
+    t0 = t0 + el
+    local a = 0.6 + 0.4 * math.sin(t0 * 2)
+    for _, g in pairs(glows) do for _, t in ipairs(g) do t:SetAlpha(a) end end
+  end
+end)

@@ -812,6 +812,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnForgiveAck(from, label)
         elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and C.FirstName and C.FirstName(to) == mine and C.OnDebtNote then
           C.OnDebtNote(action, from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "vch" and C.FirstName and C.FirstName(to) == mine and C.Vouch then
+          C.Vouch.OnVouch(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and (action == "pla" or action == "exa") and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
           C.OnForgiveAck(from, label, action == "pla" and "plea" or "ext")
         end
@@ -1016,6 +1018,13 @@ function S.SendForgive(to, amt, ref, kind)
   local ch = groupChannel()
   local msg = table.concat({ "T", db().uid, to or "", kind or "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
   if ch then enqueue(msg, ch, nil, true) end -- not grouped: re-sent when you group up again
+end
+-- 1.5.0: a vouch (kind 1-4) for someone in a recent farm; answered with "vca"
+function S.SendVouch(to, kind, ref)
+  if not db().opts.enabled then return end
+  local ch = groupChannel()
+  local msg = table.concat({ "T", db().uid, to or "", "vch", tostring(math.floor(kind or 1)), ((tostring(ref or "")):gsub("|", "")) }, "|")
+  if ch then enqueue(msg, ch, nil, true) else enqueue(msg, "WHISPER", to) end
 end
 function S.SendForgiveAck(to, ref, kind)
   if not db().opts.enabled then return end
