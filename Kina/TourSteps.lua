@@ -20,7 +20,7 @@ local function widget(part, part2)
 end
 local function mainTab(tab, view)
   return function()
-    if C.UI then C.UI.youWho = nil; if view then C.UI.youView = view end end
+    if C.UI then if view then C.UI.youView = view end end
     if C.Toggle then C.Toggle(tab) end
   end
 end

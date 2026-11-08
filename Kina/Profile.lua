@@ -48,7 +48,8 @@ end
 function P.SetPortrait(tex, name)
   local u = unitFor(name)
   if u and UnitIsVisible and UnitIsVisible(u) and SetPortraitTexture then
-    tex:SetTexCoord(0, 1, 0, 1)
+    -- (0.9.4: no SetTexCoord here: Forever throws on a masked texture, and that one
+    -- error was what left profiles, Collections and the Try menu half-drawn)
     if pcall(SetPortraitTexture, tex, u) then
       if crests[tex] then crests[tex]:Hide() end
       tex:SetAlpha(1)
@@ -66,7 +67,7 @@ function P.ClassIcon(tex, cls)
     tex:SetAlpha(0) -- (the masked portrait underneath stays, just unseen)
   else
     if crests[tex] then crests[tex]:Hide() end
-    tex:SetAlpha(1); tex:SetTexCoord(0, 1, 0, 1); tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    tex:SetAlpha(1); tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
   end
 end
 -- when the page switches back to my own live portrait, the crest goes
@@ -173,8 +174,9 @@ function P.Show(name)
   name = name:sub(1, 1):upper() .. name:sub(2)
   if name == "" then C.Print("profile: /kina profile Name (or target someone)."); return end
   if C.UI and C.Toggle and not (C.IsMyChar and C.IsMyChar(name)) then
-    C.UI.youWho = name; C.UI.youView = "you"
-    local ok = pcall(C.Toggle, "You")
+    -- 0.9.4 (Taylor): someone else's profile opens in its own closable tab
+    C.UI.profileWho = name
+    local ok = pcall(C.Toggle, "Profile")
     if ok then return true end
   end
   return P.ShowCard(name)

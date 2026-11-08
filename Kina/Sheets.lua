@@ -88,7 +88,7 @@ function C.ShowPanel(name)
 end
 
 ------------------------------------------------------------------ You: a character sheet
-builders.you = function(p)
+local function youPage(p, them)
   -- 1.5.4 (Taylor): the portrait takes the left half (about 4x bigger), the numbers the
   -- right. The same page shows anyone else's profile (C.UI.youWho), with their data.
   local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0); idBox:SetPoint("RIGHT", p, "CENTER", -6, 0)
@@ -202,7 +202,7 @@ builders.you = function(p)
 
   local function refreshThem(who)
     makeCos()
-    back:Show(); pb:Hide(); share:Hide(); h4:SetText("You and " .. who)
+    back:Hide(); pb:Hide(); share:Hide(); h4:SetText("You and " .. who) -- (0.9.4: the tab's X closes it)
     if cos and cos.try then cos.try:Hide(); cos.bars:Hide() end
     local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(who)
     local ch = pr and pr.char
@@ -249,11 +249,10 @@ builders.you = function(p)
   end
 
   p.refresh = function()
-    local who = C.UI and C.UI.youWho
-    if who then return refreshThem(who) end
+    -- 0.9.4: two separate pages: You (always me) and Profile (someone else, own tab)
+    if them then local who = C.UI and C.UI.profileWho; if who then return refreshThem(who) end; return end
     back:Hide(); pb:Show(); share:Show(); h4:SetText("Your record")
     wh:Hide()
-    portrait:SetTexCoord(0, 1, 0, 1)
     local me = C.YouProfile and C.YouProfile() or { name = UnitName("player"), level = UnitLevel("player"), class = "?", profs = {} }
     if C.Profile and C.Profile.ClearCrest then C.Profile.ClearCrest(portrait) end
     if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
@@ -312,6 +311,9 @@ builders.you = function(p)
     })
   end
 end
+
+builders.you = function(p) return youPage(p, false) end
+builders.them = function(p) return youPage(p, true) end
 
 ------------------------------------------------------------------ Debts: people on the left, one card on the right
 builders.debts = function(p)

@@ -85,6 +85,9 @@ local function countKill(guid, fromParty)
   if tagged[key] then return end
   tagged[key] = true
   if C.session and C.session.sync then
+    -- 0.9.5: a kill keeps the farm alive (shared farms used to skip this, so they all
+    -- stopped themselves an hour after they started, in the middle of farming)
+    if not C.session.paused then C.session.lastKill = C.Now() end
     -- shared farm: the log counts kills (the same mob seen by two players is one)
     if not fromParty and not C.session.paused and C.FarmSync then C.FarmSync.Observe("K", (tostring(key):gsub("[:|]", "-"))) end
     return
@@ -579,6 +582,39 @@ function C.SetVolume(v)
 end
 local VSUF = { "_25", "_50", "_75", "" }
 function C.SoundFile(base) return SOUND .. base .. (VSUF[C.Volume()] or "") .. ".ogg" end
+-- 0.9.5: when the farm last saw a kill: mine, or (in a shared farm) anyone's in the log
+function C.LastKillAt(s)
+  local lk = s.lastKill or s.last or s.start or C.Now()
+  local sy = s.sync
+  if sy and sy.chain and sy.startAt then
+    for i = sy.head or #sy.chain, 1, -1 do
+      local ev = sy.chain[i]
+      if ev and ev.kind == "K" and ev.t then lk = math.max(lk, sy.startAt + ev.t); break end
+    end
+  end
+  return lk
+end
+-- 0.9.5: shared farms that 0.9.4 and older stopped an hour after they STARTED (a kill
+-- didn't keep them alive) get their real end back from their log, once, and their XP
+local function repairIdleStops()
+  for i = 1, math.min(10, #(C.db.sessions or {})) do
+    local s = C.db.sessions[i]
+    if s and s.why == "no kills for an hour" and s.sync and s.sync.chain and not s.idleFixed and s.stop and C.Now() - s.stop < 3 * 86400 then
+      s.idleFixed = true
+      local trueEnd = C.LastKillAt(s) + 60
+      if trueEnd > s.stop + 120 and trueEnd <= C.Now() then
+        s.stop = trueEnd
+        local ok, sum = pcall(C.SessionSummary, s)
+        if ok and sum then s.result = sum end
+        local secs = math.floor(s.stop - s.start - (s.pausedSecs or 0))
+        if C.Log then C.Log("farmfix", s.sync.sid or "", secs) end
+        C.Print(string.format("|cffffd100Fixed:|r your %s farm stopped itself by mistake; it now counts as %d minutes.", s.label or "group", math.floor(secs / 60)))
+      end
+    end
+  end
+end
+C.RepairIdleStops = repairIdleStops
+C.On("INIT", function() if C.After then C.After(12, function() pcall(repairIdleStops) end) end end)
 function C.PlayCue(which)
   if C.Volume() == 0 or not PlaySoundFile then return end
   if cueHandle and StopSound then pcall(StopSound, cueHandle, 200) end
@@ -989,8 +1025,8 @@ function C.SessionTick()
   end
   -- 1.5.4 (Taylor): an hour after the last kill (anyone's, in a group farm) the farm
   -- ends, as of that last kill, so the empty hour never counts
-  local lk = s.lastKill or s.start
-  if now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
+  local lk = C.LastKillAt(s)
+  if not s.paused and now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
   -- group farm: the leader tells everyone the group's numbers every 5 seconds
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then
     local _, lead = C.FarmLeader()
@@ -1057,7 +1093,7 @@ C.On("INIT", function()
   C.session = s
   s.items = s.items or {}; s.money = s.money or {}; s.byNpc = s.byNpc or {}; s.kills = s.kills or 0
   -- 1.5.4: everyone logged off and an hour passed since the last kill: it ended there
-  local lk = s.lastKill or s.last or s.start
+  local lk = C.LastKillAt(s)
   if C.Now() - lk >= 3600 then
     C.StopSession(lk + 60, "no kills for an hour", true)
   else

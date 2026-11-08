@@ -55,6 +55,7 @@ if C.PUBLIC then tabOrder = { "Session", "Ledger", "You", "Settings", "Help" } e
 local HOME = tabOrder[1] == "Session" and "Session" or "Hot"
 local TAB_OK = {}
 for _, t in ipairs(tabOrder) do TAB_OK[t] = true end
+TAB_OK.Profile = C.PUBLIC and true or nil
 
 tabs.Bags = function()
   local rows, totals = C.AdviseBags()
@@ -2391,6 +2392,11 @@ tabs.You = function()
   local v = ui.youView or "you"
   return "", {}, {}, {}, { panel = v }
 end
+-- 0.9.4 (Taylor): someone else's profile, in its own tab ("Tri's Profile", with an X)
+tabs.Profile = function()
+  if not ui.profileWho then ui.tab = "You"; return tabs.You() end
+  return "", {}, {}, {}, { panel = "them" }
+end
 
 -- 0.9.1: How Kina works (Help.lua)
 tabs.Help = function()
@@ -2990,6 +2996,46 @@ local function build()
     end
     ui.tabButtons[name] = b
     end
+  end
+  -- 0.9.4: the profile tab (hidden until someone's profile is opened)
+  if banded then
+    local b = CreateFrame("Button", nil, ui.tabBand); b:SetFrameLevel(ui.tabBand:GetFrameLevel() + 2)
+    local a = {}
+    a.fill = b:CreateTexture(nil, "BACKGROUND"); a.fill:SetPoint("TOPLEFT", 1, -1); a.fill:SetPoint("BOTTOMRIGHT", -1, 1); a.fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+    a.rim = {}
+    for i, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+      local t = b:CreateTexture(nil, "BORDER"); t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
+      a.rim[i] = t
+    end
+    a.shine = b:CreateTexture(nil, "ARTWORK"); a.shine:SetPoint("TOPLEFT", 4, -2); a.shine:SetPoint("TOPRIGHT", -4, -2); a.shine:SetHeight(1)
+    a.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); C.Cos.Font(a.label, 13, ""); a.label:SetPoint("LEFT", 12, 0)
+    a.label:SetShadowOffset(1, -1)
+    a.notch = b:CreateTexture(nil, "OVERLAY"); a.notch:SetSize(8, 8); a.notch:SetPoint("CENTER", b, "BOTTOM", 0, -3)
+    a.notch:SetColorTexture(0.84, 0.67, 0.31, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
+    tabArt[b] = a
+    local close = CreateFrame("Button", nil, b); close:SetSize(16, 16); close:SetPoint("RIGHT", -5, 0); close:SetFrameLevel(b:GetFrameLevel() + 2)
+    local cx = close:CreateFontString(nil, "OVERLAY", "GameFontNormal"); cx:SetPoint("CENTER", 0, 1); cx:SetText("x")
+    if C.Cos and C.Cos.Font then C.Cos.Font(cx, 14, "") end
+    close:SetScript("OnEnter", function() cx:SetTextColor(1, 0.35, 0.25) end)
+    close:SetScript("OnLeave", function() cx:SetTextColor(ui.tab == "Profile" and 0.18 or 0.91, ui.tab == "Profile" and 0.12 or 0.78, ui.tab == "Profile" and 0.04 or 0.47) end)
+    close:SetScript("OnClick", function()
+      ui.profileWho = nil
+      if ui.tab == "Profile" then ui.tab = "You" end
+      C.Refresh()
+    end)
+    if x > 10 then
+      local dia = ui.tabBand:CreateTexture(nil, "ARTWORK"); dia:SetSize(5, 5); dia:SetPoint("CENTER", ui.tabBand, "LEFT", x - 7, 1)
+      dia:SetColorTexture(0.69, 0.54, 0.26, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
+      ui.profileDia = dia
+    end
+    b:SetPoint("LEFT", ui.tabBand, "LEFT", x, 1); b:SetSize(140, 24)
+    b:SetScript("OnClick", function()
+      if ui.tab ~= "Profile" and ui.plaqueFX and ui.plaqueFX.flash then pcall(ui.plaqueFX.flash) end
+      ui.tab = "Profile"; C.Refresh() end)
+    b:SetScript("OnEnter", function(self) tabLook(self, ui.tab == "Profile", true) end)
+    b:SetScript("OnLeave", function(self) tabLook(self, ui.tab == "Profile", false) end)
+    b:Hide(); if ui.profileDia then ui.profileDia:Hide() end
+    ui.profileTab, ui.profileTabX, ui.profileTabLabel = b, cx, a.label
   end
   -- search box (filters the current tab)
   local sb = CreateFrame("EditBox", "KinaSearch", f, "InputBoxTemplate")
@@ -3641,6 +3687,18 @@ function C.Refresh()
     if msg then ui.empty:SetWidth(math.max(300, ui.w - 160)); ui.empty:SetText(msg); ui.empty:Show() else ui.empty:Hide() end
   end
   if ui.searchBox and ui.searchBox:GetText() ~= (ui.search[tab] or "") then ui.searchBox:SetText(ui.search[tab] or "") end
+  -- 0.9.4: the profile tab, while someone's profile is open
+  if ui.profileTab then
+    if ui.profileWho then
+      local nm = tostring(ui.profileWho)
+      ui.profileTabLabel:SetText(nm .. (nm:sub(-1):lower() == "s" and "' Profile" or "'s Profile"))
+      ui.profileTab:SetWidth(math.max(90, math.floor((ui.profileTabLabel:GetStringWidth() or 80) + 40)))
+      ui.profileTab:Show(); if ui.profileDia then ui.profileDia:Show() end
+      ui.tabLook(ui.profileTab, tab == "Profile")
+      local on = tab == "Profile"
+      ui.profileTabX:SetTextColor(on and 0.18 or 0.91, on and 0.12 or 0.78, on and 0.04 or 0.47)
+    else ui.profileTab:Hide(); if ui.profileDia then ui.profileDia:Hide() end end
+  end
   for name, b in pairs(ui.tabButtons) do
     if name == tab then b:LockHighlight() else b:UnlockHighlight() end
     if ui.tabLook and ui.tabArt and ui.tabArt[b] then ui.tabLook(b, name == tab)

@@ -263,8 +263,21 @@ function R.Replay(lines, st, gains)
         local got = gainXP(want)
         gainRep(R.FARM_REP, t)
         if gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = "farm", sid = sid, label = f[3], secs = secs, paused = not st.share or nil } end
-      elseif gains and sid ~= "" and mates >= 1 then
-        gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", sid = sid, label = f[3], secs = secs }
+      elseif sid ~= "" and mates >= 1 then
+        st.shortFarm = st.shortFarm or {}; st.shortFarm[sid] = f[3] or true
+        if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "short", sid = sid, label = f[3], secs = secs } end
+      end
+    elseif kind == "farmfix" then
+      -- 0.9.5: a shared farm that stopped itself early by mistake (0.9.4 and older), its
+      -- real length worked out from its log: it counts as the farm it really was
+      local sid, secs = f[3] or "", tonumber(f[4]) or 0
+      if st.shortFarm and st.shortFarm[sid] and secs >= FARM_MIN_SECS then
+        local label = st.shortFarm[sid]
+        st.shortFarm[sid] = nil
+        local want = math.floor(secs / 60)
+        local got = gainXP(want)
+        gainRep(R.FARM_REP, t)
+        if gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = "farm", sid = sid, label = type(label) == "string" and label or "farm", secs = secs } end
       end
     end
   end
