@@ -55,13 +55,32 @@ local FX = {
   Exalted  = { halo = { 1.00, 0.76, 0.30, 2.60, 0.75, 0.20, 2.4 }, halo2 = { 1.00, 0.95, 0.78, 1.60, 0.50, 0.20, 2.4 },
                rays = { 0.55, 1.00, 0.82, 0.40 }, sparks = 2, sparkTint = { 1, 0.95, 0.80 }, glint = true,
                embers = 26, emberTints = { { 1, 0.80, 0.42 }, { 1, 0.95, 0.80 } } },
+  -- 0.9.13 (Taylor, redesign approved: "I like the design of oathbreaker"): dishonour
+  -- BREAKS you, a step at a time. Delinquent: one crack through ring and portrait, a
+  -- chip off the level plate. Disgraced: the portrait shattered, a chunk broken out of
+  -- the ring, the plate cracked. Oathbreaker: ring and portrait snapped in two, the
+  -- plate split. Nothing glows. damage = overlay on the portrait, ring/plate = the
+  -- broken versions, ash = grit falling from grit = { x, y, spread } (portrait widths)
+  Delinquent  = { damage = "fx_crack1", ring = "ring_delinquent_cracked", plate = "kina_plaque_arc_chip", ash = 6, grit = { 0.36, 0.41, 0.04 } },
+  Disgraced   = { damage = "fx_shatter", ring = "ring_disgraced_broken", plate = "kina_plaque_arc_crack", ash = 16, grit = { -0.39, -0.39, 0.08 } },
+  Oathbreaker = { damage = "fx_tear", ring = "ring_oathbreaker_split", plate = "kina_plaque_arc_split", ash = 24, grit = { 0, 0.5, 0.06 } },
 }
+local function heartbeat(t, rate)
+  local p = (t * rate) % 1
+  local function g(d) return math.exp(-(d / 0.07) * (d / 0.07)) end
+  return g(p) + g(p - 1) + 0.6 * g(p - 0.2)
+end
+-- the Kina level numeral, in each ring's colour
+local NUMCOL = { Unproven = { 0.71, 0.71, 0.71 }, Vouched = { 0.91, 0.57, 0.35 }, Reliable = { 0.86, 0.69, 0.34 },
+  Trusted = { 0.75, 0.83, 0.95 }, Honored = { 1.00, 0.79, 0.24 }, Revered = { 0.79, 0.64, 1.00 }, Exalted = { 1.00, 0.88, 0.40 },
+  Delinquent = { 0.85, 0.39, 0.23 }, Disgraced = { 0.76, 0.23, 0.16 }, Oathbreaker = { 0.69, 0.08, 0.11 }, Blacklisted = { 0.54, 0.06, 0.06 } }
 -- grey portrait (Delinquent half grey), how dark the portrait gets, the ring's dimming,
 -- and the creeping red shadow (alpha) for the worst
-local SHAME = { Delinquent = 0.5, Disgraced = 1, Oathbreaker = 1, Blacklisted = 1 }
+local SHAME = { Delinquent = 1, Disgraced = 1, Oathbreaker = 1, Blacklisted = 1 } -- 0.9.13: all fully grey
 local DARK = { Delinquent = 0.9, Disgraced = 0.85, Oathbreaker = 0.62, Blacklisted = 0.5 }
 local RINGDIM = { Delinquent = 0.85, Disgraced = 0.78, Oathbreaker = 0.72, Blacklisted = 0.6 }
-local VIGNETTE = { Oathbreaker = 0.8, Blacklisted = 1 }
+local VIGNETTE = { Delinquent = 0.6, Disgraced = 0.75, Oathbreaker = 0.9, Blacklisted = 1 }
+local VIGCOL = { Delinquent = { 0.10, 0.05, 0.03 }, Disgraced = { 0.10, 0.04, 0.03 }, Oathbreaker = { 0.08, 0.03, 0.02 }, Blacklisted = { 0.16, 0, 0 } }
 -- 0.9.12 (Taylor: the portrait "looks like a nintendo 64 cd art cover"): the big
 -- portraits show the character's live 3D model when the game has it (you, and anyone
 -- in sight). The game's 2D portrait is a small, blurry picture; the model is drawn at
@@ -103,16 +122,21 @@ function K.Portrait(box, portrait, opts)
   o.glow = addTex("BACKGROUND", -2, "fx_round", W) -- (kept for older callers; unused)
   o.ring = top:CreateTexture(nil, "OVERLAY", nil, 2)
   o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
-  o.vig = top:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vignette"); o.vig:Hide()
+  o.vig = top:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vig2"); o.vig:Hide()
   o.glint = addTex("OVERLAY", 3, "fx_glint", W * 1.30)
+  o.cracks = top:CreateTexture(nil, "OVERLAY", nil, 1); o.cracks:SetAllPoints(portrait); o.cracks:SetTexture(P .. "fx_cracks")
+  o.cracks:SetBlendMode("BLEND"); o.cracks:Hide()
+  o.falls, o.smoke = {}, {}
   o.sparks = {}
   for i = 1, 2 do o.sparks[i] = addTex("OVERLAY", 6, "fx_spark", W * 0.32) end
   o.embers = {}
   o.plate = top:CreateTexture(nil, "OVERLAY", nil, 4)
-  o.plate:SetSize(36, 36); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, 4)
-  o.plate:SetTexture(P .. "level_plate")
+  -- 0.9.13 (Taylor): the level sits on a small copy of the Kina nameplate
+  -- (curved to follow the bottom of the ring; the plate's body sits 27/256 below the texture's centre)
+  o.plate:SetSize(math.max(40, W * 0.66), math.max(20, W * 0.33)); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, W * 0.105)
+  o.plate:SetTexture(P .. "kina_plaque_arc")
   o.num = top:CreateFontString(nil, "OVERLAY")
-  K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, 1); o.num:SetTextColor(1, 0.86, 0.45)
+  K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, -W * 0.035); o.num:SetTextColor(1, 0.86, 0.45)
   o.badge = top:CreateTexture(nil, "OVERLAY", nil, 5)
   o.badge:SetPoint("CENTER", o.ring, "TOP", 0, 2)
   o.badgeGlow = top:CreateTexture(nil, "OVERLAY", nil, 4); o.badgeGlow:SetPoint("CENTER", o.badge, "CENTER")
@@ -127,7 +151,33 @@ function K.Portrait(box, portrait, opts)
     if fx then
       local function breathe(h, tex) if h then tex:SetAlpha(math.max(0, math.min(1, h[5] * (1 + h[6] * math.sin(t * (h[7] > 0 and h[7] or 1)))))) end end
       breathe(fx.halo, o.halo); breathe(fx.halo2, o.halo2)
-      if fx.rays and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, t * 0.12); o.rays:SetAlpha(fx.rays[1] * (0.8 + 0.2 * math.sin(t * 1.3))) end
+      local beat = fx.beat and heartbeat(t, fx.beat) or 0
+      if fx.beat and fx.halo then o.halo:SetAlpha(math.min(1, fx.halo[5] * (0.55 + 0.6 * beat))) end
+      if fx.darkRays and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, -t * 0.1); o.rays:SetAlpha(fx.darkRays) end
+      if fx.beat and o.vigOn then o.vig:SetAlpha(math.min(1, o.vigOn * (0.6 + 0.4 * beat))) end
+      for _, p in ipairs(o.falls) do
+        if p.on then
+          p.life = p.life + el * p.speed
+          if p.life >= 1 then p.life = 0; p.x = math.random() * 1.4 - 0.7 end
+          local s = W * p.size
+          p.tex:SetSize(s, s); p.tex:ClearAllPoints()
+          local g = fx.grit
+          if g then p.tex:SetPoint("CENTER", portrait, "CENTER", (g[1] + (p.x / 1.4) * g[3]) * W, (g[2] - p.life * 0.9) * W)
+          else p.tex:SetPoint("CENTER", portrait, "CENTER", p.x * W + math.sin(p.life * 5 + p.wob) * W * 0.04, W * 0.55 - p.life * W * 1.25) end
+          p.tex:SetAlpha(math.sin(p.life * math.pi) * (p.ash and 0.75 or 0.9))
+        end
+      end
+      for _, p in ipairs(o.smoke) do
+        if p.on then
+          p.life = p.life + el * p.speed
+          if p.life >= 1 then p.life = 0; p.x = math.random() * 1.2 - 0.6 end
+          local s = W * p.size * (0.6 + p.life)
+          p.tex:SetSize(s, s); p.tex:ClearAllPoints()
+          p.tex:SetPoint("CENTER", portrait, "CENTER", p.x * W * 0.6, W * 0.45 + p.life * W * 0.7)
+          p.tex:SetAlpha(math.sin(p.life * math.pi) * 0.55)
+        end
+      end
+      if fx.rays and not fx.darkRays and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, t * 0.12); o.rays:SetAlpha(fx.rays[1] * (0.8 + 0.2 * math.sin(t * 1.3))) end
       for i = 1, (fx.sparks or 0) do
         local sp = o.sparks[i]
         local a = t * 0.9 + (i - 1) * math.pi
@@ -154,7 +204,7 @@ function K.Portrait(box, portrait, opts)
         end
       end
     end
-    if o.vigOn then o.vig:SetAlpha(o.vigOn * (0.8 + 0.2 * math.sin(t * 0.7))) end
+    if o.vigOn and not (fx and fx.beat) then o.vig:SetAlpha(o.vigOn * (0.8 + 0.2 * math.sin(t * 0.7))) end
     if o.badgeGlow:IsShown() then o.badgeGlow:SetAlpha(0.55 + 0.25 * math.sin(t * 1.5)) end
   end)
   return o
@@ -164,13 +214,13 @@ function K.ModelUnit(m, unit)
   local ok = pcall(m.SetUnit, m, unit)
   if m.SetPortraitZoom then pcall(m.SetPortraitZoom, m, 1) end
   if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, 1.15) end
-  if m.SetPosition then pcall(m.SetPosition, m, 0, 0, -0.04) end
+  if m.SetPosition then pcall(m.SetPosition, m, 0, 0, 0.06) end -- 0.9.13: head higher in the ring (Taylor, dwarf)
   return ok
 end
 -- show the live 3D model for this portrait (true), or false: keep the 2D picture
 function K.ShowModel(portrait, unit)
   local o = models[portrait]
-  if not (o and o.model and unit) then return false end
+  if not (o and o.model and unit) or o.noModel then return false end
   if UnitIsVisible and not UnitIsVisible(unit) then K.HideModel(portrait); return false end
   modelUnit[o.model] = unit
   if not K.ModelUnit(o.model, unit) then K.HideModel(portrait); return false end
@@ -191,12 +241,49 @@ end
 function K.UpdatePortrait(o, standing, level, recruits, starter)
   if not o then return end
   o.ring:SetTexture(K.RingFor(standing))
+  local fx0 = FX[standing or ""]
+  if fx0 and fx0.ring then o.ring:SetTexture(P .. fx0.ring) end
+  o.plate:SetTexture(P .. ((fx0 and fx0.plate) or "kina_plaque_arc"))
   local fx = FX[standing or ""]
   o.fx = fx
   local W = o.W or 80
   setHalo(o.halo, fx and fx.halo, W); setHalo(o.halo2, fx and fx.halo2, W)
   o.glow:Hide()
-  if fx and fx.rays then o.rays:SetVertexColor(fx.rays[2], fx.rays[3], fx.rays[4]); o.rays:Show() else o.rays:Hide() end
+  if fx and fx.darkRays then
+    o.rays:SetBlendMode("BLEND"); o.rays:SetVertexColor(0.09, 0, 0); o.rays:SetSize(W * 2.0, W * 2.0); o.rays:Show()
+  elseif fx and fx.rays then
+    o.rays:SetBlendMode("ADD"); o.rays:SetSize(W * 1.95, W * 1.95); o.rays:SetVertexColor(fx.rays[2], fx.rays[3], fx.rays[4]); o.rays:Show()
+  else o.rays:Hide() end
+  if fx and fx.damage then o.cracks:SetTexture(P .. fx.damage); o.cracks:SetAlpha(1); o.cracks:Show() else o.cracks:Hide() end
+  -- falling ash and embers (in front), rising smoke (behind)
+  local small = W < 120 and (W / 160) or 1
+  local nAsh, nFall = math.floor((fx and fx.ash or 0) * small), math.floor((fx and fx.fall or 0) * small)
+  for i = 1, nAsh + nFall do
+    local p = o.falls[i]
+    if not p then
+      local tx = o.top:CreateTexture(nil, "OVERLAY", nil, 7)
+      p = { tex = tx, x = math.random() * 1.4 - 0.7, life = math.random(), speed = 0.12 + math.random() * 0.18, size = 0.04 + math.random() * 0.05, wob = math.random() * 6.28 }
+      o.falls[i] = p
+    end
+    p.ash = i <= nAsh
+    if fx.grit then p.size = 0.015 + math.random() * 0.02 end
+    if p.ash then p.tex:SetTexture(P .. "fx_ash"); p.tex:SetBlendMode("BLEND"); p.tex:SetVertexColor(1, 1, 1)
+    else p.tex:SetTexture(P .. "fx_spark"); p.tex:SetBlendMode("ADD"); p.tex:SetVertexColor(1, 0.25, 0.08) end
+    p.tex:Show(); p.on = true
+  end
+  for i = nAsh + nFall + 1, #o.falls do o.falls[i].on = false; o.falls[i].tex:Hide() end
+  local nSmoke = math.floor((fx and fx.smoke or 0) * small)
+  for i = 1, nSmoke do
+    local p = o.smoke[i]
+    if not p then
+      local tx = o.portrait:GetParent():CreateTexture(nil, "BACKGROUND", nil, -1); tx:SetTexture(P .. "fx_round"); tx:SetBlendMode("BLEND")
+      tx:SetVertexColor(0.02, 0.01, 0.01)
+      p = { tex = tx, x = math.random() * 1.2 - 0.6, life = math.random(), speed = 0.08 + math.random() * 0.08, size = 0.3 + math.random() * 0.25 }
+      o.smoke[i] = p
+    end
+    p.tex:Show(); p.on = true
+  end
+  for i = nSmoke + 1, #o.smoke do o.smoke[i].on = false; o.smoke[i].tex:Hide() end
   for i = 1, 2 do
     local on = fx and (fx.sparks or 0) >= i
     if on then local c = fx.sparkTint or { 1, 0.95, 0.8 }; o.sparks[i]:SetVertexColor(c[1], c[2], c[3]); o.sparks[i]:Show() else o.sparks[i]:Hide() end
@@ -227,8 +314,26 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   local rd = RINGDIM[standing or ""] or 1
   o.ring:SetVertexColor(rd, rd * (sh and 0.95 or 1), rd * (sh and 0.9 or 1))
   o.vigOn = VIGNETTE[standing or ""]
-  if o.vigOn then o.vig:Show() else o.vig:Hide() end
+  if o.vigOn then local vc = VIGCOL[standing or ""] or { 0.16, 0, 0 }; o.vig:SetVertexColor(vc[1], vc[2], vc[3]); o.vig:Show() else o.vig:Hide() end
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
+  local nc = NUMCOL[standing or "Unproven"] or NUMCOL.Unproven
+  o.num:SetTextColor(nc[1], nc[2], nc[3])
+  if o.num.SetShadowOffset then o.num:SetShadowOffset(1, -2); o.num:SetShadowColor(0, 0, 0, 1) end
+  -- the 3D model can't be greyed everywhere: where it can't, a dishonoured portrait
+  -- goes back to the (grey) picture
+  o.noModel = nil
+  if o.model then
+    local canGrey = type(o.model.SetDesaturation) == "function"
+    if canGrey then pcall(o.model.SetDesaturation, o.model, sh and 1 or 0) end
+    if sh and not canGrey then
+      o.noModel = true
+      if o.model:IsShown() then
+        local u = modelUnit[o.model]
+        K.HideModel(o.portrait)
+        if u and SetPortraitTexture then pcall(SetPortraitTexture, o.portrait, u) end
+      end
+    end
+  end
   local star, wide = K.StarFor(recruits)
   -- 1.5.3 (Taylor: the mentor star was tiny): sized from the portrait, and bigger
   -- 0.9.7 (Taylor): the new player leaf is bright green with a soft green glow

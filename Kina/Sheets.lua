@@ -176,7 +176,7 @@ local function youPage(p, them)
   local function makeCos()
     if cos or not C.Cos then return end
     cos = C.Cos.Portrait(portraitBox, portrait, { model = true }); C.Cos.Font(lvl, 22, "OUTLINE"); C.Cos.Font(name, 30, "OUTLINE")
-    cos.plate:SetSize(PW * 0.36, PW * 0.36); C.Cos.Font(cos.num, math.floor(PW * 0.12), "OUTLINE")
+    cos.plate:SetSize(PW * 0.66, PW * 0.33); C.Cos.Font(cos.num, math.floor(PW * 0.13), "THICKOUTLINE")
     cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
     local pv = C.Cos.preview
     local function redo() if p.refresh then p.refresh() end end

@@ -182,7 +182,7 @@ local function partyStrip()
       c.box = CreateFrame("Frame", nil, c); c.box:SetSize(38, 38); c.box:SetPoint("TOP", 0, -10)
       c.portrait = c.box:CreateTexture(nil, "ARTWORK")
       c.cos = C.Cos.Portrait(c.box, c.portrait)
-      c.cos.plate:SetSize(22, 22); C.Cos.Font(c.cos.num, 9, "OUTLINE")
+      c.cos.plate:SetSize(44, 22); C.Cos.Font(c.cos.num, 9, "OUTLINE")
       c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.name:SetPoint("BOTTOM", 0, 0); c.name:SetWidth(70)
       if c.name.SetWordWrap then c.name:SetWordWrap(false) end
       local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.4, 0.08)

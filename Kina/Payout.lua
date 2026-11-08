@@ -305,9 +305,10 @@ function C.OnSettleRequest(from, amt, label)
   end
   if not StaticPopupDialogs then return end
   StaticPopupDialogs.KINA_SETTLE_REQ = StaticPopupDialogs.KINA_SETTLE_REQ or {
-    text = "%s asks you to settle %s for the %s farm.", button1 = "Pay", button2 = "Not now", timeout = 120, hideOnEscape = true,
-    OnAccept = function() C.PayStart(C.PayDue()) end }
-  C.ShowPopup("KINA_SETTLE_REQ", tostring(from), C.Money(due.amt), tostring(label or "group"))
+    text = "%s asks you to settle %s.", button1 = "Pay", button2 = "Not now", timeout = 120, hideOnEscape = true,
+    -- 0.9.13 (exploit test): pay the person who asked (it paid your first debt, whoever that was to)
+    OnAccept = function(_, data) C.PayStart(data or C.PayDue()) end }
+  C.ShowPopup("KINA_SETTLE_REQ", tostring(from), C.Money(due.amt) .. " for the " .. tostring(label or "group") .. " farm", due)
 end
 -- the receiver's side: the payer put money in the trade
 C.On("TRADE_MONEY_CHANGED", function()

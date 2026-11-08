@@ -657,7 +657,7 @@ function C.PauseSession(fromParty, want)
   if want == nil then want = not s.paused end
   if want == (s.paused and true or false) then return end
   if want then s.paused, s.pauseAt = true, C.Now()
-  else s.pausedSecs = (s.pausedSecs or 0) + (C.Now() - (s.pauseAt or C.Now())); s.paused, s.pauseAt = nil, nil end
+  else s.pausedSecs = (s.pausedSecs or 0) + (C.Now() - (s.pauseAt or C.Now())); s.paused, s.pauseAt = nil, nil; s.resumeAt = C.Now() end
   C.SessionLog(want and "pause" or "resume")
   C.Print(want and "farm paused: the clock stops and nothing you kill or loot counts until you resume." or "farm resumed.")
   if s.sync then
@@ -1037,7 +1037,8 @@ function C.SessionTick()
   end
   -- 1.5.4 (Taylor): an hour after the last kill (anyone's, in a group farm) the farm
   -- ends, as of that last kill, so the empty hour never counts
-  local lk = C.LastKillAt(s)
+  -- 0.9.13: the hour counts from a resume too (a long pause stopped the farm the moment it resumed)
+  local lk = math.max(C.LastKillAt(s), s.resumeAt or 0)
   if not s.paused and now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
   -- group farm: the leader tells everyone the group's numbers every 5 seconds
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then

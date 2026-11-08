@@ -48,7 +48,9 @@ local function onCredit(from, rest, channel)
   local uid, target, name = rest:match("^(%x+)|([^|]*)|([^|]*)$")
   if not uid or uid == (C.Share and C.Share.UID()) then return end
   if first(target) ~= me() then return end -- someone else's credit (sent to the whole group)
-  name = first(name) or first(from)
+  -- 0.9.13 (exploit test): the recruit is whoever SENT the credit, never a name inside it
+  -- (one other account could otherwise send 50 made-up recruits)
+  name = first(from)
   if not name or C.IsMyChar(from) or C.IsMyChar(name) then return end -- never your own characters
   local d = db()
   d.recruits = d.recruits or {}

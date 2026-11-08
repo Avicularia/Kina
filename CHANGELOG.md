@@ -1,3 +1,10 @@
+# Kina 0.9.13 (beta)
+
+- Dishonour breaks your portrait: cracked, then shattered, then snapped in two.
+- Kina level sits on a curved nameplate in your ring's colour.
+- 3D portraits sit higher in the frame; an empty Ledger welcomes new players.
+- Fixes: a long pause no longer ends the farm on resume; Pay pays whoever asked.
+
 # Kina 0.9.12 (beta)
 
 - Profile portraits show your character's live 3D model, sharp at full size.

@@ -1191,7 +1191,8 @@ if C.PUBLIC then
     local open = (tot.owe or 0) >= 1 and (ORANGE .. "you owe " .. money(tot.owe) .. "|r") or ((tot.toCollect or 0) >= 1 and (GOLDC .. money(tot.toCollect) .. " owed|r") or (GREEN .. "none|r"))
     return GOLDC .. "Farms, " .. period() .. "|r  " .. GREY .. "click a farm for its details|r", { "Date", "Farm", "Players", "Farmed", "Your share", "Collected", "To collect", "Paid", "You owe", "XP" },
       { 0, 46, 210, 260, 345, 430, 515, 600, 680, 760 }, out,
-      { empty = "No farms yet. Press Start on the Kina widget when you farm; every farm shows up here with its gold, debts and XP.",
+      { empty = GOLDC .. "No farms yet|r\n\nPress " .. GOLDC .. "Start|r on the Kina widget when you go farming, alone or with friends.\n"
+          .. "Every farm shows up here: what it made, your share, any debts, and the Kina XP it earned.",
         tiles = { { "Farmed", GOLDC .. money(tot.farmed) .. "|r" }, { "Your share", GOLDC .. money(share) .. "|r" }, { "Collected", GREEN .. money(tot.collected) .. "|r" },
           { "Paid", money(tot.paid) }, { "Open", open }, { "Kina XP", "|cff4fc3f7+" .. (tot.xp or 0) .. "|r", (tot.waiting or 0) > 0 and (tot.waiting .. " waiting") or nil } } }
   end
@@ -3686,7 +3687,16 @@ function C.Refresh()
           .. "deals likely to lose money (Guardian 50%+), and trades that make less than your time is worth. Click it again to see them." or "")
         .. ((C.settings.minROI or 0) > 0 and ("\n\nMin ROI is " .. C.settings.minROI .. "%: lower it to see more.") or "")
     elseif msg and hidden > 0 then msg = msg .. string.format("\n\n%d rows are hidden by Min ROI or 'Hide not worth my time' (bottom bar).", hidden) end
-    if msg then ui.empty:SetWidth(math.max(300, ui.w - 160)); ui.empty:SetText(msg); ui.empty:Show() else ui.empty:Hide() end
+    if msg then
+      -- 0.9.13 (Taylor: it ran over the summary tiles): below the column headers, centred
+      ui.empty:ClearAllPoints()
+      local h1 = ui.headers and ui.headers[1]
+      local fr = ui.frame
+      if h1 and h1:IsShown() then
+        ui.empty:SetPoint("TOPLEFT", h1, "BOTTOMLEFT", 40, -40); ui.empty:SetPoint("RIGHT", fr, "RIGHT", -60, 0)
+      else ui.empty:SetPoint("TOP", fr, "TOP", 0, -130); ui.empty:SetWidth(math.max(300, ui.w - 160)) end
+      ui.empty:SetJustifyH("CENTER"); ui.empty:SetText(msg); ui.empty:Show()
+    else ui.empty:Hide() end
   end
   if ui.searchBox and ui.searchBox:GetText() ~= (ui.search[tab] or "") then ui.searchBox:SetText(ui.search[tab] or "") end
   -- 0.9.4: the profile tab, while someone's profile is open
