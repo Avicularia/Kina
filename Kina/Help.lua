@@ -40,7 +40,8 @@ local TOPICS = {
     .. H("Time to pay") .. "- " .. G .. "2 hours of play time|r: the clock only runs while one of you is online, and the person owed keeps it.\n"
     .. "- Ask once for more time: the person owed can give 2 more hours, 4 at most.\n"
     .. "- The person owed can forgive a debt at any time.\n"
-    .. H("When it runs out") .. "- The debt " .. R .. "lapses: -50 standing|r. It moves to Collections, where you can still pay it late.\n"
+    .. H("When it runs out") .. "- The debt " .. R .. "lapses: -50 standing|r. It moves to Collections, where you can still pay it late "
+    .. "(up to 60 days) for 80% of the XP and standing, instead of losing all of it.\n"
     .. "- If you offered the full amount in a trade and they didn't take it, the debt can't count against you. "
     .. "If it then runs out, the person who turned it down loses the standing instead (-50; -100 if again within 30 days).\n"
     .. "- After a turned-down offer there are 5 minutes in which it can still be paid with nobody losing standing." },

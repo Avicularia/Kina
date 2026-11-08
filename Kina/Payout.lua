@@ -408,12 +408,17 @@ function C.Debts()
   local me = first(UnitName("player"))
   local out = {}
   for _, s in ipairs(C.db.sessions or {}) do
-    if s.stop and C.Now() - s.stop > 14 * 86400 then break end
+    -- (0.9.2: a lapsed debt can still be paid late for 60 days, from Collections)
+    if s.stop and C.Now() - s.stop > 60 * 86400 then break end
+    local old = s.stop and C.Now() - s.stop > 14 * 86400
     local sp = s.split
     if sp and sp.transfers and not (s.hold and not s.hold.done) then -- (0.9.0: not while waiting for AH prices)
       sp.paid = sp.paid or {}; sp.received = sp.received or {}
       for _, t in ipairs(sp.transfers) do
-        if (first(t.from) == me or t.from == "you") and t.amt > 0 then
+        local who = (first(t.from) == me or t.from == "you") and t.to or t.from
+        if old and not (sp.lapsed and sp.lapsed[who]) then
+          -- older than 14 days and not lapsed: nothing to pay
+        elseif (first(t.from) == me or t.from == "you") and t.amt > 0 then
           local rest = left(sp.paid, t.to, t.amt)
           if rest >= 1 then out[#out + 1] = { dir = "owe", who = t.to, amt = rest, farm = s.label or "farm", t = s.stop or s.start, s = s, key = t.to, tr = t } end
         elseif (first(t.to) == me or t.to == "you") and t.amt > 0 then
@@ -509,6 +514,7 @@ C.DEBT_DAYS, C.EXTEND_DAYS = C.DEBT_HOURS, C.EXTEND_HOURS
 -- counted twice. After a payment is offered and turned down there are 5 minutes in
 -- which it can still be paid without anyone losing standing.
 C.GRACE = 300
+C.LATE_PAY = 0.8 -- 0.9.2 (Taylor): paying a debt after it ran out earns 80% of the XP and standing
 function C.DebtLimit(d)
   local sp = d.s.split or {}
   local ext = sp.ext and tonumber(sp.ext[d.key]) or 0
@@ -655,12 +661,14 @@ function C.SettleMoved(who, gave, got, via)
   for _, d in ipairs(C.Debts()) do
     if first(d.who) == who then
       local k = 0
+      -- 0.9.2 (Taylor): a debt paid after it ran out earns 80% of the XP and standing
+      local late = d.s and d.s.split and ((d.s.split.lapsed and d.s.split.lapsed[d.key]) or (C.DebtDue and C.DebtDue(d) and C.Now() > C.DebtDue(d))) and true or nil
       if d.dir == "owe" and gave - usedGave >= 1 then
         k = math.min(d.amt, gave - usedGave); markPaid(d, k); usedGave = usedGave + k
       elseif d.dir == "owed" and got - usedGot >= 1 then
         k = math.min(d.amt, got - usedGot); markPaid(d, k); usedGot = usedGot + k
       end
-      if k > 0 then covers[#covers + 1] = { start = d.s and d.s.start, label = d.farm, amt = math.floor(k), dir = d.dir, topup = d.topup or nil,
+      if k > 0 then covers[#covers + 1] = { start = d.s and d.s.start, label = d.farm, amt = math.floor(k), dir = d.dir, topup = d.topup or nil, late = late,
         total = math.floor((d.tr and tonumber(d.tr.amt)) or (d.amt + 0)), stop = d.s and d.s.stop or nil } end
     end
   end
@@ -710,7 +718,7 @@ function C._matchConf(r, theirGave, label)
       local tot = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
       -- 1.5.3 (Taylor): paying and being paid earn the SAME standing
       if tot >= 1 and C.Rep and C.Rep.PayRep then
-        payRep = payRep + C.Rep.PayRep(tot) * (cv.amt or 0) / tot + (onTime(cv) and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)
+        payRep = payRep + (C.Rep.PayRep(tot) * (cv.amt or 0) / tot + (onTime(cv) and not cv.late and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)) * (cv.late and C.LATE_PAY or 1)
       end
     end
     for _, cv in ipairs(r.covers or {}) do
@@ -718,8 +726,9 @@ function C._matchConf(r, theirGave, label)
       if total >= 1 then
         local part = (cv.amt or 0) / total
         -- 1.2.6: paid soon after the farm earns more (full in 5 min, half after an hour)
-        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
-        else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part end
+        local lf = cv.late and C.LATE_PAY or 1
+        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop) * lf
+        else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part * lf end
       end
     end
     if nx then payRep = 0 end
@@ -731,10 +740,11 @@ function C._matchConf(r, theirGave, label)
         local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
         if total >= 1 then
           local part = (cv.amt or 0) / total
+          local lf = cv.late and C.LATE_PAY or 1
           if cv.dir == "owed" then
-            theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop)
-          else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part end
-          theirRep = theirRep + C.Rep.PayRep(total) * part + (onTime(cv) and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)
+            theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop) * lf
+          else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part * lf end
+          theirRep = theirRep + (C.Rep.PayRep(total) * part + (onTime(cv) and not cv.late and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)) * lf
         end
       end
       if nx then payXP, recvXP, theirs, theirRep = 0, 0, 0, 0 end

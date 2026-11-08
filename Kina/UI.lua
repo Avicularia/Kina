@@ -1163,6 +1163,10 @@ if C.PUBLIC then
           elseif g.kind == "vouchgave" then what = string.format("vouched for %s", C.Books.Name(g.who))
           elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           elseif g.kind == "lapsed" then what = string.format("%sa debt to %s lapsed unpaid (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
+          elseif g.kind == "tour" then what = string.format("|cffffd100finished the Kina tour (+%d rep)|r", g.rep or 0)
+          elseif g.kind == "jail" then what = "took the one-time pardon: standing back to 1"
+          elseif g.kind == "decay" then what = string.format("%sidle week(s) (%+d rep)|r", GREY, g.rep or 0)
+          elseif g.kind == "breakpoint" then what = string.format("%stoo many thumbs down: standing dropped to -99 (%d rep)|r", ORANGE, g.rep or 0)
           else what = string.format("%s paid you %s (%s, confirmed)", C.Books.Name(g.who), C.Money(g.cameIn), g.via) end
           local note = g.paused and (ORANGE .. "sharing off|r") or (g.xp < g.want and (GREY .. "daily cap|r") or "")
           out[#out + 1] = { cols = { day(g.t), what, note, g.xp > 0 and ("+" .. g.xp) or (GREY .. "0|r") }, sort = { g.t, what, "", g.xp } }
@@ -2516,6 +2520,10 @@ local function buildSettings(f)
   header("Check Kina")
   action("Run self-test", function() if C.SelfTest then C.SelfTest.Run() end end)
   note(function() return "checks Kina works on this client (results in chat)" end)
+  -- 0.9.2 (Taylor): add-ons can't reach the internet, so Kina asks the other Kina users
+  -- it can reach (group, guild) which version they run, and links where to download
+  action("Check for updates", function() if C.Share and C.Share.CheckUpdates then C.Share.CheckUpdates() end end)
+  note(function() return C.Share and C.Share.UpdateText and C.Share.UpdateText() or "" end)
   else
   -------------------------------------------------- column 1: auction house and money
   column(0)

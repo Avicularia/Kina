@@ -1119,6 +1119,49 @@ function S.SendHold(action, n, label, members)
   if ch then enqueue(msg, ch, nil, true)
   else for _, who in ipairs(members or {}) do enqueue(msg, "WHISPER", who) end end
 end
+-- 0.9.2 (Taylor): "Check for updates". An add-on can't reach the internet (CurseForge
+-- or GitHub), so Kina asks every Kina it can reach (group and guild) for its version,
+-- waits a few seconds, and compares the newest build it has heard of, from anyone,
+-- in the last two weeks. The CurseForge app also updates Kina on its own.
+C.UPDATE_URL = "github.com/Avicularia/Kina/releases"
+function S.NewestHeard()
+  local best, from, at
+  for _, a in pairs(db().authors or {}) do
+    local b = tonumber(a.build)
+    if b and b > (C.BUILD or 0) and b <= (C.BUILD or 0) + BUILD_JUMP and C.Now() - (a.seen or 0) < 14 * 86400 and (not best or b > best.build) then
+      best = { build = b, ver = a.ver, who = a.name, seen = a.seen }
+    end
+  end
+  return best
+end
+function S.UpdateText()
+  local u = C.settings and C.settings.updCheck
+  if not u then return "asks the Kina users in your group and guild which version they run" end
+  if u.ver then return "|cffffd100Kina " .. u.ver .. " is out|r (you have " .. tostring(C.version) .. "): " .. C.UPDATE_URL end
+  return "|cff7CFC00up to date|r as of " .. (date and date("%b %d %H:%M", u.t) or "") .. " (" .. (u.n or 0) .. " Kina users checked)"
+end
+function S.CheckUpdates()
+  if not db().opts.enabled then C.Print("turn on data sharing to check for updates (Settings > Data sharing)."); return end
+  S.Announce(true)
+  C.Print("checking for a newer Kina with the Kina users in your group and guild...")
+  local function done()
+    local n = 0
+    for _, a in pairs(db().authors or {}) do if C.Now() - (a.seen or 0) < 14 * 86400 then n = n + 1 end end
+    local best = S.NewestHeard()
+    C.settings.updCheck = { t = C.Now(), n = n, ver = best and best.ver or nil }
+    if best then
+      C.Print(string.format("|cffffd100A newer Kina is out: %s|r (you have %s; %s runs it). Update with the CurseForge app, or download it from %s, replace the Kina folder and /reload.",
+        tostring(best.ver or ("build " .. best.build)), tostring(C.version), tostring(best.who or "a Kina user"), C.UPDATE_URL))
+    elseif n == 0 then
+      C.Print("no other Kina users to ask right now. The CurseForge app shows Kina updates, or check " .. C.UPDATE_URL .. ".")
+    else
+      C.Print(string.format("|cff7CFC00Kina %s is up to date|r: none of the %d Kina users you've seen lately runs a newer one.", tostring(C.version), n))
+    end
+    if C.RefreshSettings then pcall(C.RefreshSettings) end
+  end
+  if C.After then C.After(6, done) else done() end
+end
+
 -- 0.9.1: my Kina found loot under my name in a farm log that I never looted
 function S.SendTamper(label)
   if not db().opts.enabled then return end

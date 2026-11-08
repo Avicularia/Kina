@@ -80,7 +80,9 @@ function C.ShowPanel(name)
       p:ClearAllPoints()
       p:SetPoint("TOPLEFT", u.frame, "TOPLEFT", 16, -(u.panelTop or 92))
       p:SetPoint("BOTTOMRIGHT", u.frame, "BOTTOMRIGHT", -16, 44)
-      p:Show(); if p.refresh then pcall(p.refresh) end
+      p:Show()
+      -- (0.9.2: a page that fails to draw is logged, not silently left half-drawn)
+      if p.refresh then local ok, err = pcall(p.refresh); if not ok and C.LogError then C.LogError("panel " .. tostring(n), err) end end
     else p:Hide() end
   end
 end
@@ -204,14 +206,8 @@ builders.you = function(p)
     if cos and cos.try then cos.try:Hide(); cos.bars:Hide() end
     local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(who)
     local ch = pr and pr.char
-    local u = C.Profile and C.Profile.UnitFor and C.Profile.UnitFor(who)
-    local set = false
-    if u and SetPortraitTexture then set = pcall(SetPortraitTexture, portrait, u) end
-    if not set then
-      if ch and ch.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[ch.class] then
-        portrait:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles"); portrait:SetTexCoord(unpack(CLASS_ICON_TCOORDS[ch.class]))
-      else portrait:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); portrait:SetTexCoord(0, 1, 0, 1) end
-    else portrait:SetTexCoord(0, 1, 0, 1) end
+    -- their live portrait when they're in sight, else their class crest
+    if C.Profile and C.Profile.SetPortrait then pcall(C.Profile.SetPortrait, portrait, who) end
     local stand = pr and pr.stand
     local sname, sat, snext = "Unproven", 0, 100
     if type(stand) == "number" and C.Rep then sname, sat, snext = C.Rep.StandingOf(stand) end

@@ -182,7 +182,7 @@ function V.ThumbButton(parent, bad, w, h, label)
   end
   local ic = b:CreateTexture(nil, "ARTWORK"); ic:SetSize(h - 4, h - 4); ic:SetPoint("LEFT", 4, 0); ic:SetTexture(bad and DOWN or UP)
   local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); t:SetPoint("LEFT", ic, "RIGHT", 4, 0); t:SetPoint("RIGHT", -4, 0)
-  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Bad") .. "|r") or ("|cffffd100" .. (label or "Commend") .. "|r"))
+  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Disgraced") .. "|r") or ("|cffffd100" .. (label or "Commend") .. "|r"))
   local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetPoint("TOPLEFT", 2, -2); hl:SetPoint("BOTTOMRIGHT", -2, 2)
   hl:SetColorTexture(bad and 1 or 1, bad and 0.2 or 0.85, bad and 0.15 or 0.4, 0.18)
   b:SetMotionScriptsWhileDisabled(true)
@@ -214,7 +214,7 @@ local function makeCard(parent)
   if C.Cos then C.Cos.Font(c.name, 15, "OUTLINE") end
   c.stand = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.stand:SetPoint("TOP", c.name, "BOTTOM", 0, -3)
   c.up = V.ThumbButton(c, false, CARD_W - 16, 26, "Commend"); c.up:SetPoint("BOTTOM", 0, 40)
-  c.down = V.ThumbButton(c, true, CARD_W - 16, 26, "Bad"); c.down:SetPoint("BOTTOM", 0, 9)
+  c.down = V.ThumbButton(c, true, CARD_W - 16, 26, "Disgraced"); c.down:SetPoint("BOTTOM", 0, 9)
   c.result = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.result:SetPoint("BOTTOM", 0, 22); c.result:SetWidth(CARD_W - 12)
   return c
 end

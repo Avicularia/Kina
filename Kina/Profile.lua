@@ -35,10 +35,18 @@ function P.SetPortrait(tex, name)
     tex:SetTexCoord(0, 1, 0, 1); if pcall(SetPortraitTexture, tex, u) then return end
   end
   local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(name)
-  local cls = pr and pr.char and pr.char.class
-  if cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
-    tex:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles"); tex:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
-  else tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); tex:SetTexCoord(0, 1, 0, 1) end
+  P.ClassIcon(tex, pr and pr.char and pr.char.class)
+end
+-- 0.9.2: the class crest as its own icon file. (The old one cut a corner out of the
+-- game's sheet of all class circles, and a round portrait mask ignores that cut: the
+-- widget showed the whole sheet of tiny class icons.)
+local CLASS_FILE = { WARRIOR = "Warrior", PALADIN = "Paladin", HUNTER = "Hunter", ROGUE = "Rogue", PRIEST = "Priest",
+  DEATHKNIGHT = "DeathKnight", SHAMAN = "Shaman", MAGE = "Mage", WARLOCK = "Warlock", MONK = "Monk", DRUID = "Druid",
+  DEMONHUNTER = "DemonHunter", EVOKER = "Evoker" }
+function P.ClassIcon(tex, cls)
+  tex:SetTexCoord(0, 1, 0, 1)
+  local f = cls and CLASS_FILE[cls]
+  tex:SetTexture(f and ("Interface\\Icons\\ClassIcon_" .. f) or "Interface\\Icons\\INV_Misc_QuestionMark")
 end
 
 -- people worth listing: your group first (Kina or not), then recent farm partners
@@ -128,7 +136,7 @@ local function build()
   o.note = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); o.note:SetPoint("BOTTOMLEFT", 16, 44); o.note:SetWidth(288); o.note:SetJustifyH("LEFT")
   -- 1.5.2: thumbs up (commend) and thumbs down (bad commendation, red)
   o.up = C.Vouch.ThumbButton(card, false, 100, 26, "Commend"); o.up:SetPoint("BOTTOMLEFT", 12, 12)
-  o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Bad"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
+  o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Disgraced"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
   o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(o.whisper) end; o.whisper:SetSize(82, 24); o.whisper:SetPoint("BOTTOMRIGHT", -12, 13)
   o.whisper:SetText("Whisper")
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaProfile") end
@@ -158,10 +166,7 @@ function P.ShowCard(name)
   local set = false
   if u and SetPortraitTexture then set = pcall(SetPortraitTexture, o.portrait, u) end
   if not set then
-    local cls = ch and ch.class
-    if cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
-      o.portrait:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles"); o.portrait:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
-    else o.portrait:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); o.portrait:SetTexCoord(0, 1, 0, 1) end
+    P.ClassIcon(o.portrait, ch and ch.class)
   else o.portrait:SetTexCoord(0, 1, 0, 1) end
   local stand = pr and pr.stand
   local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil

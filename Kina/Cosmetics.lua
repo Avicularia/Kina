@@ -164,7 +164,12 @@ function K.OpenList(anchor, label, options, onPick, style)
     -- 1.5.2: "bad" lists (bad commendations) are red: red border, red tint, red highlight
     if style == "bad" then r.hl:SetColorTexture(1, 0.15, 0.1, 0.30) else r.hl:SetColorTexture(1, 0.85, 0.4, 0.16) end
     r.t:SetText(opt[1])
-    r:SetScript("OnClick", function() menu:Hide(); onPick(opt[2]) end)
+    r:SetScript("OnClick", function()
+      menu:Hide()
+      -- (0.9.2: a choice that fails is logged, so it can be found)
+      local ok, err = pcall(onPick, opt[2])
+      if not ok and C.LogError then C.LogError("list " .. tostring(label), err) end
+    end)
     r:Show()
   end
   menu:SetSize(244, 34 + #options * 18)

@@ -163,10 +163,14 @@ local function layoutCard(step)
   local c = makeCard()
   c.step:SetText(string.format("KINA TOUR  ·  %d OF %d", idx, #T.steps))
   c.title:SetText(step.title or "")
-  c.body:SetText(step.body or "")
+  -- (title, body and rules can be functions, worked out when the card shows)
+  local function val(v) if type(v) == "function" then local ok, r = pcall(v); return ok and r or "" end; return v end
+  c.title:SetText(val(step.title) or "")
+  c.body:SetText(val(step.body) or "")
+  local rules = val(step.rules)
   local h = 30 + (c.title:GetStringHeight() or 20) + 19 + (c.body:GetStringHeight() or 40)
-  if step.rules and step.rules ~= "" then
-    c.rbox.text:SetText(step.rules)
+  if rules and rules ~= "" then
+    c.rbox.text:SetText(rules)
     local rh = (c.rbox.text:GetStringHeight() or 30) + 32
     c.rbox:ClearAllPoints(); c.rbox:SetPoint("TOPLEFT", c.body, "BOTTOMLEFT", 0, -12); c.rbox:SetSize(CARD_W - 36, rh); c.rbox:Show()
     h = h + 12 + rh
@@ -240,7 +244,7 @@ end
 
 function T.Go(i)
   if i < 1 then return end
-  if i > #T.steps then T.Stop(); return end
+  if i > #T.steps then T.Stop(false, true); return end
   leave()
   idx = i
   local step = T.steps[i]
@@ -255,6 +259,33 @@ function T.Go(i)
   if l and step.beside then local ok, bf = pcall(step.beside); if ok then bl, br, bt, bb = rectOf(bf) end end
   placeCard(step, l, r, t, b, bl, br, bt, bb)
   card:Show()
+  -- some features only get their size a moment after they show (a tooltip filling in):
+  -- light them again shortly after
+  if C.After and step.target then
+    C.After(0.3, function()
+      if not (T.active and current == step) then return end
+      local ok, f, f2 = pcall(step.target)
+      if not ok then return end
+      local l2, r2, t2, b2 = light(f, f2)
+      local xl, xr, xt, xb
+      if l2 and step.beside then local ok2, bf = pcall(step.beside); if ok2 then xl, xr, xt, xb = rectOf(bf) end end
+      placeCard(step, l2, r2, t2, b2, xl, xr, xt, xb)
+    end)
+  end
+end
+
+-- 0.9.2 (Taylor): finishing the tour the first time earns 50 XP and 20 standing. It's a
+-- surprise: only the last page says so (TourSteps.lua, "done").
+function T.Rewarded() return C.settings and C.settings.tourRewarded or false end
+function T.Reward()
+  if T.Rewarded() or not C.Log then return end
+  C.settings.tourRewarded = true
+  C.Log("tour", "done")
+  local R = C.Rep or {}
+  C.Print(string.format("|cffffd100Tour complete: +%d XP and +%d standing.|r Welcome to Kina!", R.TOUR_XP or 50, R.TOUR_REP or 20))
+  if C.PlayCue then pcall(C.PlayCue, "settled") end
+  if C.Refresh then pcall(C.Refresh) end
+  if C.RefreshWidget then pcall(C.RefreshWidget) end
 end
 
 -- what the screen looked like before, put back at the end
@@ -268,7 +299,7 @@ function T.Start(at)
   if type(at) == "string" then i = T.Find(at) or 1 elseif type(at) == "number" then i = at end
   T.Go(i)
 end
-function T.Stop(skipped)
+function T.Stop(skipped, finished)
   leave()
   if ov then ov:Hide() end
   if card then card:Hide() end
@@ -282,6 +313,7 @@ function T.Stop(skipped)
     end
   end
   saved = nil
+  if finished and not T.Rewarded() then T.Reward(); return end
   if skipped then C.Print("tour skipped. Replay it any time: " .. GOLD .. "/kina tour|r, or the Help tab.")
   else C.Print("that's Kina! Replay the tour any time with " .. GOLD .. "/kina tour|r; the Help tab has every rule.") end
 end

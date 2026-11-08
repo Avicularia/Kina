@@ -140,7 +140,7 @@ do
           if not sp.lapsed[d.key] then
             sp.lapsed[d.key] = true
             if C.Log then C.Log("lapsed", d.who, math.floor(d.amt), (d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) end
-            show({ head = "Debt lapsed: " .. (C.Books and C.Books.Name(d.who) or d.who), sub = C.Money(math.floor(d.amt)) .. GREY .. " (" .. (d.farm or "farm") .. ") was not paid in time|r", gains = "|cffff4040" .. C.Rep.LAPSE_REP .. " rep|r" .. GREY .. "  (paying it still earns XP and rep back)|r" })
+            show({ head = "Debt lapsed: " .. (C.Books and C.Books.Name(d.who) or d.who), sub = C.Money(math.floor(d.amt)) .. GREY .. " (" .. (d.farm or "farm") .. ") was not paid in time|r", gains = "|cffff4040" .. C.Rep.LAPSE_REP .. " rep|r" .. GREY .. "  (paying it late still earns 80% of the XP and standing)|r" })
             if C.PlayCue then C.PlayCue("repdown") end
           end
         elseif due and due - C.Now() < 900 and not warned[key] then
@@ -160,6 +160,10 @@ do
             show({ head = "Payment refused: " .. (C.Books and C.Books.Name(d.who) or d.who), sub = GREY .. "they offered the full amount and the time ran out|r", gains = "|cffff4040standing lost|r" })
             if C.PlayCue then C.PlayCue("repdown") end
           end
+        elseif due and C.Now() >= due then
+          -- 0.9.2: the creditor's copy notes it ran out too (Collections, and a late payment
+          -- after 14 days still finds it)
+          sp.lapsed = sp.lapsed or {}; sp.lapsed[d.key] = sp.lapsed[d.key] or true
         end
       end
     end

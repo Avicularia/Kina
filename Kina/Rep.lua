@@ -104,7 +104,8 @@ end
 --    positive (not below 0), +50/week while negative (+25 Blacklisted), never above -20
 --  * while this Kina is out of date ("frozen" lines) nothing is gained or lost
 R.BLACKLIST, R.BREAK_REP = -1000, -99
-local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT" }
+local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT", "tourDone" }
+R.TOUR_XP, R.TOUR_REP = 50, 20 -- 0.9.2 (Taylor): finishing the welcome tour, once
 R.STATE_KEYS = STATE_KEYS
 function R.Mult(st)
   if (st.rep or 0) < 0 then return st.black and 0.25 or 0.5 end
@@ -162,6 +163,13 @@ function R.Replay(lines, st, gains)
         st.jailUsed = true; st.rep = 1; st.black = nil
         st.recoverTo = math.max(st.recoverTo or 0, st.maxEver); after(t)
         if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "jail", rep = 1 } end
+      end
+    elseif kind == "tour" then
+      -- 0.9.2: the welcome tour finished, the first time only
+      if not st.tourDone then
+        st.tourDone = true
+        local gx, gr = gainXP(R.TOUR_XP), gainRep(R.TOUR_REP, t)
+        if gains then gains[#gains + 1] = { t = t, xp = gx, want = R.TOUR_XP, kind = "tour", rep = gr } end
       end
     elseif kind == "carry" then
       -- 0.9.1 (security): this account's Kina file was wiped, but this character

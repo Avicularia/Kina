@@ -69,7 +69,7 @@ local STEPS = {
     rules = "- You have " .. G .. "2 hours of play time|r to pay (the clock only runs while one of you is online).\n"
       .. "- Ask once for more time: the person owed can give 2 more hours (4 at most).\n"
       .. "- Paying earns XP and standing; paying soon after the farm earns more XP.\n"
-      .. "- A debt that runs out costs " .. R .. "-50 standing|r. You can still pay it late from Collections.\n"
+      .. "- A debt that runs out costs " .. R .. "-50 standing|r. You can still pay it late from Collections for up to 80% of the XP and standing, instead of losing all of it.\n"
       .. "- Offered the full amount and they didn't take it? Then the debt can't count against you.",
     target = widget("pay"),
     open = function()
@@ -169,7 +169,20 @@ local STEPS = {
     target = function()
       if not (GameTooltip and GameTooltip.SetOwner) then return nil end
       GameTooltip:SetOwner(UIParent, "ANCHOR_NONE"); GameTooltip:ClearAllPoints(); GameTooltip:SetPoint("CENTER", UIParent, "CENTER", -220, 40)
-      if GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, 4306) end
+      -- (0.9.2: an item from your own bags, which the game always has loaded; an item the
+      -- game hasn't seen this session gives an empty tooltip that hides itself)
+      local done = false
+      local CC = C_Container
+      if CC and CC.GetContainerNumSlots and CC.GetContainerItemID and GameTooltip.SetBagItem then
+        for bag = 0, 4 do
+          for slot = 1, (CC.GetContainerNumSlots(bag) or 0) do
+            local id = CC.GetContainerItemID(bag, slot)
+            local sell = id and C_Item and C_Item.GetItemInfo and select(11, C_Item.GetItemInfo(id))
+            if id and (sell or 0) > 0 and not done then done = pcall(GameTooltip.SetBagItem, GameTooltip, bag, slot) end
+          end
+        end
+      end
+      if not done and GameTooltip.SetHyperlink then pcall(GameTooltip.SetHyperlink, GameTooltip, "item:2589") end
       GameTooltip:Show()
       return GameTooltip
     end,
@@ -183,12 +196,15 @@ local STEPS = {
     beside = mainFrame, close = hideMain },
 
   { id = "done", title = "You're ready",
-    body = "1.  Group up with other Kina users.\n"
+    -- 0.9.2 (Taylor): the reward is a surprise: only this last page mentions it
+    body = function() return "1.  Group up with other Kina users.\n"
       .. "2.  Press " .. G .. "Start|r and farm together for 15 minutes or more.\n"
       .. "3.  Press " .. G .. "Stop|r, and scan the auction house when asked.\n"
       .. "4.  " .. G .. "Pay|r what you owe, or " .. G .. "Ask|r for what you're owed.\n"
       .. "5.  Commend the partners who made it great.\n\n"
-      .. "Good hunting!" },
+      .. "Good hunting!"
+      .. ((T.Rewarded and not T.Rewarded()) and ("\n\n" .. G .. "One more thing: finishing the tour earns you " .. ((C.Rep and C.Rep.TOUR_XP) or 50)
+        .. " XP and " .. ((C.Rep and C.Rep.TOUR_REP) or 20) .. " standing. Press Finish to claim it!|r") or "") end },
 }
 
 for _, s in ipairs(STEPS) do T.Add(s) end

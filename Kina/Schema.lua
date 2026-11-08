@@ -101,6 +101,8 @@ SETTINGS.decayWeeks = N
 SETTINGS.tipDE = B
 SETTINGS.lastStanding = S
 SETTINGS.tourSeen = S
+SETTINGS.tourRewarded = B
+SETTINGS.updCheck = T
 SETTINGS.tourOff = B
 
 local DB = { t = T, f = {
@@ -115,10 +117,10 @@ local DB = { t = T, f = {
   log = { t = T, f = { lines = list({ t = T, f = { e = S, h = S }, req = { "e", "h" } }), base = S, summary = NUMMAP,
     repState = { t = T, f = { xp = N, share = B, cap = NUMMAP, rep = N, noProg = map(B), lastRefused = N,
       maxEver = N, lowEver = N, recoverTo = N, black = B, everBlack = B, jailUsed = B, frozen = B, negSecs = N, posSecs = N, lastT = N,
-      fell = N, lastFall = N, lastFarmT = N, badTimes = list(N), badSeen = N } }, repHash = S } },
+      fell = N, lastFall = N, lastFarmT = N, badTimes = list(N), badSeen = N, tourDone = B } }, repHash = S } },
   mark = { t = T, f = { rep = N, black = B, t = N } },
   settles = list({ t = T, f = { t = N, who = S, gave = N, got = N, via = S, paidOff = N, cameIn = N, conf = N,
-    covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N }, req = { "amt", "dir" } }) },
+    covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N, late = B }, req = { "amt", "dir" } }) },
     req = { "t", "who", "gave", "got", "via" } }),
   payout = { t = T, f = { floors = list({ t = T, f = { id = N, n = N, v = N, members = N, partners = list(S), label = S, t = N },
     req = { "id", "n", "v", "members", "partners" } }), owed = NUMMAP } },
