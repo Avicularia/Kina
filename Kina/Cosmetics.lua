@@ -62,36 +62,60 @@ local SHAME = { Delinquent = 0.5, Disgraced = 1, Oathbreaker = 1, Blacklisted = 
 local DARK = { Delinquent = 0.9, Disgraced = 0.85, Oathbreaker = 0.62, Blacklisted = 0.5 }
 local RINGDIM = { Delinquent = 0.85, Disgraced = 0.78, Oathbreaker = 0.72, Blacklisted = 0.6 }
 local VIGNETTE = { Oathbreaker = 0.8, Blacklisted = 1 }
-function K.Portrait(box, portrait)
+-- 0.9.12 (Taylor: the portrait "looks like a nintendo 64 cd art cover"): the big
+-- portraits show the character's live 3D model when the game has it (you, and anyone
+-- in sight). The game's 2D portrait is a small, blurry picture; the model is drawn at
+-- full size. The model sits between the portrait and the ring: a dark inner rim hides
+-- its square edges, the ring and its effects draw on top.
+local models = setmetatable({}, { __mode = "k" }) -- [portrait texture] = cosmetics object
+local modelUnit = setmetatable({}, { __mode = "k" })
+function K.Portrait(box, portrait, opts)
   local o = {}
   if portrait.SetMask then pcall(portrait.SetMask, portrait, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
   portrait:ClearAllPoints(); portrait:SetPoint("TOPLEFT", 4, -4); portrait:SetPoint("BOTTOMRIGHT", -4, 4)
   o.portrait = portrait
   local W = box:GetWidth() or 80
   o.W = W
+  -- everything over the portrait lives on a frame above it (so it also draws over the model)
+  local top = CreateFrame("Frame", nil, box); top:SetAllPoints(box)
+  if top.SetFrameLevel and box.GetFrameLevel then top:SetFrameLevel((box:GetFrameLevel() or 1) + 3) end
+  o.top = top
+  if opts and opts.model then
+    local ok, m = pcall(CreateFrame, "PlayerModel", nil, box)
+    if ok and m and m.SetUnit then
+      if m.SetFrameLevel and box.GetFrameLevel then m:SetFrameLevel((box:GetFrameLevel() or 1) + 1) end
+      m:SetPoint("CENTER", portrait, "CENTER", 0, 0); m:SetSize(W * 0.84, W * 0.84); m:Hide()
+      m:SetScript("OnShow", function(self) local u = modelUnit[self]; if u then K.ModelUnit(self, u) end end)
+      o.model = m
+      o.bezel = top:CreateTexture(nil, "OVERLAY", nil, 0)
+      o.bezel:SetPoint("CENTER", portrait, "CENTER"); o.bezel:SetSize(W * 1.30, W * 1.30)
+      o.bezel:SetTexture(P .. "portrait_bezel"); o.bezel:Hide()
+    end
+  end
+  models[portrait] = o
   local function addTex(layer, sub, file, size)
-    local t = box:CreateTexture(nil, layer, nil, sub); t:SetPoint("CENTER", portrait, "CENTER"); t:SetSize(size, size)
+    local t = (layer == "OVERLAY" and top or box):CreateTexture(nil, layer, nil, sub); t:SetPoint("CENTER", portrait, "CENTER"); t:SetSize(size, size)
     t:SetTexture(P .. file); t:SetBlendMode("ADD"); t:Hide(); return t
   end
   o.halo = addTex("BACKGROUND", -5, "fx_round", W * 2)
   o.halo2 = addTex("BACKGROUND", -4, "fx_round", W * 1.5)
   o.rays = addTex("BACKGROUND", -3, "fx_rays", W * 1.95)
   o.glow = addTex("BACKGROUND", -2, "fx_round", W) -- (kept for older callers; unused)
-  o.ring = box:CreateTexture(nil, "OVERLAY", nil, 2)
+  o.ring = top:CreateTexture(nil, "OVERLAY", nil, 2)
   o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
-  o.vig = box:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vignette"); o.vig:Hide()
+  o.vig = top:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vignette"); o.vig:Hide()
   o.glint = addTex("OVERLAY", 3, "fx_glint", W * 1.30)
   o.sparks = {}
   for i = 1, 2 do o.sparks[i] = addTex("OVERLAY", 6, "fx_spark", W * 0.32) end
   o.embers = {}
-  o.plate = box:CreateTexture(nil, "OVERLAY", nil, 4)
+  o.plate = top:CreateTexture(nil, "OVERLAY", nil, 4)
   o.plate:SetSize(36, 36); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, 4)
   o.plate:SetTexture(P .. "level_plate")
-  o.num = box:CreateFontString(nil, "OVERLAY")
+  o.num = top:CreateFontString(nil, "OVERLAY")
   K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, 1); o.num:SetTextColor(1, 0.86, 0.45)
-  o.badge = box:CreateTexture(nil, "OVERLAY", nil, 5)
+  o.badge = top:CreateTexture(nil, "OVERLAY", nil, 5)
   o.badge:SetPoint("CENTER", o.ring, "TOP", 0, 2)
-  o.badgeGlow = box:CreateTexture(nil, "OVERLAY", nil, 4); o.badgeGlow:SetPoint("CENTER", o.badge, "CENTER")
+  o.badgeGlow = top:CreateTexture(nil, "OVERLAY", nil, 4); o.badgeGlow:SetPoint("CENTER", o.badge, "CENTER")
   o.badgeGlow:SetTexture(P .. "fx_spark"); o.badgeGlow:SetBlendMode("ADD"); o.badgeGlow:SetVertexColor(0.35, 1, 0.35); o.badgeGlow:Hide()
   local t = 0
   local pulser = CreateFrame("Frame", nil, box)
@@ -135,6 +159,31 @@ function K.Portrait(box, portrait)
   end)
   return o
 end
+function K.ModelUnit(m, unit)
+  pcall(m.ClearModel, m)
+  local ok = pcall(m.SetUnit, m, unit)
+  if m.SetPortraitZoom then pcall(m.SetPortraitZoom, m, 1) end
+  if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, 1.15) end
+  if m.SetPosition then pcall(m.SetPosition, m, 0, 0, -0.04) end
+  return ok
+end
+-- show the live 3D model for this portrait (true), or false: keep the 2D picture
+function K.ShowModel(portrait, unit)
+  local o = models[portrait]
+  if not (o and o.model and unit) then return false end
+  if UnitIsVisible and not UnitIsVisible(unit) then K.HideModel(portrait); return false end
+  modelUnit[o.model] = unit
+  if not K.ModelUnit(o.model, unit) then K.HideModel(portrait); return false end
+  o.model:Show(); o.bezel:Show()
+  portrait:SetTexture(P .. "portrait_bg"); portrait:SetAlpha(1)
+  return true
+end
+function K.HideModel(portrait)
+  local o = models[portrait]
+  if not (o and o.model) then return end
+  modelUnit[o.model] = nil
+  o.model:Hide(); o.bezel:Hide()
+end
 local function setHalo(tex, h, W)
   if not h then tex:Hide(); return end
   tex:SetVertexColor(h[1], h[2], h[3]); tex:SetSize(W * h[4], W * h[4]); tex:SetAlpha(h[5]); tex:Show()
@@ -159,7 +208,7 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   for i = 1, want do
     local p = o.embers[i]
     if not p then
-      local tx = o.portrait:GetParent():CreateTexture(nil, "OVERLAY", nil, 7); tx:SetTexture(P .. "fx_spark"); tx:SetBlendMode("ADD")
+      local tx = (o.top or o.portrait:GetParent()):CreateTexture(nil, "OVERLAY", nil, 7); tx:SetTexture(P .. "fx_spark"); tx:SetBlendMode("ADD")
       p = { tex = tx, x = math.random() * 1.1 - 0.55, life = math.random(), speed = 0.18 + math.random() * 0.25, size = 0.05 + math.random() * 0.06, wob = math.random() * 6.28 }
       o.embers[i] = p
     end

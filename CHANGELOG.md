@@ -1,3 +1,7 @@
+# Kina 0.9.12 (beta)
+
+- Profile portraits show your character's live 3D model, sharp at full size.
+
 # Kina 0.9.11 (beta)
 
 - Each realm now has its own Kina profile. A new realm starts fresh; your old realm's profile is kept.

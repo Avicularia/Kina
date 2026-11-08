@@ -47,6 +47,12 @@ local function crestFor(tex)
 end
 function P.SetPortrait(tex, name)
   local u = unitFor(name)
+  -- 0.9.12: the live 3D model where there's one to show (big portraits only)
+  if u and C.Cos and C.Cos.ShowModel and C.Cos.ShowModel(tex, u) then
+    if crests[tex] then crests[tex]:Hide() end
+    return
+  end
+  if C.Cos and C.Cos.HideModel then C.Cos.HideModel(tex) end
   if u and UnitIsVisible and UnitIsVisible(u) and SetPortraitTexture then
     -- (0.9.4: no SetTexCoord here: Forever throws on a masked texture, and that one
     -- error was what left profiles, Collections and the Try menu half-drawn)
@@ -142,7 +148,7 @@ local function build()
   local o = { frame = card }
   o.box = CreateFrame("Frame", nil, card); o.box:SetSize(72, 72); o.box:SetPoint("TOPLEFT", 26, -30)
   o.portrait = o.box:CreateTexture(nil, "ARTWORK")
-  o.cos = C.Cos and C.Cos.Portrait(o.box, o.portrait)
+  o.cos = C.Cos and C.Cos.Portrait(o.box, o.portrait, { model = true })
   o.name = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); o.name:SetPoint("TOPLEFT", 122, -30)
   if C.Cos then C.Cos.Font(o.name, 19, "OUTLINE") end
   o.line1 = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); o.line1:SetPoint("TOPLEFT", o.name, "BOTTOMLEFT", 0, -5)

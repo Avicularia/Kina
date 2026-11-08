@@ -175,7 +175,7 @@ local function youPage(p, them)
   end
   local function makeCos()
     if cos or not C.Cos then return end
-    cos = C.Cos.Portrait(portraitBox, portrait); C.Cos.Font(lvl, 22, "OUTLINE"); C.Cos.Font(name, 30, "OUTLINE")
+    cos = C.Cos.Portrait(portraitBox, portrait, { model = true }); C.Cos.Font(lvl, 22, "OUTLINE"); C.Cos.Font(name, 30, "OUTLINE")
     cos.plate:SetSize(PW * 0.36, PW * 0.36); C.Cos.Font(cos.num, math.floor(PW * 0.12), "OUTLINE")
     cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
     local pv = C.Cos.preview
@@ -256,7 +256,9 @@ local function youPage(p, them)
     wh:Hide()
     local me = C.YouProfile and C.YouProfile() or { name = UnitName("player"), level = UnitLevel("player"), class = "?", profs = {} }
     if C.Profile and C.Profile.ClearCrest then C.Profile.ClearCrest(portrait) end
-    if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
+    if not (C.Cos and C.Cos.ShowModel and C.Cos.ShowModel(portrait, "player")) then
+      if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
+    end
     name:SetText(me.name or "You")
     line:SetText(string.format("Level %s %s", tostring(me.level or "?"), me.className or "?"))
     local m = C.Rep and C.Rep.Mine() or { level = 1, xp = 0, ok = true }
