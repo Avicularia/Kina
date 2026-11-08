@@ -196,6 +196,10 @@ end
 -- before other add-ons' whole-tooltip hooks); items without a sell price get it at the
 -- end as before. One block per hover (kept in a local table, never on the tooltip).
 local shown = setmetatable({}, { __mode = "k" })
+-- 0.9.3: "Only Kina" rebuilds the tooltip once per hover. Rebuilding it made the game
+-- (and other add-ons) fill it again, which rebuilt it again: the tooltip flashed.
+local rebuilding = setmetatable({}, { __mode = "k" })
+local rebuiltFor = setmetatable({}, { __mode = "k" })
 local function idOf(tip, data)
   local id = type(data) == "table" and tonumber(data.id) or nil
   if not id and tip.GetItem then
@@ -209,13 +213,14 @@ local function handle(tip, data)
   if not tip or (tip.IsForbidden and tip:IsForbidden()) then return end
   if tip ~= GameTooltip and tip ~= ItemRefTooltip then return end -- skip comparison tooltips
   if InCombatLockdown and InCombatLockdown() then return end
+  if rebuilding[tip] then return end
   local id = idOf(tip, data)
   if not id or shown[tip] == id then return end
   shown[tip] = id
   local ok, err = pcall(addLines, tip, id)
   if not ok and C.debug then C.Print("tooltip error: " .. tostring(err)) end
   tip:Show()
-  if C.settings.tipOnly and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
+  if C.settings.tipOnly and rebuiltFor[tip] ~= id and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
     local keep, name = tip:NumLines(), tip:GetName()
     C_Timer.After(0, function() pcall(C.TipOnlyKina, tip, name, keep, id) end)
   end
@@ -240,13 +245,18 @@ function C.TipOnlyKina(tip, name, keep, id)
     end
     rows[i] = { lt or " ", rt, lr, lg, lb, rr, rg, rb }
   end
-  tip:ClearLines()
-  for i, r in ipairs(rows) do
-    if r[2] and r[2] ~= "" then tip:AddDoubleLine(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
-    else tip:AddLine(r[1], r[3], r[4], r[5], #r[1] > 48) end
-  end
-  shown[tip] = id
-  tip:Show()
+  rebuilding[tip] = true
+  rebuiltFor[tip] = id
+  local ok = pcall(function()
+    tip:ClearLines()
+    for i, r in ipairs(rows) do
+      if r[2] and r[2] ~= "" then tip:AddDoubleLine(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+      else tip:AddLine(r[1], r[3], r[4], r[5], #r[1] > 48) end
+    end
+    shown[tip] = id
+    tip:Show()
+  end)
+  rebuilding[tip] = nil
 end
 
 C._TooltipAdd = addLines -- for tests
@@ -255,7 +265,10 @@ local function install()
   if hooked then return end
   hooked = true
   for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
-    if tip and tip.HookScript then tip:HookScript("OnTooltipCleared", function(self) shown[self] = nil end) end
+    if tip and tip.HookScript then
+      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil end end)
+      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil end)
+    end
   end
   local TDP = TooltipDataProcessor
   if TDP and TDP.AddLinePostCall and Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.SellPrice then

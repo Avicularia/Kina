@@ -2405,7 +2405,7 @@ end
 local function buildSettings(f)
   -- scrolls (mouse wheel or the bar on the right) when the options don't fit
   local sf = CreateFrame("ScrollFrame", "KinaSettingsScroll", f, "UIPanelScrollFrameTemplate")
-  sf:SetPoint("TOPLEFT", 12, -74); sf:SetPoint("BOTTOMRIGHT", -34, 62); sf:Hide()
+  sf:SetPoint("TOPLEFT", 12, -74 - (ui.tabBand and 24 or 0)); sf:SetPoint("BOTTOMRIGHT", -34, 62); sf:Hide()
   local outer = CreateFrame("Frame", nil, sf); outer:SetSize(ui.w - 50, 800)
   sf:SetScrollChild(outer)
   ui.settingsContent = outer
@@ -2883,7 +2883,7 @@ local function build()
         local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE"); ver:SetPoint("TOP", plateF, "BOTTOM", 0, 6)
         ver:SetText("|cffc9b27av" .. C.version .. "|r")
         title:Hide()
-        if C.Cos.PlaqueFX then pcall(C.Cos.PlaqueFX, plateF, 284, 71, 26) end -- 1.5.5: halo, sweep, sparks
+        if C.Cos.PlaqueFX then local okP, fxo = pcall(C.Cos.PlaqueFX, plateF, 284, 71, 26); if okP then ui.plaqueFX = fxo end end -- 1.5.5: halo, sweep, sparks
         -- 1.5.1: grabbing the banner moves the window too
         if C.DragBy then C.DragBy(f, plateF) end
       end
@@ -2914,22 +2914,91 @@ local function build()
   if C.Cos and C.Cos.Glow then pcall(C.Cos.Glow, f, 16) end -- 1.5.0: standing glow on the window
   ui.tabButtons = {}
   local x = 10
+  -- 0.9.3 (Taylor, mock approved): the tabs sit on their own tooled band under the plate,
+  -- sized to their names and starting at the left, so more tabs never reach the plate
+  local tabArt = setmetatable({}, { __mode = "k" })
+  ui.tabArt = tabArt
+  local banded = C.PUBLIC and C.Skin and C.Skin.On() and C.Cos and C.Cos.Font
+  if banded then
+    local band = CreateFrame("Frame", nil, f); band:SetFrameLevel(f:GetFrameLevel() + 6)
+    band:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -46); band:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -46); band:SetHeight(34)
+    local bg = band:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    bg:SetVertexColor(1, 1, 1, 1)
+    if bg.SetGradient and CreateColor then pcall(bg.SetGradient, bg, "VERTICAL", CreateColor(0.035, 0.028, 0.02, 0.96), CreateColor(0.09, 0.07, 0.05, 0.96))
+    else bg:SetColorTexture(0.06, 0.05, 0.035, 0.96) end
+    local top = band:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1); top:SetColorTexture(0.47, 0.38, 0.20, 1)
+    local bot = band:CreateTexture(nil, "BORDER"); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT"); bot:SetHeight(2); bot:SetColorTexture(0.84, 0.67, 0.31, 1)
+    local bot2 = band:CreateTexture(nil, "BORDER"); bot2:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 40, -1); bot2:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", -40, -1); bot2:SetHeight(1); bot2:SetColorTexture(0.35, 0.27, 0.14, 1)
+    ui.tabBand = band
+  end
+  local function tabLook(b, on, over)
+    local a = tabArt[b]
+    if not a then return end
+    if on then
+      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.60, 0.44, 0.17, 1), CreateColor(0.87, 0.69, 0.33, 1)) else a.fill:SetColorTexture(0.8, 0.62, 0.28, 1) end
+      for _, t in ipairs(a.rim) do t:SetColorTexture(1, 0.84, 0.47, 1) end
+      a.shine:SetColorTexture(1, 0.94, 0.75, 0.9); a.label:SetTextColor(0.18, 0.12, 0.04); a.label:SetShadowColor(1, 0.9, 0.6, 0.35); a.notch:Show()
+    else
+      local k = over and 1.25 or 1
+      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.13 * k, 0.10 * k, 0.07 * k, 1), CreateColor(0.23 * k, 0.19 * k, 0.13 * k, 1)) else a.fill:SetColorTexture(0.18, 0.15, 0.1, 1) end
+      for _, t in ipairs(a.rim) do t:SetColorTexture(0.69 * k, 0.54 * k, 0.26 * k, 1) end
+      a.shine:SetColorTexture(0.47, 0.38, 0.24, 0.8); a.label:SetTextColor(0.91, 0.78, 0.47); a.label:SetShadowColor(0, 0, 0, 1); a.notch:Hide()
+    end
+  end
+  ui.tabLook = tabLook
   for _, name in ipairs(tabOrder) do
-    local b = button(f, name, 54, function() ui.tab = name; ui.offset = 0; if name == "You" then ui.youWho = nil end; C.Refresh() end)
+    local onTabClick = function()
+      -- 0.9.3 (Taylor): the plate flares when you open a different tab
+      if ui.tab ~= name and ui.plaqueFX and ui.plaqueFX.flash then pcall(ui.plaqueFX.flash) end
+      ui.tab = name; ui.offset = 0; if name == "You" then ui.youWho = nil end; C.Refresh() end
+    if banded then
+      local b = CreateFrame("Button", nil, ui.tabBand); b:SetFrameLevel(ui.tabBand:GetFrameLevel() + 2)
+      local a = {}
+      a.fill = b:CreateTexture(nil, "BACKGROUND"); a.fill:SetPoint("TOPLEFT", 1, -1); a.fill:SetPoint("BOTTOMRIGHT", -1, 1); a.fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+      a.rim = {}
+      for i, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+        local t = b:CreateTexture(nil, "BORDER"); t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
+        a.rim[i] = t
+      end
+      a.shine = b:CreateTexture(nil, "ARTWORK"); a.shine:SetPoint("TOPLEFT", 4, -2); a.shine:SetPoint("TOPRIGHT", -4, -2); a.shine:SetHeight(1)
+      a.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); C.Cos.Font(a.label, 13, ""); a.label:SetPoint("CENTER", 0, 0)
+      a.label:SetShadowOffset(1, -1); a.label:SetText(name)
+      a.notch = b:CreateTexture(nil, "OVERLAY"); a.notch:SetSize(8, 8); a.notch:SetPoint("CENTER", b, "BOTTOM", 0, -3)
+      a.notch:SetColorTexture(0.84, 0.67, 0.31, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
+      tabArt[b] = a
+      local w = math.floor((a.label:GetStringWidth() or (#name * 8)) + 28)
+      b:SetSize(math.max(58, w), 24); b:SetPoint("LEFT", ui.tabBand, "LEFT", x, 1)
+      if x > 10 then
+        local dia = ui.tabBand:CreateTexture(nil, "ARTWORK"); dia:SetSize(5, 5); dia:SetPoint("CENTER", ui.tabBand, "LEFT", x - 7, 1)
+        dia:SetColorTexture(0.69, 0.54, 0.26, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
+      end
+      x = x + b:GetWidth() + 14
+      b:SetScript("OnClick", onTabClick)
+      b:SetScript("OnEnter", function(self) tabLook(self, ui.tab == name, true) end)
+      b:SetScript("OnLeave", function(self) tabLook(self, ui.tab == name, false) end)
+      tabLook(b, false)
+      ui.tabButtons[name] = b
+    else
+    local b = button(f, name, 54, function()
+      -- 0.9.3 (Taylor): the plate flares when you open a different tab
+      if ui.tab ~= name and ui.plaqueFX and ui.plaqueFX.flash then pcall(ui.plaqueFX.flash) end
+      ui.tab = name; ui.offset = 0; if name == "You" then ui.youWho = nil end; C.Refresh() end)
     b:SetPoint("TOPLEFT", x, -28); x = x + 56
     if C.Skin and C.Skin.On() then
       -- 1.5.5: tabs are the same buttons as everywhere else (gold-filled when open)
       b:SetSize(76, 24); x = x + 24
     end
     ui.tabButtons[name] = b
+    end
   end
   -- search box (filters the current tab)
   local sb = CreateFrame("EditBox", "KinaSearch", f, "InputBoxTemplate")
   sb:SetSize(130, 20); sb:SetPoint("TOPRIGHT", -16, -30); sb:SetAutoFocus(false)
+  if banded then sb:ClearAllPoints(); sb:SetPoint("RIGHT", ui.tabBand, "RIGHT", -12, 1); sb:SetFrameLevel(ui.tabBand:GetFrameLevel() + 3) end
   sb:SetScript("OnTextChanged", function(self) ui.search[ui.tab or "Hot"] = self:GetText(); ui.offset = 0; C.Refresh() end)
   sb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   sb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-  local sl = C.Text(f, "OVERLAY", "GameFontDisableSmall"); sl:SetPoint("RIGHT", sb, "LEFT", -6, 0); sl:SetText("Search")
+  local sl = C.Text(ui.tabBand or f, "OVERLAY", "GameFontDisableSmall"); sl:SetPoint("RIGHT", sb, "LEFT", -6, 0); sl:SetText("Search")
   ui.searchBox = sb
   -- bottom bar
   local scan = button(f, "Scan AH", 80, function() C.StartScanLoop() end); scan:SetPoint("BOTTOMRIGHT", -32, 10)
@@ -3419,7 +3488,7 @@ function C.Refresh()
   end
   opts = opts or {}
   -- 1.2.0: breathing room under the tab shelf in the iron look
-  if C.Skin and C.Skin.On() then opts.top = (opts.top or 0) + 10 end
+  if C.Skin and C.Skin.On() then opts.top = (opts.top or 0) + 10 + (ui.tabBand and 24 or 0) end -- (0.9.3: the tab band sits lower)
   -- 1.5.5: a strip of summary tiles above a list (Session, Ledger)
   do
     local baseTop = opts.top or 0
@@ -3574,7 +3643,8 @@ function C.Refresh()
   if ui.searchBox and ui.searchBox:GetText() ~= (ui.search[tab] or "") then ui.searchBox:SetText(ui.search[tab] or "") end
   for name, b in pairs(ui.tabButtons) do
     if name == tab then b:LockHighlight() else b:UnlockHighlight() end
-    if C.Skin and C.Skin.TabActive then pcall(C.Skin.TabActive, b, name == tab) end
+    if ui.tabLook and ui.tabArt and ui.tabArt[b] then ui.tabLook(b, name == tab)
+    elseif C.Skin and C.Skin.TabActive then pcall(C.Skin.TabActive, b, name == tab) end
   end
   C.Draw()
 end

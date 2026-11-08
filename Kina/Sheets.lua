@@ -255,6 +255,7 @@ builders.you = function(p)
     wh:Hide()
     portrait:SetTexCoord(0, 1, 0, 1)
     local me = C.YouProfile and C.YouProfile() or { name = UnitName("player"), level = UnitLevel("player"), class = "?", profs = {} }
+    if C.Profile and C.Profile.ClearCrest then C.Profile.ClearCrest(portrait) end
     if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
     name:SetText(me.name or "You")
     line:SetText(string.format("Level %s %s", tostring(me.level or "?"), me.className or "?"))
@@ -815,7 +816,10 @@ builders.collections = function(p)
     for i, b in ipairs(filters) do if FL[i][1] == filter then b:LockHighlight() else b:UnlockHighlight() end end
     local list = {}
     for _, c in ipairs(C.Collections()) do if filter == "all" or c.stamp == filter then list[#list + 1] = c end end
-    empty:SetText(#list == 0 and (GREY .. "Nothing here yet.|r") or "")
+    -- 0.9.3 (Taylor): say so plainly, so an empty page is clearly working
+    local EMPTY = { all = "No collections detected yet: debts that are settled, forgiven or lapse will show up here.",
+      lapsed = "No lapsed debts detected.", forgiven = "No forgiven debts detected.", settled = "No settled debts detected yet." }
+    empty:SetText(#list == 0 and (GREY .. (EMPTY[filter] or EMPTY.all) .. "|r") or "")
     for i, r in ipairs(rows) do
       local c = list[i]
       if c then

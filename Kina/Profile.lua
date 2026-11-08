@@ -29,25 +29,48 @@ end
 P.UnitFor = unitFor
 -- 1.5.4: the best picture we have of someone: their live portrait when they're near,
 -- otherwise their class crest (the game can't save a portrait for later)
+-- 0.9.3: the crest is drawn on its own unmasked texture over the portrait. (A round
+-- portrait mask ignores a cut-out of the game's class-circle sheet, and Forever has no
+-- per-class icon files, so both earlier tries showed nothing or the whole sheet.)
+local crests = setmetatable({}, { __mode = "k" })
+local function crestFor(tex)
+  local c = crests[tex]
+  if not c then
+    local parent = tex:GetParent()
+    local layer, sub = tex:GetDrawLayer()
+    c = parent:CreateTexture(nil, layer or "ARTWORK", nil, math.min(7, (sub or 0) + 1))
+    c:SetAllPoints(tex)
+    c:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+    crests[tex] = c
+  end
+  return c
+end
 function P.SetPortrait(tex, name)
   local u = unitFor(name)
   if u and UnitIsVisible and UnitIsVisible(u) and SetPortraitTexture then
-    tex:SetTexCoord(0, 1, 0, 1); if pcall(SetPortraitTexture, tex, u) then return end
+    tex:SetTexCoord(0, 1, 0, 1)
+    if pcall(SetPortraitTexture, tex, u) then
+      if crests[tex] then crests[tex]:Hide() end
+      tex:SetAlpha(1)
+      return
+    end
   end
   local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(name)
   P.ClassIcon(tex, pr and pr.char and pr.char.class)
 end
--- 0.9.2: the class crest as its own icon file. (The old one cut a corner out of the
--- game's sheet of all class circles, and a round portrait mask ignores that cut: the
--- widget showed the whole sheet of tiny class icons.)
-local CLASS_FILE = { WARRIOR = "Warrior", PALADIN = "Paladin", HUNTER = "Hunter", ROGUE = "Rogue", PRIEST = "Priest",
-  DEATHKNIGHT = "DeathKnight", SHAMAN = "Shaman", MAGE = "Mage", WARLOCK = "Warlock", MONK = "Monk", DRUID = "Druid",
-  DEMONHUNTER = "DemonHunter", EVOKER = "Evoker" }
 function P.ClassIcon(tex, cls)
-  tex:SetTexCoord(0, 1, 0, 1)
-  local f = cls and CLASS_FILE[cls]
-  tex:SetTexture(f and ("Interface\\Icons\\ClassIcon_" .. f) or "Interface\\Icons\\INV_Misc_QuestionMark")
+  local co = cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls]
+  if co then
+    local c = crestFor(tex)
+    c:SetTexCoord(unpack(co)); c:Show()
+    tex:SetAlpha(0) -- (the masked portrait underneath stays, just unseen)
+  else
+    if crests[tex] then crests[tex]:Hide() end
+    tex:SetAlpha(1); tex:SetTexCoord(0, 1, 0, 1); tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+  end
 end
+-- when the page switches back to my own live portrait, the crest goes
+function P.ClearCrest(tex) if crests[tex] then crests[tex]:Hide() end; tex:SetAlpha(1) end
 
 -- people worth listing: your group first (Kina or not), then recent farm partners
 function P.People()
@@ -163,11 +186,7 @@ function P.ShowCard(name)
   local u = unitFor(name)
   local ch = pr and pr.char
   -- portrait: the live one when they're near, else their class icon
-  local set = false
-  if u and SetPortraitTexture then set = pcall(SetPortraitTexture, o.portrait, u) end
-  if not set then
-    P.ClassIcon(o.portrait, ch and ch.class)
-  else o.portrait:SetTexCoord(0, 1, 0, 1) end
+  P.SetPortrait(o.portrait, name)
   local stand = pr and pr.stand
   local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
   local klv = pr and pr.kinaLv

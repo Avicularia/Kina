@@ -276,10 +276,16 @@ function K.PlaqueFX(plate, w, h, count)
       size = 4 + math.random() * 7, wob = math.random() * 6.28 }
   end
   local t, nextSweep, sweepT = 0, 2, nil
+  local flashT -- 0.9.3: a quick flare (a new tab opened)
   fx:SetScript("OnUpdate", function(_, el)
     if el > 0.2 then el = 0.2 end
     t = t + el
-    halo:SetAlpha(0.55 + 0.30 * math.sin(t * 1.6))
+    local boost = 0
+    if flashT then
+      flashT = flashT + el
+      if flashT >= 0.45 then flashT = nil else boost = math.sin(flashT / 0.45 * math.pi) * 0.45 end
+    end
+    halo:SetAlpha(math.min(1, 0.55 + 0.30 * math.sin(t * 1.6) + boost))
     -- the sweep: across the plate in 0.9 s, every 5-7 s
     if not sweepT and t >= nextSweep then sweepT = 0 end
     if sweepT then
@@ -302,5 +308,6 @@ function K.PlaqueFX(plate, w, h, count)
       p.tex:SetAlpha(math.sin(p.life * math.pi) * 0.9)
     end
   end)
-  return fx
+  -- (returned, not stored on the frame) flash(): the halo flares and a sweep runs now
+  return { frame = fx, flash = function() flashT = 0; if not sweepT then sweepT = 0 end end }
 end

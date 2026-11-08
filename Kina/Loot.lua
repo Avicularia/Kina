@@ -243,7 +243,7 @@ local function readLoot()
     if ctxOf[guid] then return ctxOf[guid] end
     local ctx = "corpse"
     if fishing then ctx = "fish"
-    elseif targetAlive and guid == targetGUID then ctx = "pickpocket"
+    elseif targetAlive and not (issecretvalue and (issecretvalue(targetGUID) or issecretvalue(guid))) and guid == targetGUID then ctx = "pickpocket"
     elseif skinning and seenLoot[tostring(guid) .. "corpse"] then ctx = "skin" end
     ctxOf[guid] = ctx
     return ctx
@@ -346,7 +346,7 @@ local function readLoot()
           if C.session then C.session.nodes = (C.session.nodes or 0) + 1 end
           -- its name: the tooltip of what you just clicked (chest, vein, herb)
           local nm = GameTooltip and GameTooltip.IsShown and GameTooltip:IsShown() and GameTooltipTextLeft1 and GameTooltipTextLeft1:GetText()
-          if type(nm) == "string" and nm ~= "" then n.name = nm end
+          if type(nm) == "string" and not (issecretvalue and issecretvalue(nm)) and nm ~= "" then n.name = nm end
           C.SessionLog("opened", oid, n.name)
         end
         if id then
