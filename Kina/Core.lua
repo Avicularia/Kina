@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "0.9.10"
+C.version = "0.9.11"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 165
+C.BUILD = 166
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -195,6 +195,45 @@ local function fill(dst, src)
   end
 end
 
+-- 0.9.11 (Taylor): each realm has its own Kina profile. A realm is its own community,
+-- so moving to a new realm starts a new Kina level, standing, record and debts there;
+-- going back to the old realm brings its profile back. What belongs to the profile:
+local PROFILE_KEYS = { "log", "sessions", "activeSession", "settles", "forgive", "payout", "vouch",
+  "mentor", "mark", "farmIn", "seenMail", "share" }
+C.PROFILE_KEYS = PROFILE_KEYS
+function C.RealmProfile(db, cur)
+  cur = cur or (GetRealmName and GetRealmName()) or "?"
+  if type(db.realms) ~= "table" then db.realms = {} end
+  local was = db.profileRealm
+  if type(was) ~= "string" then
+    -- data from before 0.9.11 belongs to the realm it was made on: the one whose auction
+    -- house Kina knows best (a brand-new install has none, and simply starts here)
+    local best, bn = nil, 0
+    for k, m in pairs(type(db.markets) == "table" and db.markets or {}) do
+      local r, n = tostring(k):match("^(.-)|"), 0
+      if type(m) == "table" and type(m.items) == "table" then for _ in pairs(m.items) do n = n + 1 end end
+      if r and n > bn then best, bn = r, n end
+    end
+    was = best or cur
+  end
+  if was ~= cur then
+    local out = {}
+    for _, k in ipairs(PROFILE_KEYS) do out[k] = db[k]; db[k] = nil end
+    db.realms[was] = out
+    local back = db.realms[cur]
+    if type(back) == "table" then
+      for _, k in ipairs(PROFILE_KEYS) do db[k] = back[k] end
+      db.realms[cur] = nil
+    elseif type(out.share) == "table" and type(out.share.opts) == "table" then
+      -- a new profile keeps your sharing settings (and nothing else)
+      local o = {}; for k, v in pairs(out.share.opts) do o[k] = v end
+      db.share = { opts = o }
+    end
+    C.realmSwitched = { from = was, to = cur, fresh = type(back) ~= "table" }
+  end
+  db.profileRealm = cur
+end
+
 function C.InitDB()
   -- Kina was called Kina Scout C: the old saved data (loaded by the small KinaScoutC
   -- stub that ships with Kina) moves over once, so nothing is lost in the rename.
@@ -206,6 +245,7 @@ function C.InitDB()
       KinaDB = KinaDB or {}
     end
   end
+  C.RealmProfile(KinaDB)
   -- damaged or very old saved data: drop whatever has the wrong shape (Schema.lua)
   if C.Sanitize then
     local n = C.Sanitize(KinaDB)
@@ -524,3 +564,16 @@ function C.Job(fn) table.insert(jobs, fn); runner:Show() end
 function C.After(sec, fn)
   if C_Timer and C_Timer.After then C_Timer.After(sec, fn) else fn() end
 end
+
+-- 0.9.11: say so when this realm's Kina profile is new (or an old one came back)
+C.On("PLAYER_LOGIN", function()
+  local s = C.realmSwitched
+  if not (s and C.After) then return end
+  C.After(6, function()
+    if s.fresh then
+      C.Print(string.format("|cffffd100new realm, new Kina profile:|r Kina level, standing and record start fresh on %s. Your %s profile is kept for when you play there.", s.to, s.from))
+    else
+      C.Print(string.format("|cffffd100welcome back to %s:|r your Kina profile here is back (your %s one is kept).", s.to, s.from))
+    end
+  end)
+end)

@@ -1,3 +1,7 @@
+# Kina 0.9.11 (beta)
+
+- Each realm now has its own Kina profile. A new realm starts fresh; your old realm's profile is kept.
+
 # Kina 0.9.10 (beta)
 
 - Installs shared: new players name who told them about Kina; it counts toward the mentor star after their first 15-minute farm.
