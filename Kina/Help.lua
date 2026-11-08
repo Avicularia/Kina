@@ -18,7 +18,8 @@ local TOPICS = {
     .. "so every widget shows the same numbers. Stop ends the farm for everyone.\n"
     .. H("What counts") .. "- A farm counts for Kina level and standing after " .. G .. "15 minutes|r. Paused time doesn't count.\n"
     .. "- If anyone in the farm is " .. R .. "under level 10|r at any point, the farm gives no progression. The split still works.\n"
-    .. "- A farm stops itself " .. G .. "an hour after its last kill|r, and counts as ending at that kill.\n"
+    .. "- A solo farm runs until you press Stop (time logged off doesn't count). A group farm stops itself "
+    .. G .. "an hour after its last kill|r, and counts as ending at that kill.\n"
     .. H("Fixing the log") .. "Right-click a partner's item on the Session page to leave it out, or to dispute its price "
     .. "(it then counts at its vendor price for everyone; disputes are logged). You can't leave out your own loot: a partner can." },
 

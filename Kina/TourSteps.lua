@@ -51,7 +51,7 @@ local STEPS = {
       .. "Press " .. G .. "Stop|r when you're done. It stops the farm for everyone.",
     rules = "- A farm counts for Kina level and standing after " .. G .. "15 minutes|r (paused time doesn't count).\n"
       .. "- If anyone in the farm is " .. R .. "under level 10|r, the farm gives no progression. The split still works.\n"
-      .. "- A farm stops itself " .. G .. "an hour after its last kill|r, and counts as ending at that kill.",
+      .. "- A solo farm runs until you press Stop. A group farm stops itself " .. G .. "an hour after its last kill|r.",
     target = widget("go") },
 
   { id = "tiles", title = "The numbers",

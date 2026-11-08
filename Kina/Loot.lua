@@ -1039,7 +1039,8 @@ function C.SessionTick()
   -- ends, as of that last kill, so the empty hour never counts
   -- 0.9.13: the hour counts from a resume too (a long pause stopped the farm the moment it resumed)
   local lk = math.max(C.LastKillAt(s), s.resumeAt or 0)
-  if not s.paused and now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
+  -- 0.9.14 (Taylor): a solo farm never ends by itself; only shared farms stop when idle
+  if s.sync and not s.paused and now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
   -- group farm: the leader tells everyone the group's numbers every 5 seconds
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then
     local _, lead = C.FarmLeader()
@@ -1100,11 +1101,26 @@ C.On("INIT", function()
   if n > 0 then C.Print("skinning records reset (" .. n .. " mobs): older ones counted ordinary corpse loot as skins. New skins are counted correctly.") end
 end)
 
+C.On("PLAYER_LOGOUT", function()
+  local s = C.session
+  if s and not s.sync and not s.paused then s.paused, s.pauseAt, s.offPause = true, C.Now(), true end
+end)
 C.On("INIT", function()
   local s = C.db.activeSession
   if type(s) ~= "table" or not s.start then C.db.activeSession = nil; return end
   C.session = s
   s.items = s.items or {}; s.money = s.money or {}; s.byNpc = s.byNpc or {}; s.kills = s.kills or 0
+  -- 0.9.14 (Taylor): a solo farm never ends by itself. The time you were logged off
+  -- doesn't count (it was paused at logout), and it carries on where you left it.
+  if not s.sync then
+    if s.offPause then
+      s.pausedSecs = (s.pausedSecs or 0) + math.max(0, C.Now() - (s.pauseAt or C.Now()))
+      s.paused, s.pauseAt, s.offPause = nil, nil, nil
+      s.resumeAt = C.Now()
+    end
+    C.Print("farm resumed: " .. tostring(s.label))
+    return
+  end
   -- 1.5.4: everyone logged off and an hour passed since the last kill: it ended there
   local lk = C.LastKillAt(s)
   if C.Now() - lk >= 3600 then

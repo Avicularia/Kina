@@ -1,3 +1,8 @@
+# Kina 0.9.14 (beta)
+
+- Solo farms run until you press Stop (time logged off doesn't count).
+- No more "farming partner?" popup when a Kina user joins your group.
+
 # Kina 0.9.13 (beta)
 
 - Dishonour breaks your portrait: cracked, then shattered, then snapped in two.

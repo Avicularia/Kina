@@ -340,35 +340,9 @@ function C.OnKinaMate(name, char, tries)
     greeted[name] = true
     C.Print(string.format("%s runs Kina: syncing scans, loot and community drop data (progress on the scan bar).", name))
   end
-  local profs = {}
-  for p, sk in pairs(char.profs or {}) do profs[#profs + 1] = p .. " " .. sk end
-  table.sort(profs)
-  local text = string.format("Kina: %s (%s %d%s) is in your group.\n\nUse them as your farming partner?",
-    name, nice(char.class), char.level or 0, #profs > 0 and (": " .. table.concat(profs, ", ")) or "")
-  if not (StaticPopupDialogs and StaticPopup_Show) then return end
-  StaticPopupDialogs.KINA_SYNC = {
-    text = "%s", button1 = YES or "Yes", button2 = NO or "No", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    OnAccept = function(_, data)
-      local st = C.settings
-      st.partnerClass = data.char.class
-      st.partnerLevel = data.char.level
-      local parts, slots = {}, {}
-      for p, sk in pairs(data.char.profs or {}) do parts[#parts + 1] = p .. " " .. sk; slots[#slots + 1] = { p, sk } end
-      table.sort(slots, function(a, b) return a[1] < b[1] end)
-      st.partnerProfs = table.concat(parts, ", ")
-      st.partnerSlots = { slots[1] or { "None", 1 }, slots[2] or { "None", 1 } }
-      st.farmMode = "duo"
-      C.Print(string.format("partner set: %s (%s %d). Farms now split loot across your group.", data.name, nice(data.char.class), data.char.level or 0))
-      if C.Refresh then C.Refresh() end
-    end,
-  }
-  local dlg = C.ShowPopup("KINA_SYNC", text, nil, { name = name, char = char })
-  -- get noticed: ready-check sound, and on top of every window
-  if PlaySound then pcall(PlaySound, (SOUNDKIT and SOUNDKIT.READY_CHECK) or 8960, "Master") end
-  if dlg then
-    if dlg.SetFrameStrata then dlg:SetFrameStrata("FULLSCREEN_DIALOG") end
-    if dlg.Raise then dlg:Raise() end
-  end
+  -- 0.9.14 (Taylor): no more "Use them as your farming partner?" popup. It only fed the
+  -- private build's farm planner (public Kina never showed it), and the split works
+  -- through the farm invite either way. The chat line above is all that's left.
 end
 C.On("GROUP_ROSTER_UPDATE", function()
   -- ask again next time someone rejoins
