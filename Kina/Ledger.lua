@@ -455,7 +455,7 @@ function C.LedgerFixHeld()
       if C.Refresh then C.Refresh() end
     end,
   }
-  StaticPopup_Show("KINA_FIXHELD", "Kina: these are no longer in your bags, bank or AH listings. Mark them as sold to a vendor (at vendor price)?\n\n"
+  C.ShowPopup("KINA_FIXHELD", "Kina: these are no longer in your bags, bank or AH listings. Mark them as sold to a vendor (at vendor price)?\n\n"
     .. table.concat(lines, "\n") .. ((#list > #lines) and ("\n... and " .. (#list - #lines) .. " more") or "")
     .. "\n\n(Items still in your mailbox would be counted too: collect your mail first.)", nil, list)
 end

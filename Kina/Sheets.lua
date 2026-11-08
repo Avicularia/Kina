@@ -348,7 +348,7 @@ builders.debts = function(p)
   if cPort.SetMask then pcall(cPort.SetMask, cPort, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
   local cName = text(card, "GameFontNormalLarge"); cName:SetPoint("TOPLEFT", 66, -14)
   local cPick
-  if C.Cos and C.Cos.Picker then
+  if C.Cos and C.Cos.Picker and not C.PUBLIC then -- (0.9.8: no Try on the Debts page)
     local opts = { { "(their real standing)", false } }
     for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted", "Delinquent" }) do opts[#opts + 1] = { st, st } end
     cPick = C.Cos.Picker(card, "Their ring", opts, function(v) C.Cos.preview.theirRing = v or nil; if p.refresh then p.refresh() end end)
@@ -479,7 +479,7 @@ builders.debts = function(p)
                 text = "Forgive %s?\n\nThe debt closes for both of you and can't be reopened.",
                 button1 = "Forgive", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
                 OnAccept = function(_, y) if y and C.Forgive then C.Forgive(y) end end }
-              StaticPopup_Show("KINA_FORGIVE", x.who .. " the " .. C.Money(math.floor(d.amt)), nil, d)
+              C.ShowPopup("KINA_FORGIVE", x.who .. " the " .. C.Money(math.floor(d.amt)), nil, d)
             else C.Forgive(d) end
           end, 100)
           setBtn(l.btns[2], (sp.pleaFrom and sp.pleaFrom[d.key]) and ("Give " .. C.EXTEND_HOURS .. " more hours") or nil, function() C.ExtendDebt(d); p.refresh() end, 150)

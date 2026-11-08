@@ -195,6 +195,14 @@ function C.PayStart(due)
 end
 
 C.On("TRADE_SHOW", function()
+  -- 0.9.8: the person you owe asked you to settle and opened this trade: pay them
+  local them0 = UnitName and UnitName("NPC")
+  local ask = them0 and C.settleAsks and C.settleAsks[first(them0)]
+  if ask and GetTime() - ask.t < 120 and not (pendingPay and GetTime() - pendingPay.t < 60) then
+    C.settleAsks[first(them0)] = nil
+    pendingPay = { to = ask.due.to, amt = ask.due.amt, due = ask.due, t = GetTime() }
+    if StaticPopup_Hide then pcall(StaticPopup_Hide, "KINA_SETTLE_REQ") end
+  end
   local p = pendingPay
   if not p or GetTime() - p.t > 60 then pendingPay = nil; return end
   local them = UnitName and UnitName("NPC")
@@ -249,7 +257,7 @@ local function popupAccept(text)
       local ok = AcceptTrade and pcall(AcceptTrade)
       if not ok then C.Print("press Trade in the trade window to finish.") end
     end }
-  StaticPopup_Show("KINA_TRADE_ACCEPT", text)
+  C.ShowPopup("KINA_TRADE_ACCEPT", text)
 end
 C.AskAcceptTrade = popupAccept
 
@@ -271,11 +279,26 @@ function C.RequestSettle(due)
   if not (due and C.Share and C.Share.SendSettle) then return end
   expecting = { from = due.from, amt = due.amt, s = due.s, t = GetTime() }
   C.Share.SendSettle("req", due.from, due.amt, due.s and due.s.label or "farm")
-  C.Print(string.format("asked %s to settle %s. Stay close: they get a Pay popup.", C.Books.Name(due.from), C.Money(due.amt)))
+  -- 0.9.8 (Taylor): Ask to pay opens the trade too when they're close enough; their Kina
+  -- puts the amount in for them (it knows the debt) and they just accept
+  local u = unitFor(due.from)
+  local near = u and (not CheckInteractDistance or CheckInteractDistance(u, 2))
+  if near and InitiateTrade then
+    pcall(InitiateTrade, u)
+    C.Print(string.format("asked %s to settle %s and opened a trade: their Kina puts the money in.", C.Books.Name(due.from), C.Money(due.amt)))
+  else
+    C.Print(string.format("asked %s to settle %s. Stand next to them to trade: they also get a Pay popup.", C.Books.Name(due.from), C.Money(due.amt)))
+  end
 end
 -- the payer's side: a request arrived
+C.settleAsks = {}
 function C.OnSettleRequest(from, amt, label)
   local due = C.PayDue()
+  -- (0.9.8: the debt to THIS person, not just the first one due)
+  for _, d in ipairs(C.Debts()) do
+    if d.dir == "owe" and first(d.who) == first(from) and d.amt >= 1 then due = { to = d.who, amt = math.floor(d.amt), s = d.s }; break end
+  end
+  if due and first(due.to) == first(from) then C.settleAsks[first(from)] = { t = GetTime(), due = due } end
   if not due or first(due.to) ~= first(from) then
     C.Print(string.format("%s asked you to settle %s, but Kina has no matching debt (check your farm log).", tostring(from), C.Money(amt or 0)))
     return
@@ -284,7 +307,7 @@ function C.OnSettleRequest(from, amt, label)
   StaticPopupDialogs.KINA_SETTLE_REQ = StaticPopupDialogs.KINA_SETTLE_REQ or {
     text = "%s asks you to settle %s for the %s farm.", button1 = "Pay", button2 = "Not now", timeout = 120, hideOnEscape = true,
     OnAccept = function() C.PayStart(C.PayDue()) end }
-  StaticPopup_Show("KINA_SETTLE_REQ", tostring(from), C.Money(due.amt), tostring(label or "group"))
+  C.ShowPopup("KINA_SETTLE_REQ", tostring(from), C.Money(due.amt), tostring(label or "group"))
 end
 -- the receiver's side: the payer put money in the trade
 C.On("TRADE_MONEY_CHANGED", function()

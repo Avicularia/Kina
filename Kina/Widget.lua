@@ -319,7 +319,11 @@ function C.RefreshWidget()
       for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
     end
     local tr = last and last.split and last.split.loot and last.split.transfers
-    if tr and tr[1] then
+    -- 0.9.8 (Taylor): while the farm's split waits for a fresh auction scan there is no
+    -- number yet: the split from the old prices isn't what anyone will owe
+    if last and last.hold and not last.hold.done then
+      w.status:SetText("|cffffd100waiting for the auction house scan|r")
+    elseif tr and tr[1] then
       -- what's still open between you and the group on that farm (part payments count)
       local r = C.Books and C.Books.Farm(last)
       local open = {}

@@ -1962,7 +1962,7 @@ local RENAME = {
 function C.RenameCamp(r)
   if not (StaticPopupDialogs and StaticPopup_Show) then return end
   StaticPopupDialogs["KINA_RENAME_CAMP"] = RENAME
-  StaticPopup_Show("KINA_RENAME_CAMP", nil, nil, { camp = r.camp })
+  C.ShowPopup("KINA_RENAME_CAMP", nil, nil, { camp = r.camp })
 end
 
 -- Edit mobs: take a mob out of a camp, add one you killed while farming it,
@@ -3378,7 +3378,7 @@ local function build()
               C.Print(string.format("disputed %s: it now counts at its vendor price (%s each) for everyone in this farm.", data.name, C.Money(data.vend)))
             end,
           }
-          StaticPopup_Show("KINA_DISPUTE", string.format("Dispute the value of %s?\nIt will count at its vendor price (%s each) for everyone in this farm. Disputes are logged.", dd.name, C.Money(vend)), nil, { s = dd.s, id = dd.id, name = dd.name, vend = vend })
+          C.ShowPopup("KINA_DISPUTE", string.format("Dispute the value of %s?\nIt will count at its vendor price (%s each) for everyone in this farm. Disputes are logged.", dd.name, C.Money(vend)), nil, { s = dd.s, id = dd.id, name = dd.name, vend = vend })
         end
       elseif d.debtWho then
         C.debtsWant = d.debtWho
@@ -3395,7 +3395,7 @@ local function build()
           text = "Forgive %s?\n\nThe debt closes for both of you and can't be reopened.",
           button1 = "Forgive", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
           OnAccept = function(_, x) if x and C.Forgive then C.Forgive(x) end end }
-        StaticPopup_Show("KINA_FORGIVE", C.Books.Name(od.who) .. " the " .. C.Money(math.floor(od.amt)), nil, od)
+        C.ShowPopup("KINA_FORGIVE", C.Books.Name(od.who) .. " the " .. C.Money(math.floor(od.amt)), nil, od)
       elseif d.book then
         ui.bookOf = d.book; ui.offset = 0; C.Refresh()
       elseif d.flip and not (IsShiftKeyDown and IsShiftKeyDown()) then

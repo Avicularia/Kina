@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "0.9.7"
+C.version = "0.9.8"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 162
+C.BUILD = 163
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -43,6 +43,13 @@ function C.MerchantIsOpen() if MerchantFrame and MerchantFrame.IsShown then retu
 -- Admin view (the private build only): who used which consumables. Public builds show
 -- the group total only, so nobody gets blamed for a potion.
 function C.Admin() return not C.PUBLIC end
+-- 0.9.8: Kina's confirm popups (Forgive, Pay, Dispute...) are the game's popups, which sit
+-- on a lower layer than the Kina window: they opened hidden behind it. Kina steps back
+-- first (clicking Kina again brings it forward).
+function C.ShowPopup(which, ...)
+  if C.LowerKina then pcall(C.LowerKina) end
+  return StaticPopup_Show(which, ...)
+end
 C.SCHEMA = 1
 
 local floor = math.floor

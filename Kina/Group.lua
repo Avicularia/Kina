@@ -362,7 +362,7 @@ function C.OnKinaMate(name, char, tries)
       if C.Refresh then C.Refresh() end
     end,
   }
-  local dlg = StaticPopup_Show("KINA_SYNC", text, nil, { name = name, char = char })
+  local dlg = C.ShowPopup("KINA_SYNC", text, nil, { name = name, char = char })
   -- get noticed: ready-check sound, and on top of every window
   if PlaySound then pcall(PlaySound, (SOUNDKIT and SOUNDKIT.READY_CHECK) or 8960, "Master") end
   if dlg then

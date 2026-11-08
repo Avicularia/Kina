@@ -228,36 +228,56 @@ end
 -- 1.5.4 (Taylor): "the only thing I need to see is the part you added": with Settings >
 -- "Only Kina in item tooltips" on, the lines other add-ons put under Kina's block are
 -- dropped (the tooltip is rebuilt from the game's own lines and Kina's)
--- 0.9.6: the lines other add-ons add after Kina's block are hidden (text cleared, line
--- hidden, tooltip trimmed to Kina's last line) instead of rebuilding the tooltip: a
--- rebuild made the game and the other add-ons fill it again (it flashed, or they came
--- back). Lines added later still are caught by the tooltip's own update.
-local keepFor = setmetatable({}, { __mode = "k" })
-local function trim(tip)
-  local k = keepFor[tip]
-  if not (k and tip:IsShown() and tip.NumLines and tip.GetName) then return end
-  local name = tip:GetName()
-  local n = tip:NumLines() or 0
-  if not name or n <= k.n then return end
-  local hid = false
-  for i = k.n + 1, n do
-    local L, R = _G[name .. "TextLeft" .. i], _G[name .. "TextRight" .. i]
-    if L and L:IsShown() then L:SetText(""); L:Hide(); hid = true end
-    if R and R:IsShown() then R:SetText(""); R:Hide() end
+-- 0.9.8: "Only Kina" shows its OWN tooltip over the game's: the item's own lines and
+-- Kina's block, copied once. The game's tooltip stays where it is, invisible, so other
+-- add-ons can keep adding to it without anything being rebuilt, hidden or resized under
+-- them (each of those made the tooltip flash).
+local kt -- Kina's item tooltip
+local active = setmetatable({}, { __mode = "k" })
+local function kinaTip()
+  if not kt then
+    kt = CreateFrame("GameTooltip", "KinaItemTooltip", UIParent, "GameTooltipTemplate")
+    kt:SetFrameStrata("TOOLTIP")
   end
-  if hid then
-    local last = _G[name .. "TextLeft" .. k.n]
-    local top, bottom = tip:GetTop(), last and last:GetBottom()
-    if top and bottom and top > bottom then tip:SetHeight(top - bottom + 11) end
+  return kt
+end
+local function release(tip)
+  if active[tip] then
+    active[tip] = nil
+    if kt then kt:Hide() end
+    tip:SetAlpha(1)
   end
 end
+C._TipRelease = release
 function C.TipOnlyKina(tip, name, keep, id)
-  if not tip:IsShown() or shown[tip] ~= id then return end
-  if InCombatLockdown and InCombatLockdown() then return end
-  keepFor[tip] = { n = keep, id = id }
-  trim(tip)
+  if tip ~= GameTooltip or not tip:IsShown() or shown[tip] ~= id then return end
+  local rows = {}
+  for i = 1, keep do
+    local L, R = _G[name .. "TextLeft" .. i], _G[name .. "TextRight" .. i]
+    local lt = L and L:GetText()
+    if lt and issecretvalue and issecretvalue(lt) then return end
+    local rt = R and R:IsShown() and R:GetText() or nil
+    if rt and issecretvalue and issecretvalue(rt) then rt = nil end
+    local lr, lg, lb = 1, 1, 1; if L then lr, lg, lb = L:GetTextColor() end
+    local rr, rg, rb = 1, 1, 1; if R then rr, rg, rb = R:GetTextColor() end
+    -- the game draws the sell price with coins next to the text: keep it as text
+    if lt and SELL_PRICE and lt:find(SELL_PRICE, 1, true) and C.VendorPrice then
+      local v = C.VendorPrice(id); if v and v > 0 then lt = SELL_PRICE .. " " .. C.Money(v) end
+    end
+    rows[i] = { lt or " ", rt, lr, lg, lb, rr, rg, rb }
+  end
+  local k = kinaTip()
+  k:SetOwner(UIParent, "ANCHOR_NONE")
+  k:ClearAllPoints(); k:SetPoint("TOPLEFT", tip, "TOPLEFT", 0, 0)
+  k:ClearLines()
+  for _, r in ipairs(rows) do
+    if r[2] and r[2] ~= "" then k:AddDoubleLine(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+    else k:AddLine(r[1], r[3], r[4], r[5], #r[1] > 48) end
+  end
+  k:Show()
+  active[tip] = true
+  tip:SetAlpha(0)
 end
-C._TipTrim = trim
 
 C._TooltipAdd = addLines -- for tests
 local hooked = false
@@ -266,13 +286,13 @@ local function install()
   hooked = true
   for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
     if tip and tip.HookScript then
-      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil; keepFor[self] = nil end end)
-      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil; keepFor[self] = nil end)
+      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil; release(self) end end)
+      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil; release(self) end)
       -- (a few times a second while shown: hide lines other add-ons add late)
       local acc = 0
       tip:HookScript("OnUpdate", function(self, el)
-        acc = acc + (el or 0); if acc < 0.15 then return end; acc = 0
-        if C.settings and C.settings.tipOnly and keepFor[self] then pcall(trim, self) end
+        -- (Kina's own tooltip is showing: keep the game's one invisible under it)
+        if active[self] and self:GetAlpha() > 0 then self:SetAlpha(0) end
       end)
     end
   end

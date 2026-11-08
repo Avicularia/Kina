@@ -865,7 +865,7 @@ function C.StopSession(at, why, silent, fromParty)
           if C.FarmSync then C.FarmSync.Observe("N", "1") end
           C.StopSession()
         end }
-      StaticPopup_Show("KINA_APART")
+      C.ShowPopup("KINA_APART")
       return
     end
     if C.FlushUse then pcall(C.FlushUse, true) end
@@ -1442,7 +1442,7 @@ do
     askedFor = name
     local text = C.session and string.format("Kina: stop the farm \"%s\" and start one in %s?", tostring(C.session.label or "farm"), name)
       or string.format("Kina: start a farm in %s?", name)
-    StaticPopup_Show("KINA_INSTANCE_FARM", text, nil, name)
+    C.ShowPopup("KINA_INSTANCE_FARM", text, nil, name)
   end
   C.On("PLAYER_ENTERING_WORLD", function() C.After(3, check) end)
   C.On("ZONE_CHANGED_NEW_AREA", function() C.After(2, check) end)
