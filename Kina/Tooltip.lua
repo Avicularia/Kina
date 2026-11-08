@@ -196,10 +196,6 @@ end
 -- before other add-ons' whole-tooltip hooks); items without a sell price get it at the
 -- end as before. One block per hover (kept in a local table, never on the tooltip).
 local shown = setmetatable({}, { __mode = "k" })
--- 0.9.3: "Only Kina" rebuilds the tooltip once per hover. Rebuilding it made the game
--- (and other add-ons) fill it again, which rebuilt it again: the tooltip flashed.
-local rebuilding = setmetatable({}, { __mode = "k" })
-local rebuiltFor = setmetatable({}, { __mode = "k" })
 local function idOf(tip, data)
   local id = type(data) == "table" and tonumber(data.id) or nil
   if not id and tip.GetItem then
@@ -213,16 +209,17 @@ local function handle(tip, data)
   if not tip or (tip.IsForbidden and tip:IsForbidden()) then return end
   if tip ~= GameTooltip and tip ~= ItemRefTooltip then return end -- skip comparison tooltips
   if InCombatLockdown and InCombatLockdown() then return end
-  if rebuilding[tip] then return end
   local id = idOf(tip, data)
   if not id or shown[tip] == id then return end
   shown[tip] = id
   local ok, err = pcall(addLines, tip, id)
   if not ok and C.debug then C.Print("tooltip error: " .. tostring(err)) end
   tip:Show()
-  if C.settings.tipOnly and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
-    local keep, name = tip:NumLines(), tip:GetName()
-    C_Timer.After(0, function() pcall(C.TipOnlyKina, tip, name, keep, id) end)
+  -- 0.9.9: copied straight away, in the same frame (0.9.8 waited a frame, so the
+  -- game's tooltip showed for one frame every time the game refreshed it: the flash)
+  if C.settings.tipOnly and tip.NumLines and tip.GetName and tip:GetName() then
+    local okc = pcall(C.TipOnlyKina, tip, tip:GetName(), tip:NumLines(), id)
+    if not okc then C._TipRelease(tip) end
   end
 end
 -- 1.5.4 (Taylor): "the only thing I need to see is the part you added": with Settings >
@@ -250,12 +247,12 @@ local function release(tip)
 end
 C._TipRelease = release
 function C.TipOnlyKina(tip, name, keep, id)
-  if tip ~= GameTooltip or not tip:IsShown() or shown[tip] ~= id then return end
+  if tip ~= GameTooltip or not tip:IsShown() or shown[tip] ~= id then return release(tip) end
   local rows = {}
   for i = 1, keep do
     local L, R = _G[name .. "TextLeft" .. i], _G[name .. "TextRight" .. i]
     local lt = L and L:GetText()
-    if lt and issecretvalue and issecretvalue(lt) then return end
+    if lt and issecretvalue and issecretvalue(lt) then return release(tip) end
     local rt = R and R:IsShown() and R:GetText() or nil
     if rt and issecretvalue and issecretvalue(rt) then rt = nil end
     local lr, lg, lb = 1, 1, 1; if L then lr, lg, lb = L:GetTextColor() end
@@ -286,13 +283,15 @@ local function install()
   hooked = true
   for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
     if tip and tip.HookScript then
-      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil; release(self) end end)
-      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil; release(self) end)
-      -- (a few times a second while shown: hide lines other add-ons add late)
-      local acc = 0
-      tip:HookScript("OnUpdate", function(self, el)
-        -- (Kina's own tooltip is showing: keep the game's one invisible under it)
-        if active[self] and self:GetAlpha() > 0 then self:SetAlpha(0) end
+      -- 0.9.9: a refresh (the game redraws bag items' tooltips several times a second)
+      -- clears and refills the tooltip in one go. Kina's tooltip and the hidden game one
+      -- stay as they are through it; only if the refill wasn't an item does it let go.
+      tip:HookScript("OnTooltipCleared", function(self) shown[self] = nil end)
+      tip:HookScript("OnHide", function(self) shown[self] = nil; release(self) end)
+      tip:HookScript("OnUpdate", function(self)
+        if not active[self] then return end
+        if shown[self] == nil or not C.settings.tipOnly then release(self); return end
+        if self:GetAlpha() > 0 then self:SetAlpha(0) end
       end)
     end
   end

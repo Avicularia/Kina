@@ -37,18 +37,19 @@ local function npcRecord(id)
 end
 
 local function noteUnit(unit)
-  if not UnitExists(unit) or UnitIsPlayer(unit) then return end
-  local id, kind = C.NPCIDFromGUID(UnitGUID(unit))
+  local P = C.Plain
+  if not UnitExists(unit) or P(UnitIsPlayer(unit)) then return end
+  local id, kind = C.NPCIDFromGUID(P(UnitGUID(unit)))
   if kind ~= "npc" then return end
   local r = npcRecord(id)
-  r.nm = UnitName(unit)
+  r.nm = P(UnitName(unit)) or r.nm
   -- seen inside a dungeon or raid: never an open-world farm
   local inInst, itype = false, nil
   if IsInInstance then inInst, itype = IsInInstance() end
   if inInst and (itype == "party" or itype == "raid") then r.inst = true end
-  local lvl = UnitLevel and UnitLevel(unit); if lvl and lvl > 0 then r.lvl = lvl end
-  r.type = UnitCreatureType and UnitCreatureType(unit) or r.type
-  local cls = UnitClassification and UnitClassification(unit)
+  local lvl = UnitLevel and P(UnitLevel(unit)); if lvl and lvl > 0 then r.lvl = lvl end
+  r.type = UnitCreatureType and P(UnitCreatureType(unit)) or r.type
+  local cls = UnitClassification and P(UnitClassification(unit))
   if cls then
     r.elite = (cls == "elite" or cls == "rareelite" or cls == "worldboss")
     r.rare = (cls == "rare" or cls == "rareelite") or nil
@@ -120,21 +121,34 @@ local PLATES = 40
 function C.ScanPlateKills()
   if C.settings.plateKills == false then return end
   local grouped = C.GroupSize and C.GroupSize() > 1
+  local P = C.Plain
   for i = 1, PLATES do
     local u = "nameplate" .. i
-    if UnitExists(u) and UnitIsDead and UnitIsDead(u) and not UnitIsPlayer(u)
-      and not (UnitIsTapDenied and UnitIsTapDenied(u)) then
-      local guid = UnitGUID(u)
-      local npc, kind = C.NPCIDFromGUID(guid)
-      if kind == "npc" and not tagged[killKey(guid)] then
-        countKill(guid, grouped)
-        C.char.plateKills = (C.char.plateKills or 0) + 1
+    -- (one plate the game keeps secret mustn't stop the rest: each is tried alone)
+    pcall(function()
+      if UnitExists(u) and UnitIsDead and P(UnitIsDead(u)) and not P(UnitIsPlayer(u))
+        and not (UnitIsTapDenied and P(UnitIsTapDenied(u))) then
+        local guid = P(UnitGUID(u))
+        local npc, kind = C.NPCIDFromGUID(guid)
+        if kind == "npc" and not tagged[killKey(guid)] then
+          countKill(guid, grouped)
+          C.char.plateKills = (C.char.plateKills or 0) + 1
+        end
       end
-    end
+    end)
   end
 end
 
 local lastTarget
+local function watchTarget()
+  local P = C.Plain
+  local guid = UnitExists("target") and P(UnitGUID("target")) or nil
+  if guid ~= lastTarget then lastTarget = guid; if guid then noteUnit("target") end end
+  if guid and UnitIsDead and P(UnitIsDead("target")) and not P(UnitIsPlayer("target"))
+    and not (UnitIsTapDenied and P(UnitIsTapDenied("target"))) then
+    countKill(guid)
+  end
+end
 local poll = CreateFrame("Frame")
 local acc, accPlates = 0, 0
 poll:SetScript("OnUpdate", function(_, elapsed)
@@ -143,12 +157,10 @@ poll:SetScript("OnUpdate", function(_, elapsed)
   accPlates = accPlates + acc
   acc = 0
   if accPlates >= 0.5 then accPlates = 0; pcall(C.ScanPlateKills) end
-  local guid = UnitExists("target") and UnitGUID("target") or nil
-  if guid ~= lastTarget then lastTarget = guid; if guid then noteUnit("target") end end
-  if guid and UnitIsDead and UnitIsDead("target") and not UnitIsPlayer("target")
-    and not (UnitIsTapDenied and UnitIsTapDenied("target")) then
-    countKill(guid)
-  end
+  -- 0.9.9: this ran unprotected 4 times a second; in a dungeon the target's GUID is
+  -- secret, and comparing it raised an error every time ("a large number of errors")
+  local ok, err = pcall(watchTarget)
+  if not ok then C.LogError("target poll", err) end
 end)
 
 ------------------------------------------------------------------ loot windows

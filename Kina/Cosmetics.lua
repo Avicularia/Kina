@@ -15,7 +15,7 @@ function K.RingFor(standing) return P .. (RING[standing or "Unproven"] or "ring_
 function K.ProfIcon(prof) return P .. (PROF[prof] or "prof_generic") end
 function K.StarFor(recruits)
   recruits = tonumber(recruits) or 0
-  if recruits >= 50 then return P .. "star_50", true end
+  if recruits >= 50 then return P .. "star_50" end -- 0.9.9: square, gem-set like the rings
   if recruits >= 20 then return P .. "star_20" end
   if recruits >= 10 then return P .. "star_10" end
   if recruits >= 5 then return P .. "star_5" end

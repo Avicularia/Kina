@@ -6,7 +6,7 @@ local F = {}
 C.FarmSync = F
 
 local node
-local function first(n) return type(n) == "string" and n:match("^%s*([^%s%-]+)") or nil end
+local function first(n) return type(n) == "string" and not (issecretvalue and issecretvalue(n)) and n:match("^%s*([^%s%-]+)") or nil end
 F.First = first
 local function me() return first(UnitName and UnitName("player")) or "?" end
 
