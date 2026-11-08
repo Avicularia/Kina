@@ -108,6 +108,7 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "tour" or cmd == "welcome" then if C.Tour then C.Tour.Start(rest ~= "" and rest or nil) end
   elseif cmd == "help" or cmd == "rules" then C.Toggle("Help")
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
+  elseif cmd == "mentor" then if C.Mentor then C.Mentor.Name(rest) end
   elseif cmd == "vouch" then
     C.Print("commendations happen in the window that opens when a group farm ends.")
   elseif cmd == "preview" and rest == "commend" then if C.Vouch then C.Vouch.ShowPrompt(true) end

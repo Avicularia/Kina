@@ -124,10 +124,16 @@ local function logEnd(s)
   local r = s.result or {}
   -- 1.0.10 adds: lowest level, highest level, the group's NET, players in the group
   local net = (s.gview and s.gview.net) or r.total or 0
-  C.Log("farmend", s.label, sync and sync.sid or "", sync and sync.head or 0, sync and sync.hash or "",
+  local f = { C.Now(), "farmend", s.label, sync and sync.sid or "", sync and sync.head or 0, sync and sync.hash or "",
     s.stop and s.start and (s.stop - s.start - (s.pausedSecs or 0)) or 0, r.total or 0, r.kills or s.kills or 0, #(s.party or {}),
-    s.minLvl or 0, s.maxLvl or 0, math.floor(net), math.max(s.groupN or 1, #(s.party or {}) + 1))
+    s.minLvl or 0, s.maxLvl or 0, math.floor(net), math.max(s.groupN or 1, #(s.party or {}) + 1) }
+  C.Log(unpack(f, 2, 14))
   s.logged = true
+  -- 0.9.10: a new player's first qualifying farm gives their mentor the install credit
+  if C.Mentor and C.Mentor.OnFarmEnd then
+    local ok, err = pcall(C.Mentor.OnFarmEnd, s, f)
+    if not ok and C.LogError then C.LogError("mentor", err) end
+  end
 end
 local function logSplit(s)
   if not (s and s.split) or s.splitLogged then return end

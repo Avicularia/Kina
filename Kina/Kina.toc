@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 0.9.9
+## Version: 0.9.10
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -34,6 +34,7 @@ Hot.lua
 Favor.lua
 Loot.lua
 Share.lua
+Mentor.lua
 Duo.lua
 Pockets.lua
 PocketSync.lua

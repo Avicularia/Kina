@@ -1,3 +1,8 @@
+# Kina 0.9.10 (beta)
+
+- Installs shared: new players name who told them about Kina; it counts toward the mentor star after their first 15-minute farm.
+- The profile portrait sits lower, clear of the tabs.
+
 # Kina 0.9.9 (beta)
 
 - Fixed the flood of errors in dungeons.

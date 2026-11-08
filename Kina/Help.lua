@@ -87,6 +87,10 @@ local TOPICS = {
     .. "best and lowest standing, days positive and negative. Commendations and Farm stats show who you farm with most.\n\n"
     .. "Click a party portrait under the widget, or any name, for that player's profile: the same layout, with "
     .. "what their Kina last told yours.\n\n"
+    .. H("Installs shared") .. "When a new player installs Kina because of you, it counts on your profile and earns you a "
+    .. G .. "mentor star|r (1, 5, 10, 20 and 50 installs). It counts once their Kina has done its first farm of "
+    .. G .. "15 minutes|r or more and told yours. The new player names you after the welcome tour (or " .. G .. "/kina mentor Name|r); "
+    .. "if they don't, the first person they farm with gets it. Your own characters never count, and each new player counts once.\n\n"
     .. GR .. "Other players' standing is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "
     .. "wiped or swapped, and their profile says so.|r" },
 
@@ -111,6 +115,7 @@ local TOPICS = {
     .. G .. "/kina widget|r  show or hide the widget\n"
     .. G .. "/kina profile Name|r  someone's Kina profile\n"
     .. G .. "/kina pardon|r  the one-time pardon, if you put it off\n"
+    .. G .. "/kina mentor Name|r  new players: who told you about Kina\n"
     .. G .. "/kina start|r, " .. G .. "/kina stop|r  start or stop a farm\n"
     .. G .. "/kina scan|r  scan the auction house" },
 }

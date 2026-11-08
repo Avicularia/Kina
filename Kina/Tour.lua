@@ -313,6 +313,8 @@ function T.Stop(skipped, finished)
     end
   end
   saved = nil
+  -- 0.9.10: a new player is asked once who told them about Kina
+  if C.Mentor and C.Mentor.Ask and C.After then C.After(finished and 3 or 1, function() pcall(C.Mentor.Ask) end) end
   if finished and not T.Rewarded() then T.Reward(); return end
   if skipped then C.Print("tour skipped. Replay it any time: " .. GOLD .. "/kina tour|r, or the Help tab.")
   else C.Print("that's Kina! Replay the tour any time with " .. GOLD .. "/kina tour|r; the Help tab has every rule.") end

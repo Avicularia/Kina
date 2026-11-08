@@ -240,7 +240,8 @@ local function hello(channel, target, force)
   local msg = table.concat({ "H", d.uid, b36(PROTO), clean(myName()), clean(C.MarketKey()),
     b36(share and C.market.scanTime or 0), b36(share and S.StampLoot() or 0), b36(share and vendorTime() or 0), b36(share and offerTime() or 0),
     (cls:gsub("%A", "")), b36((UnitLevel and UnitLevel("player")) or 0), table.concat(profs, ","), b36(S.CommStamp()),
-    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or ""), S.MyFlags and S.MyFlags() or "", tostring(C.BUILD or 0) }, "|")
+    rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or ""), S.MyFlags and S.MyFlags() or "", tostring(C.BUILD or 0),
+    b36(C.Mentor and C.Mentor.Count() or 0) }, "|")
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -456,7 +457,8 @@ function S.ProfileOf(name)
   local ch = (type(best.chars) == "table" and best.chars[want]) or best.char
   local nt = S.Notable(name)
   return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = ch, ver = best.ver, build = best.build,
-    scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil }
+    scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil,
+    recruits = best.recruits }
 end
 function S.CharOf(name)
   local best, want = authorFor(name)
@@ -547,6 +549,9 @@ local function onHello(from, rest, channel)
     S.newestBuild = b; S.newestVer = a.ver
   end
   a.flags = f[16] or a.flags
+  -- 0.9.10: how many installs they've shared (mentor star)
+  if f[18] then a.recruits = n36(f[18], 9999) or a.recruits end
+  if S.onHello then pcall(S.onHello, from, uid, a, channel) end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) and (tonumber(f[17]) or 0) <= (C.BUILD or 0) + BUILD_JUMP then
     S.newerSeen = S.newerSeen or {}
@@ -992,6 +997,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
         local last = C.db.sessions and C.db.sessions[1]
         if uid and uid ~= db().uid and C.InGroupName and C.InGroupName(from) and last and last.gsplit and last.gsplit.mine
           and last.stop and C.Now() - last.stop < 1800 then S.SendSplit(last.gsplit.by) end
+      elseif S.kinds[kind] then
+        S.kinds[kind](from, rest, channel)
       elseif kind == "F" then
         local uid, st, sp, inc = rest:match("^(%x+)|(%w+)|(%w+)|(%w+)$")
         if uid and uid ~= db().uid and C.OnPartnerFarm then C.OnPartnerFarm(from, n36(st), n36(sp), n36(inc, 1e11) or 0) end
@@ -1187,6 +1194,15 @@ function S.CheckUpdates()
 end
 
 -- 0.9.1: my Kina found loot under my name in a farm log that I never looted
+-- 0.9.10: other modules add message kinds here (Mentor.lua: N and A)
+S.kinds = {}
+S.InMyGroup, S.GroupChannel = inMyGroup, groupChannel
+function S.UID() return db().uid end
+function S.Send(msg, channel, target)
+  if not db().opts.enabled or not channel then return false end
+  enqueue(msg, channel, target, true)
+  return true
+end
 function S.SendTamper(label)
   if not db().opts.enabled then return end
   local ch = groupChannel()

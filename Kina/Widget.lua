@@ -211,7 +211,7 @@ local function partyStrip()
       local stand = pr and pr.stand
       local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
       local klv = pr and pr.kinaLv
-      C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1)
+      C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
       if klv and klv > 0 then c.cos.plate:Show(); c.cos.num:Show() else c.cos.plate:Hide(); c.cos.num:Hide() end
       c.name:SetText((pr and "|cffffffff" or "|cff9d9d9d") .. m.name .. "|r")
       c:Show()

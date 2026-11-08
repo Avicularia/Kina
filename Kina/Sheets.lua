@@ -93,7 +93,7 @@ local function youPage(p, them)
   -- right. The same page shows anyone else's profile (C.UI.youWho), with their data.
   local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0); idBox:SetPoint("RIGHT", p, "CENTER", -6, 0)
   local PW = C.Cos and 200 or 96
-  local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetSize(PW, PW); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -72)
+  local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetSize(PW, PW); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -104) -- 0.9.10: lower, so the star clears the tab bar
   if iron() and not C.Cos then C.Skin.Tile(portraitBox, 6) end
   local portrait = portraitBox:CreateTexture(nil, "ARTWORK"); portrait:SetPoint("TOPLEFT", 7, -7); portrait:SetPoint("BOTTOMRIGHT", -7, 7)
   local cos
@@ -115,7 +115,7 @@ local function youPage(p, them)
   local stBar = bar(prog, 0.30, 0.62, 0.95); stBar:SetPoint("TOPLEFT", 16, -110); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -7); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
 
-  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(204)
+  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(228)
   local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
   -- (1.5.4: no "Commend someone": commending only happens in the end-of-farm window)
   local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pb) end; pb:SetSize(110, 22); pb:SetPoint("TOPRIGHT", -14, -10)
@@ -123,9 +123,9 @@ local function youPage(p, them)
   local recL, recR = {}, {}
   local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -50); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
   local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -50); colB:SetPoint("BOTTOMRIGHT", -16, 10)
-  for i = 1, 12 do -- (1.5.4: two columns of six)
-    local col = i <= 6 and colA or colB
-    local y = -((i - 1) % 6) * 24
+  for i = 1, 14 do -- (1.5.4: two columns of six; 0.9.10: seven, for installs shared)
+    local col = i <= 7 and colA or colB
+    local y = -((i - 1) % 7) * 24
     if (i - 1) % 2 == 0 then -- 1.5.5: zebra rows
       local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(22)
       z:SetColorTexture(1, 0.9, 0.66, 0.04)
@@ -212,7 +212,7 @@ local function youPage(p, them)
     local sname, sat, snext = "Unproven", 0, 100
     if type(stand) == "number" and C.Rep then sname, sat, snext = C.Rep.StandingOf(stand) end
     local klv = pr and pr.kinaLv
-    if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
+    if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1, pr and pr.recruits); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
       cos.xpF:Hide(); cos.stF:Hide() end
     name:SetText(who)
     local cls = ch and ch.class and (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ch.class] or ch.class)
@@ -242,6 +242,7 @@ local function youPage(p, them)
       { "They commended you", tostring(b.got or 0) .. ((b.gotBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
       { "Kina version", pr and pr.ver or (GREY .. "?|r") },
       { "Standing now", tostring(stand or "?") },
+      { "Installs shared", tostring(pr and pr.recruits or 0) },
     })
     do
       wh:Show(); wh:SetScript("OnClick", function() if ChatFrame_SendTell then pcall(ChatFrame_SendTell, who) end end)
@@ -266,7 +267,7 @@ local function youPage(p, them)
       local pv = C.Cos.preview
       local rec0 = C.YouRecord and C.YouRecord() or {}
       local starter = (rec0.farms or 0) == 0 or ((rec0.farms or 0) == 1 and ((rec0.oweNow or 0) >= 1 or (rec0.owedNow or 0) >= 1))
-      local recruits = 0
+      local recruits = C.Mentor and C.Mentor.Count() or 0
       if pv.badge == "leaf" then starter = true elseif pv.badge == "none" then starter = false
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       C.Cos.UpdatePortrait(cos, pv.ring or m.standing, pv.level or m.level, recruits, starter)
@@ -301,6 +302,9 @@ local function youPage(p, them)
       { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
       { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
         .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or "") },
+      -- 0.9.10: people who installed Kina because of you (counted once their Kina has
+      -- farmed 15+ minutes and told yours)
+      { "Installs shared", tostring(C.Mentor and C.Mentor.Count() or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },
       { "Standing", tostring(m.rep or 0) .. (mult and ("  " .. mult) or "") },
       { "Best / lowest", tostring(m.best or 0) .. GREY .. "  /  |r" .. tostring(m.lowest or 0) },
