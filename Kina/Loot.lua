@@ -845,6 +845,22 @@ function C.StopSession(at, why, silent, fromParty)
     for who, v in pairs(t.byLooter) do by[who] = math.floor(v + 0.5) end
     local total, each, transfers = C.FarmSync.Split(by)
     if t.noSplit then transfers = {}; s.noSplit = true end
+    if t.nVotes and not t.noSplit then
+      C.Print("|cffffd100\"Don't split\" only counts when it comes from the players who'd be paid.|r The split stands; they can forgive what they're owed.")
+    end
+    -- 0.9.1 (security): the log has loot in my name I never looted: record no debts
+    if (s.sync.forged or 0) > 0 then
+      transfers = {}; s.noSplit = true; s.forged = true
+      C.Print("|cffff4030This farm's log was changed by someone else|r (it has loot under your name you never looted): Kina records no debts for you from it.")
+    end
+    -- 0.9.1 (security): the leader stamps the prices; if mine disagree a lot, say so
+    if not t.noSplit and C.SplitValue and s.sync.leader ~= C.FarmSync.First(UnitName and UnitName("player")) then
+      local okm, mt = pcall(C.FarmSync.Totals, s.sync, function(id, sfx) return (C.SplitValue(id, sfx)) or 0 end)
+      if okm and mt and math.abs((mt.items or 0) - (t.items or 0)) > math.max(10000, 0.25 * math.max(mt.items or 0, t.items or 0)) then
+        C.Print(string.format("|cffffd100Heads up:|r %s's prices put this farm's loot at %s; your prices say %s. Right-click a farm log item to dispute it, or scan the AH when asked.",
+          tostring(s.sync.leader), C.Money(t.items or 0), C.Money(mt.items or 0)))
+      end
+    end
     s.split = { total = total, each = each, incomes = by, transfers = transfers, loot = true }
     s.settled, s.gsplitShown = true, true
     -- 0.9.0 (Taylor): the split waits for fresh AH scans (or everyone skipping)
@@ -1330,6 +1346,12 @@ function C.FarmEditEntry(s, i)
     applyLoot(s, e[5], e[3], e[4] or 1, on)
     if C.Share and C.Share.SendFarmEdit then pcall(C.Share.SendFarmEdit, "g", e[3], e[4] or 1, e[5], on) end
   elseif k == "loot" then
+    -- 0.9.1 (security): in a group farm your own loot can't be left out by you (it
+    -- would lower what you owe); a farm partner can leave it out for everyone
+    if not on and (s.g or s.sync or (s.party and #s.party > 0)) then
+      C.Print("you can't leave your own loot out of a group farm (it would change what you owe). Ask a farm partner to leave it out.")
+      return
+    end
     -- your own loot: leaving it out takes it off the farm's items (and back on again)
     s.excl = s.excl or { coin = 0, items = {} }
     local n = e[4] or 1
@@ -1348,6 +1370,8 @@ end
 function C.OnFarmEdit(kind, id, n, who, on, from)
   local s = C.session
   if not s then return end
+  -- 0.9.1 (security): nobody can leave out their own loot
+  if kind == "g" and not on and tostring(who or ""):lower():match("^[^%-]*") == tostring(from or ""):lower():match("^[^%-]*") then return end
   if kind == "g" then applyLoot(s, who, id, n, on) elseif kind == "k" then applyKill(s, id, on) end
   C.SessionLog("edit", id, on and 1 or 0, kind, from)
   if C.RefreshWidget then C.RefreshWidget() end

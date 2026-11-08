@@ -82,6 +82,17 @@ function H.ShowWindow(s)
   w:Show()
 end
 
+-- 0.9.1: the window as the welcome tour shows it (nothing is sent; the buttons close it)
+function H.Preview(on)
+  if not on then if win and win.s and win.s.preview then win:Hide() end; return win end
+  local s = { preview = true, label = "Sample farm", hold = { me = "wait", peers = {} } }
+  H.ShowWindow(s)
+  win.wait:SetText("|cffffd100Kina users:|r  " .. myName() .. " " .. stateText("wait") .. "   Triforce " .. stateText("done") .. "   Elwyn " .. stateText("skip"))
+  win.scan:SetScript("OnClick", function() win:Hide() end)
+  win.skip:SetScript("OnClick", function() win:Hide() end)
+  return win
+end
+
 ------------------------------------------------------------------ the hold
 function H.Begin(s)
   if C.settings and C.settings.askScan == false then return end
@@ -106,6 +117,10 @@ function H.OnMessage(from, action, n, label)
   if action == "prh" then
     local s = sessionBySid(label or "")
     if not (s and s.hold) or s.hold.done then return end
+    -- 0.9.1 (security): only a Kina user in this farm can answer for it
+    local isMember = false
+    for _, who in ipairs(members(s)) do if lower(who) == lower(from) then isMember = true end end
+    if not isMember then return end
     s.hold.peers[lower(from)] = (n == 1) and "done" or "skip"
     if win and win:IsShown() and win.s == s and win.refresh then win.refresh() end
     H.Check(s)
@@ -113,8 +128,13 @@ function H.OnMessage(from, action, n, label)
     local sid, list = (label or ""):match("^([^;]+);(.*)$")
     local s = sid and sessionBySid(sid)
     if not (s and s.hold) or s.hold.done then return end
+    -- 0.9.1 (security): only the farm's leader re-prices, and only for the farm's own
+    -- players (anyone else's "new prices" used to replace the split)
+    if not (s.hold.leader and lower(s.hold.leader) == lower(from)) then return end
+    local inFarm = {}
+    if s.split and s.split.incomes then for who in pairs(s.split.incomes) do inFarm[lower(who)] = true end end
     local by = {}
-    for who, v in (list or ""):gmatch("([^=,]+)=(%-?%d+)") do by[who] = tonumber(v) end
+    for who, v in (list or ""):gmatch("([^=,]+)=(%-?%d+)") do if inFarm[lower(who)] then by[who] = tonumber(v) end end
     if next(by) then H.Apply(s, by) end
   end
 end

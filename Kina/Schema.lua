@@ -100,6 +100,8 @@ SETTINGS.decayFrom = N
 SETTINGS.decayWeeks = N
 SETTINGS.tipDE = B
 SETTINGS.lastStanding = S
+SETTINGS.tourSeen = S
+SETTINGS.tourOff = B
 
 local DB = { t = T, f = {
   settings = { t = T, f = SETTINGS },
@@ -113,14 +115,15 @@ local DB = { t = T, f = {
   log = { t = T, f = { lines = list({ t = T, f = { e = S, h = S }, req = { "e", "h" } }), base = S, summary = NUMMAP,
     repState = { t = T, f = { xp = N, share = B, cap = NUMMAP, rep = N, noProg = map(B), lastRefused = N,
       maxEver = N, lowEver = N, recoverTo = N, black = B, everBlack = B, jailUsed = B, frozen = B, negSecs = N, posSecs = N, lastT = N,
-      fell = N, lastFall = N, lastFarmT = N, badTimes = list(N), badSeen = N } } } },
+      fell = N, lastFall = N, lastFarmT = N, badTimes = list(N), badSeen = N } }, repHash = S } },
+  mark = { t = T, f = { rep = N, black = B, t = N } },
   settles = list({ t = T, f = { t = N, who = S, gave = N, got = N, via = S, paidOff = N, cameIn = N, conf = N,
     covers = list({ t = T, f = { start = N, label = S, amt = N, dir = S, topup = B, total = N, stop = N }, req = { "amt", "dir" } }) },
     req = { "t", "who", "gave", "got", "via" } }),
   payout = { t = T, f = { floors = list({ t = T, f = { id = N, n = N, v = N, members = N, partners = list(S), label = S, t = N },
     req = { "id", "n", "v", "members", "partners" } }), owed = NUMMAP } },
   seenMail = NUMMAP, errlog = list(T), blocked = list(T),
-  share = { t = T, f = { opts = T, authors = map(T), uid = S } },
+  share = { t = T, f = { opts = T, authors = map(T), uid = S, notable = map(T) } },
   ledger = { t = T, f = { seen = T, seenN = NUMMAP, entries = list(T), transfers = T } },
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N,

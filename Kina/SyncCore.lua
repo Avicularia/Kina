@@ -205,6 +205,9 @@ function Core:Observe(kind, data)
   local s = self.s
   if not s or s.closed then return end
   s.oseq = s.oseq + 1
+  -- 0.9.1: what I reported, so an entry in my name I never made is spotted (takeEvent)
+  s.mine = s.mine or {}
+  s.mine[s.oseq] = kind .. ":" .. tostring(data or ""):match("^([^:]*)")
   -- Stop: the leader first collects every report still on its way (see beginStop)
   if kind == "S" and self:IsLeader() then s.stopData = data; self:beginStop(); return end
   if self:IsLeader() and s.settleUntil and self:now() < s.settleUntil then
@@ -291,7 +294,17 @@ function Core:takeEvent(ev)
   s.chain[ev.seq] = ev
   s.head, s.hash = ev.seq, ev.hash
   if ev.oseq > 0 then s.seenOrig[ev.origin .. ":" .. ev.oseq] = ev.seq end
-  if ev.kind == "S" then s.closed = true; s.outbox = {} end -- the farm is over: nothing left to send
+  -- 0.9.1 (security): loot, coin or an edit in MY name that I never reported means
+  -- someone else wrote the log (a takeover with a made-up log): flag the farm
+  if s.mine and ev.origin == self:name() and ev.oseq > 0 and ev.kind ~= "J" and ev.kind ~= "S" and ev.kind ~= "Q" then
+    local want = s.mine[ev.oseq]
+    local got = ev.kind .. ":" .. tostring(ev.data or ""):match("^([^:]*)")
+    if want ~= got then
+      s.forged = (s.forged or 0) + 1
+      if self.env.onForged then pcall(self.env.onForged, ev) end
+    end
+  end
+  if ev.kind == "S" then s.closed = true; s.outbox = {}; s.mine = nil end -- the farm is over: nothing left to send
   self:ackOwn(ev)
   local nxt = s.buf[s.head + 1]
   s.buf[s.head + 1] = nil
@@ -319,6 +332,7 @@ function Core:Receive(from, msg)
     local origin = f[3]
     if origin ~= from then return end -- you can only report for yourself
     if not self:members()[origin] then return end -- not in this farm
+    s.following = s.following or {}; s.following[from] = self:now()
     if f[5] == "S" then s.stopData = (f[6] == "idle") and "idle" or s.stopData; self:beginStop(); return end
     if s.settleUntil and self:now() < s.settleUntil then
       s.deferred = s.deferred or {}
@@ -340,6 +354,7 @@ function Core:Receive(from, msg)
     if f[3] == from and s.marks then s.marks[from] = tonumber(f[4]) or 0 end
   elseif kind == "J" and self:IsLeader() then
     if f[3] ~= from then return end
+    if self.env.inGroup and not self.env.inGroup(from) then return end -- 0.9.1: group members only
     if not self:members()[from] then self:append(from, 0, "J", "") end
     -- send the newcomer the log so far
     self:serve(1, from)
@@ -356,13 +371,18 @@ function Core:Receive(from, msg)
         -- ties go to name order. The one that steps down follows the winner; reports
         -- it filed that the winner lacks are re-sent by their owners (see truncate).
         local wins = theirHead > s.head or (theirHead == s.head and from:lower() < self:name():lower())
+        -- 0.9.1 (security): a member who was just reporting to us as a follower isn't a
+        -- second leader, and no real log jumps hundreds of entries ahead of ours
+        if s.following and s.following[from] and self:now() - s.following[from] < 30 then wins = false end
+        if theirHead > s.head + 300 then wins = false end
         if not wins then return end
         for _, d in ipairs(s.deferred or {}) do
           if d[1] == self:name() then s.outbox[d[2]] = { kind = d[3], data = d[4], t = 0 } end
         end
         s.deferred, s.settleUntil, s.stopping, s.announce = nil, nil, nil, nil
         s.leader = from
-      elseif f[7] == "L" or self:now() - (s.lastHB or 0) > 25 then
+      elseif self:now() - (s.lastHB or 0) > 25
+          or (f[7] == "L" and (not self.env.leaderGone or self.env.leaderGone(s.leader) or self:now() - (s.lastHB or 0) > 12)) then
         -- a new leader announcing itself, or ours has gone quiet while this member
         -- leads: follow the one that is actually leading
         s.leader = from
@@ -548,21 +568,16 @@ end
 function Core.Totals(s, reprice)
   local out = { coin = 0, items = 0, used = 0, kills = 0, byLooter = {}, coinBy = {}, members = {}, events = 0 }
   if not s then return out end
-  local excluded, paused = {}, false
-  -- edits first (they can point at any earlier entry)
-  for _, ev in ipairs(s.chain) do
-    if ev.kind == "E" then
-      local seq, on = ev.data:match("^(%d+):(%d)$")
-      if seq then excluded[tonumber(seq)] = (on == "1") or nil end
-    end
-  end
+  local excluded, paused = Core.Excluded(s), false
   local kills = {}
   -- 1.3.1: disputed loot lines ("V" = "seq:copper each") count at that value (vendor)
   local disputed = {}
   for _, ev in ipairs(s.chain) do
     if ev.kind == "V" then
       local seq, per = (ev.data or ""):match("^(%d+):(%d+)$")
-      if seq then disputed[tonumber(seq)] = tonumber(per) end
+      local tgt = seq and s.chain[tonumber(seq)]
+      -- 0.9.1 (security): disputing your own loot down to vendor price doesn't count
+      if tgt and tgt.origin ~= ev.origin then disputed[tonumber(seq)] = tonumber(per) end
     end
   end
   out.disputed = disputed
@@ -582,9 +597,15 @@ function Core.Totals(s, reprice)
     if k == "J" then out.members[ev.origin] = true; out.byLooter[ev.origin] = out.byLooter[ev.origin] or 0
     elseif k == "Q" then out.members[ev.origin] = nil
     elseif k == "P" then paused = ev.data == "1"
-    elseif k == "N" then out.noSplit = true -- 1.0.10: a "don't split" farm (set by whoever started it)
+    elseif k == "N" then
+      -- 1.0.10: a "don't split" farm. 0.9.1 (security): set by whoever started it before
+      -- anything was looted; later, only when everyone the split would PAY says so (the
+      -- player who owes can't wave their own debt away)
+      if ev.origin == (s.chain[1] and s.chain[1].origin) and not out.looted then out.noSplit = true
+      else out.nVotes = out.nVotes or {}; out.nVotes[ev.origin] = true end
     elseif not paused and not excluded[ev.seq] then
       if k == "L" then
+        out.looted = true
         local lid, n, lsfx, v = ev.data:match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
         if reprice and tonumber(lid) then v = reprice(tonumber(lid), lsfx ~= "" and lsfx or nil) end
         if disputed[ev.seq] then v = disputed[ev.seq] end
@@ -620,10 +641,35 @@ function Core.Totals(s, reprice)
       end
     end
   end
+  if out.nVotes and not out.noSplit then
+    local by = {}
+    for who, v in pairs(out.byLooter) do by[who] = math.floor(v + 0.5) end
+    local _, _, transfers = Core.Split(by)
+    local all = #transfers > 0
+    for _, tr in ipairs(transfers) do if not out.nVotes[tr.to] then all = false end end
+    if all or #transfers == 0 then out.noSplit = true end
+  end
   out.net = out.coin + out.items
   out.paused, out.closed = paused, s.closed
   out.noSplit = out.noSplit or nil
   return out
+end
+
+-- Entries left out of the farm (right-click > Leave it out). 0.9.1 (security): leaving
+-- out your OWN loot or coin doesn't count (it would lower what you owe); a farm partner
+-- can leave it out for everyone.
+function Core.Excluded(s)
+  local ex = {}
+  for _, ev in ipairs(s and s.chain or {}) do
+    if ev.kind == "E" then
+      local q, on = (ev.data or ""):match("^(%d+):(%d)$")
+      local tgt = q and s.chain[tonumber(q)]
+      if tgt and not (on == "1" and (ev.oseq or 0) > 0 and tgt.origin == ev.origin and (tgt.kind == "L" or tgt.kind == "C")) then
+        ex[tonumber(q)] = (on == "1") or nil
+      end
+    end
+  end
+  return ex
 end
 
 -- Even split: who pays whom so everyone ends with the same share of (loot - used).

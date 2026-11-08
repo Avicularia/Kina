@@ -24,7 +24,9 @@ local ADDON, C = ...
 local PREFIX = "KinaShare"
 local PROTO = 2  -- 0.10.1: hello carries the community-data stamp
 local MAX_LEN = 250
-local MAX_AUTHORS = 200
+local MAX_AUTHORS = 100            -- 0.9.1 (Taylor): remember at most 100 Kina users
+local MAX_NOTABLE = 300            -- names worth remembering past that (negative, scarred, levelled)
+local BUILD_JUMP = 40              -- a hello claiming more builds ahead than this is ignored
 local MARKET_MAX_AGE = 3 * 86400   -- shared scans older than 3 days are ignored for prices
 local REPLY_COOLDOWN = 60
 local HELLO_EVERY = 300            -- re-announce to the group every 5 min
@@ -374,6 +376,45 @@ end
 local function inMyGroup(name)
   return C.InGroupName and C.InGroupName(name) or false
 end
+S.guildHeard = {}
+-- 0.9.1 (security): names worth remembering after the 100-player list forgets them:
+-- anyone seen below zero, with the Blacklisted scar, or past Kina level I. If one of
+-- them comes back with a LOWER Kina level (levels never go down), their Kina record was
+-- wiped or swapped: their profile says so.
+local function notable()
+  local d = db()
+  if type(d.notable) ~= "table" then d.notable = {} end
+  return d.notable
+end
+function S.Remember(name, a)
+  local k = tostring(name or ""):lower():match("^[^%-%s]+")
+  if not k or k == "" then return end
+  local lv = a.rep and tonumber(a.rep.lv)
+  local stand, scar = tonumber(a.stand), a.flags and a.flags:find("b") and true or nil
+  local list = notable()
+  local e = list[k]
+  if not e then
+    if not ((lv and lv >= 2) or (stand and stand < 0) or scar) then return end
+    local n = 0; for _ in pairs(list) do n = n + 1 end
+    if n >= MAX_NOTABLE then
+      local old, ot
+      for kk, x in pairs(list) do if not ot or (x.t or 0) < ot then old, ot = kk, x.t or 0 end end
+      if old then list[old] = nil end
+    end
+    e = {}; list[k] = e
+  end
+  if lv and lv > 0 then
+    if (e.lv or 0) - lv >= 1 and not e.reset then e.reset = { lv = e.lv, worst = e.worst, t = C.Now() } end
+    e.lv = math.max(e.lv or 0, lv)
+  end
+  if stand and stand < (e.worst or 0) then e.worst = stand end
+  if scar then e.scar = true end
+  e.t = C.Now()
+end
+function S.Notable(name)
+  local k = tostring(name or ""):lower():match("^[^%-%s]+")
+  return k and notable()[k] or nil
+end
 -- 1.4.0: standing points told to the group in the hello (shown "unverified" on their card)
 -- 1.5.4: flags others see on my profile: b = was Blacklisted once (the scar)
 function S.MyFlags()
@@ -384,7 +425,7 @@ local standCache, standAt = nil, 0
 function S.MyStanding()
   if GetTime and GetTime() - standAt < 60 and standCache then return standCache end
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
-  standCache, standAt = (ok and m and m.ok and m.rep) or 0, GetTime and GetTime() or 0
+  standCache, standAt = (ok and m and m.rep) or 0, GetTime and GetTime() or 0
   return standCache
 end
 function S.StandingOf(name)
@@ -405,7 +446,9 @@ function S.ProfileOf(name)
     if nm and tostring(nm):lower():match("^[^%-]+") == want and (not best or (a.seen or 0) > (best.seen or 0)) then best = a end
   end
   if not best then return nil end
-  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver, build = best.build, scar = best.flags and best.flags:find("b") and true or nil }
+  local nt = S.Notable(name)
+  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver, build = best.build,
+    scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil }
 end
 function S.CharOf(name)
   local d = db()
@@ -439,7 +482,11 @@ local function onQuery(from, rest)
   local key = (target or channel) .. what .. base
   local now = GetTime and GetTime() or 0
   if lastReply[key] and now - lastReply[key] < REPLY_COOLDOWN then return end
-  lastReply[key] = now
+  -- 0.9.1: one dump of each kind per asker per minute, whatever base they ask from
+  -- (varying the base used to get round the cooldown and flood the channel)
+  local who = from .. what
+  if lastReply[who] and now - lastReply[who] < REPLY_COOLDOWN then return end
+  lastReply[key], lastReply[who] = now, now
   if what == "M" then sendMarket(channel, target, uid)
   elseif what == "L" then sendLoot(channel, target, uid, base)
   elseif what == "V" then sendVendor(channel, target, uid, base)
@@ -483,16 +530,22 @@ local function onHello(from, rest, channel)
   if not (uid and uid:match("^%x+$") and scanT and lootV and vendT) or uid == d.uid or n36(proto) ~= PROTO then return end
   local a = authorOf(uid, true)
   a.name, a.seen = name, C.Now()
+  if channel == "GUILD" then S.guildHeard[from] = true end
   if S.syncHeard then S.syncHeard[from] = true end
   if f[15] and f[15]:match("^%-?%d+$") then a.stand = tonumber(f[15]) end
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") then a.ver = f[14] end
   -- 1.5.4/0.9.0: the newest Kina anyone runs, by build number (older Kinas sent none:
   -- they are older than this one). An older Kina stops earning until it updates.
   a.build = tonumber(f[17]) or a.build
-  if a.build and a.build > (S.newestBuild or C.BUILD or 0) then S.newestBuild = a.build; S.newestVer = a.ver end
+  -- 0.9.1 (security): only a Kina in my group can tell mine it's out of date, and only by
+  -- a believable jump (a fake hello claiming build 999999 used to freeze everyone)
+  local b = tonumber(f[17])
+  if b and inMyGroup(from) and b <= (C.BUILD or 0) + BUILD_JUMP and b > (S.newestBuild or C.BUILD or 0) then
+    S.newestBuild = b; S.newestVer = a.ver
+  end
   a.flags = f[16] or a.flags
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
-  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) then
+  if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) and (tonumber(f[17]) or 0) <= (C.BUILD or 0) + BUILD_JUMP then
     S.newerSeen = S.newerSeen or {}
     if not S.newerSeen[f[14]] then
       S.newerSeen[f[14]] = true
@@ -510,6 +563,10 @@ local function onHello(from, rest, channel)
   -- their Kina reputation (unverified until the Kina server exists)
   if f[13] == "x" then a.rep = { lv = -1, t = C.Now() }
   elseif f[13] and f[13] ~= "" then a.rep = { lv = math.min(n36(f[13]) or 0, (C.Rep and C.Rep.MAX_LEVEL) or 50), t = C.Now() } end
+  pcall(S.Remember, a.char and a.char.from or name or from, a)
+  -- 0.9.1 (security): prices, loot records and vendor data only come from my group or
+  -- guild (a stranger's whisper could otherwise push fake AH prices into my splits)
+  if not (channel ~= "WHISPER" or inMyGroup(from) or S.guildHeard[from]) then return end
   if C.ShareData and not C.ShareData() then
     if channel ~= "WHISPER" and channel ~= "GUILD" then hello(channel, nil, false) end
     return
@@ -723,8 +780,13 @@ end
 -- Returns the item row, the name of who scanned it (nil = you) and the scan time.
 function S.MarketItem(id)
   if snapshots and snapshots.ownT ~= C.market.scanTime then snapshots = nil end
+  local own = C.market.items and C.market.items[id]
+  local om = own and own.m
   for _, s in ipairs(snapshots or buildSnapshots()) do
     local mi = s.items[id]
+    -- 0.9.1 (security): a shared price more than 3x away from my own scan's is skipped
+    -- (a made-up scan can't make loot look worthless or priceless in a split)
+    if mi and not s.own and om and om > 0 and mi.m and (mi.m > om * 3 or mi.m < om / 3) then mi = nil end
     if mi then return mi, s.name, s.t end
   end
 end
@@ -841,6 +903,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnDebtClock(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "vch" and C.FirstName and C.FirstName(to) == mine and C.Vouch then
           C.Vouch.OnVouch(from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "tmp" and C.InGroupName and C.InGroupName(from) then
+          C.Print(string.format("|cffff4030%s's Kina found loot in the %s farm log under their name that they never looted.|r That farm's split may be wrong: check it before paying.", tostring(from), tostring(label or "group")))
         elseif uid and uid ~= db().uid and (action == "pla" or action == "exa") and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
           C.OnForgiveAck(from, label, action == "pla" and "plea" or "ext")
         end
@@ -874,14 +938,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
       elseif kind == "W" then
         local uid, secs, net, coin, items, kills, paused = rest:match("^(%x+)|(%w+)|(%w+)|(%w+)|(%w+)|(%w+)|(%d)")
         local used = n36(rest:match("^%x+|%w+|%w+|%w+|%w+|%w+|%d|(%w+)") or "0", 1e11) or 0
-        if uid and uid ~= db().uid then
+        if uid and uid ~= db().uid and C.InGroupName and C.InGroupName(from) then
           C.groupView = { from = (from:match("^([^%-]+)") or from), secs = n36(secs), net = (n36(net, 1e11) or 0) - used, coin = n36(coin, 1e11),
             items = n36(items, 1e11), used = used, kills = n36(kills), paused = paused == "1", t = GetTime and GetTime() or 0 }
           if C.RefreshWidget then C.RefreshWidget() end
         end
       elseif kind == "K" then
         local uid, guid = rest:match("^(%x+)|(.+)$")
-        if uid and uid ~= db().uid and C.session and C.countKill then C.countKill(guid, true) end
+        if uid and uid ~= db().uid and C.session and C.countKill and C.InGroupName and C.InGroupName(from) then C.countKill(guid, true) end
       elseif kind == "U" then
         local uid, id, n = rest:match("^(%x+)|(%w+)|(%w+)$")
         if uid and uid ~= db().uid and C.OnFarmUse and C.InGroupName and C.InGroupName(from) then C.OnFarmUse(from, n36(id), n36(n) or 1) end
@@ -1054,6 +1118,12 @@ function S.SendHold(action, n, label, members)
   local ch = groupChannel()
   if ch then enqueue(msg, ch, nil, true)
   else for _, who in ipairs(members or {}) do enqueue(msg, "WHISPER", who) end end
+end
+-- 0.9.1: my Kina found loot under my name in a farm log that I never looted
+function S.SendTamper(label)
+  if not db().opts.enabled then return end
+  local ch = groupChannel()
+  if ch then enqueue(table.concat({ "T", db().uid, "", "tmp", "0", ((tostring(label or "")):gsub("|", "")) }, "|"), ch, nil, true) end
 end
 -- 1.5.4: how long my Kina has counted on our debt (the play-time clock)
 function S.SendClock(to, secs, ref)

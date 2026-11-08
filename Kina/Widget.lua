@@ -717,6 +717,15 @@ local function build()
   end)
 end
 
+-- 0.9.1: parts of the widget, for the welcome tour ("frame", "go", "pay", "snd",
+-- "tNet", "strip", ...)
+function C.Widget.Part(k)
+  if k == "strip" then return strip end
+  if not w then return nil end
+  if k == "frame" then return w end
+  return w[k]
+end
+
 function C.ShowWidget(show)
   if show and not w then build() end
   C.settings.hudShown = show and true or false

@@ -163,6 +163,13 @@ function R.Replay(lines, st, gains)
         st.recoverTo = math.max(st.recoverTo or 0, st.maxEver); after(t)
         if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "jail", rep = 1 } end
       end
+    elseif kind == "carry" then
+      -- 0.9.1 (security): this account's Kina file was wiped, but this character
+      -- remembered a negative standing (KinaMark): it carries over, never improves
+      local v = tonumber(f[3]) or 0
+      if v < (st.rep or 0) then st.rep = v end
+      if f[4] == "b" then st.everBlack = true end
+      after(t)
     elseif kind == "decay" then
       local amt = tonumber(f[3]) or 0
       if not st.frozen and amt ~= 0 then
@@ -187,7 +194,9 @@ function R.Replay(lines, st, gains)
       local rp = 0
       if f[12] and f[12] ~= "" then rp = tonumber(f[12]) or 0
       elseif paidOff >= 1 then rp = R.PayRep(paidOff) end
-      if rp <= 0 and paidOff < 1 and cameIn >= 1 then rp = R.PayRep(cameIn) end
+      -- (only lines from before standing was logged; 0.9.1: a logged 0 stays 0, so many
+      -- 1-copper part payments can't each earn a full payment's standing)
+      if (not f[12] or f[12] == "") and rp <= 0 and paidOff < 1 and cameIn >= 1 then rp = R.PayRep(cameIn) end
       local gr = gainRep(rp, t)
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who, rep = gr,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end
@@ -312,7 +321,24 @@ end
 R.RECV_XP, R.FARM_MIN_SECS, R.FARM_MAX = RECV_XP, FARM_MIN_SECS, FARM_MAX
 
 -- Your reputation now: { xp, level, title, next, share, ok }
+-- 0.9.1: worked out at most every 30 s, or when the log changes (it replays the whole
+-- log, which grows for months)
+local mineCache, mineKey, mineAt
+function R.Invalidate() mineCache = nil end
 function R.Mine()
+  local log = C.db and C.db.log
+  if log then
+    local last = log.lines and log.lines[#log.lines]
+    local key = tostring(log.lines and #log.lines or 0) .. (last and last.h or "") .. tostring(log.base) .. tostring(log.repHash) .. tostring(log.repState)
+    local now = GetTime and GetTime() or C.Now()
+    if mineCache and mineKey == key and now - (mineAt or 0) < 30 then return mineCache end
+    local m = R.MineNow()
+    mineCache, mineKey, mineAt = m, key, now
+    return m
+  end
+  return R.MineNow()
+end
+function R.MineNow()
   local log = C.db and C.db.log
   if not log then return { xp = 0, level = 1, title = "", next = R.XPFor(2), share = C.ShareData(), ok = true } end
   local ok = C.EventLog and C.EventLog.Verify() or false
@@ -326,7 +352,15 @@ function R.Mine()
   st = R.Replay(log.lines or {}, st)
   local xp = ok and st.xp or 0
   local lv = R.LevelOf(xp)
-  local rp = ok and (st.rep or 0) or 0
+  -- 0.9.1 (security): a damaged or edited log shows 0, or the last standing a good log
+  -- had if that was lower (editing a bad record no longer wipes it clean)
+  local mark = C.db.mark
+  local rp = ok and (st.rep or 0) or math.min(0, tonumber(mark and mark.rep) or 0)
+  if ok then
+    C.db.mark = { rep = rp, black = st.everBlack or nil, t = C.Now() }
+    if type(KinaMark) ~= "table" then KinaMark = {} end
+    KinaMark.rep, KinaMark.black, KinaMark.t = rp, st.everBlack or nil, C.Now()
+  end
   local sname, sat, snext, snextName = R.StandingOf(rp)
   -- 1.5.4: the record numbers (time counted up to now)
   local neg, pos = st.negSecs or 0, st.posSecs or 0
@@ -342,7 +376,7 @@ function R.Mine()
     rep = rp, standing = sname, standingAt = sat, standingNext = snext, standingNextName = snextName,
     share = C.ShareData(), ok = ok,
     best = st.maxEver or math.max(0, rp), lowest = st.lowEver or math.min(0, rp), negDays = neg / DAY, posDays = pos / DAY,
-    black = st.black, everBlack = st.everBlack, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
+    black = ok and st.black or (rp <= R.BLACKLIST) or nil, everBlack = st.everBlack or (not ok and mark and mark.black) or nil, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
     lastFarmT = st.lastFarmT, fell = st.fell or 0, frozen = st.frozen, bad48 = n48, bad7 = n7 }
 end
 

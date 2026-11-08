@@ -42,9 +42,26 @@ function C.Log(kind, ...)
   return line
 end
 
+-- 0.9.1 (security): the rolled-up state (repState) is part of the chain too: its hash
+-- is kept with it, so editing the numbers in it breaks the chain like editing a line.
+function L.StateHash(st)
+  if type(st) ~= "table" then return "0" end
+  local keys = {}
+  for k in pairs(st) do if type(st[k]) ~= "table" then keys[#keys + 1] = tostring(k) end end
+  table.sort(keys)
+  local parts = {}
+  for _, k in ipairs(keys) do local v = st[k]; parts[#parts + 1] = k .. "=" .. (type(v) == "number" and string.format("%.0f", v) or tostring(v)) end
+  for _, bt in ipairs(type(st.badTimes) == "table" and st.badTimes or {}) do parts[#parts + 1] = string.format("%.0f", tonumber(bt) or 0) end
+  return hash(table.concat(parts, ";"))
+end
 -- Checks the chain. Returns true, or false and the first line that doesn't match.
 function L.Verify()
   local d = db()
+  if d.repState then
+    -- (a save from before 0.9.1 has no hash yet: stamp it once)
+    if not d.repHash then d.repHash = hash(d.base .. "|" .. L.StateHash(d.repState)) end
+    if d.repHash ~= hash(d.base .. "|" .. L.StateHash(d.repState)) then return false, 0 end
+  end
   local prev = d.base
   for i, line in ipairs(d.lines) do
     if hash(prev .. "|" .. line.e) ~= line.h then return false, i end
@@ -76,6 +93,7 @@ function L.Prune(force)
     d.summary[k] = (d.summary[k] or 0) + 1
   end
   d.base = d.lines[cut].h
+  if d.repState then d.repHash = hash(d.base .. "|" .. L.StateHash(d.repState)) end
   local keep = {}
   for i = cut + 1, #d.lines do keep[#keep + 1] = d.lines[i] end
   d.lines = keep
@@ -146,6 +164,12 @@ if C.FarmSync and C.FarmSync.Accept then
 end
 
 C.On("PLAYER_LOGIN", function()
+  -- 0.9.1 (security): a fresh Kina file on a character that remembers a negative
+  -- standing (or the Blacklisted scar) starts from that, not from a clean slate
+  local d = db()
+  if #d.lines == 0 and not d.repState and type(KinaMark) == "table" and ((tonumber(KinaMark.rep) or 0) < 0 or KinaMark.black) then
+    C.Log("carry", math.min(0, tonumber(KinaMark.rep) or 0), KinaMark.black and "b" or "")
+  end
   L.Prune()
   local ok, bad = L.Verify()
   C.Log("login", C.version, ok and "chain ok" or ("chain broken at " .. tostring(bad)))

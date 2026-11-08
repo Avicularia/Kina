@@ -94,6 +94,21 @@ function V.Give(who, kind)
   end
   return true
 end
+-- was this player in my farm `ref` (a qualifying shared farm, ended in the last 2 days)?
+function V.FarmMate(from, ref)
+  if not ref or ref == "" then return false end
+  local k = lower(from)
+  for _, s in ipairs(C.db.sessions or {}) do
+    local sref = (s.sync and s.sync.sid) or ("t" .. tostring(s.start))
+    if sref == ref then
+      if not (s.stop and C.Now() - s.stop <= 2 * DAY and s.split and s.split.incomes) then return false end
+      if s.stop - (s.start or s.stop) - (s.pausedSecs or 0) < 900 then return false end
+      for who in pairs(s.split.incomes) do if lower(who) == k then return true end end
+      return false
+    end
+  end
+  return false
+end
 -- their Kina told mine they vouched for me
 function V.OnVouch(from, kind, ref)
   kind = tonumber(kind) or 1
@@ -104,6 +119,10 @@ function V.OnVouch(from, kind, ref)
     if lower(g.who) == lower(from) and ((ref and ref ~= "" and g.ref == ref) or ((not ref or ref == "") and C.Now() - g.t < DAY)) then return end
   end
   if C.IsMyChar and C.IsMyChar(from) then return end -- 1.5.2: never from your own characters
+  -- 0.9.1 (security): only from someone who was in that farm with me, and only for a
+  -- farm that ended in the last 2 days (made-up farm names used to allow endless
+  -- thumbs down from anyone)
+  if not V.FarmMate(from, ref) then return end
   local bad = V.IsBad(kind)
   -- 1.5.4 (Taylor): +10 / -10 every time, no softening; multipliers are applied to
   -- gains when the standing is worked out (Rep.lua)

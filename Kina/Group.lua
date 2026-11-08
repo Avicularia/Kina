@@ -226,6 +226,9 @@ function C.ShowGroupSplit(s)
 end
 -- the leader's split arrived (from Share.lua)
 function C.OnGroupSplit(by, from)
+  -- 0.9.1 (security): only the group's farm leader sends the split
+  local leader = C.FarmLeader and C.FarmLeader()
+  if not (leader and tostring(from):lower():match("^[^%-]+") == tostring(leader):lower():match("^[^%-]+")) then return end
   local g = { by = by, from = from }
   local s = C.session
   if s and s.g then C.pendingSplit = { t = C.Now(), g = g }; return end -- Stop hasn't reached us yet

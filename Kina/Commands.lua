@@ -105,6 +105,8 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "profile" then
     local who = rest ~= "" and rest or (UnitName and UnitName("target"))
     if C.Profile then C.Profile.Show(who) end
+  elseif cmd == "tour" or cmd == "welcome" then if C.Tour then C.Tour.Start(rest ~= "" and rest or nil) end
+  elseif cmd == "help" or cmd == "rules" then C.Toggle("Help")
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "vouch" then
     C.Print("commendations happen in the window that opens when a group farm ends.")

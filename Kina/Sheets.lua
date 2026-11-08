@@ -61,6 +61,10 @@ local function heading(parent, s, noRule)
   return t
 end
 
+-- 0.9.1: other files add pages (Help.lua) with the same look
+function C.RegisterPanel(name, fn) builders[name] = fn end
+C.SheetKit = { text = text, box = box, heading = heading, bar = bar }
+
 function C.ShowPanel(name)
   local u = ui()
   if not (u and u.frame) then return end

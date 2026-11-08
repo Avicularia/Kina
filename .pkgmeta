@@ -1,0 +1,20 @@
+# CurseForge packager. Put this file at the root of the GitHub repo, next to the Kina
+# folder (the repo layout: Kina/Kina.toc, Kina/*.lua, Kina/Media/...). Tag a release
+# (git tag 1.0.0 && git push --tags) and CurseForge builds the zip from it.
+package-as: Kina
+
+move-folders:
+  Kina/Kina: Kina
+
+ignore:
+  - sim
+  - t
+  - pub
+  - dist
+  - art
+  - curseforge
+  - KinaScoutC
+  - "*.py"
+  - "*.sh"
+  - "*.log"
+  - README.md

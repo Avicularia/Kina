@@ -109,6 +109,15 @@ function F.Node()
       send = function(msg, to) if C.Share and C.Share.SendSync then C.Share.SendSync(msg, to) end end,
       price = function(id, suffix) return C.SplitValue and (C.SplitValue(id, suffix)) or 0 end, -- the split price (thin greens at their floor)
       leaderGone = leaderGone,
+      inGroup = function(name) return unitOf(name) ~= nil end,
+      onForged = function()
+        local s = C.session
+        if s and not s.forgedSaid then
+          s.forgedSaid = true
+          C.Print("|cffff4030Kina found loot in this farm's log under your name that you never looted.|r Your Kina won't record debts from this farm's split.")
+          if C.Share and C.Share.SendTamper then pcall(C.Share.SendTamper, s.label) end
+        end
+      end,
       onInvite = onInvite,
       onChange = onChange,
     })
@@ -193,16 +202,7 @@ function F.ToggleEntry(seq)
   end
   F.Observe("E", seq .. ":" .. (ex and "0" or "1"))
 end
-function F.Excluded(s)
-  local ex = {}
-  for _, ev in ipairs(s and s.chain or {}) do
-    if ev.kind == "E" then
-      local q, on = ev.data:match("^(%d+):(%d)$")
-      if q then ex[tonumber(q)] = (on == "1") or nil end
-    end
-  end
-  return ex
-end
+function F.Excluded(s) return Core.Excluded(s) end
 
 -- What the widget shows for a shared farm: straight from the log.
 function F.View()

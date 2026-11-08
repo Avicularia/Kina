@@ -51,7 +51,7 @@ local tabs = {}
 local tabOrder = { "Dungeons", "Farms", "Hot", "Skill up", "Session", "Settings" }
 -- Public Kina: the farm log with debts and payments, the ledger, and settings. The
 -- advice tabs (and the data behind them) come back in a later public version.
-if C.PUBLIC then tabOrder = { "Session", "Ledger", "You", "Settings" } end -- 1.2.0: You (character sheet)
+if C.PUBLIC then tabOrder = { "Session", "Ledger", "You", "Settings", "Help" } end -- 1.2.0: You (character sheet); 0.9.1: Help
 local HOME = tabOrder[1] == "Session" and "Session" or "Hot"
 local TAB_OK = {}
 for _, t in ipairs(tabOrder) do TAB_OK[t] = true end
@@ -2388,6 +2388,11 @@ tabs.You = function()
   return "", {}, {}, {}, { panel = v }
 end
 
+-- 0.9.1: How Kina works (Help.lua)
+tabs.Help = function()
+  return "", {}, {}, {}, { panel = "help" }
+end
+
 tabs.Settings = function()
   return "Settings: click a switch to flip it, type in a box and press Enter. Everything is saved per account.",
     {}, {}, {}, { settings = true }
@@ -3203,8 +3208,15 @@ local function build()
         if btn == "RightButton" then mobMenu(d) else C.ShowMob(d.npc, d.farm) end
       elseif d.syncRef and btn == "RightButton" and C.FarmSync then
         local seq = d.syncRef
-        local ex = C.FarmSync.Excluded(C.session and C.session.sync)
-        showMenu({ { ex[seq] and "Count it in this farm (everyone)" or "Leave it out of this farm (everyone)", function() C.FarmSync.ToggleEntry(seq) end } })
+        local sy = C.session and C.session.sync
+        local ex = C.FarmSync.Excluded(sy)
+        local tgt = sy and sy.chain[seq]
+        local mine = tgt and tgt.origin == C.FarmSync.First(UnitName and UnitName("player")) and (tgt.kind == "L" or tgt.kind == "C")
+        if mine and not ex[seq] then
+          showMenu({ { "Your own loot: only a farm partner can leave it out", function() end } })
+        else
+          showMenu({ { ex[seq] and "Count it in this farm (everyone)" or "Leave it out of this farm (everyone)", function() C.FarmSync.ToggleEntry(seq) end } })
+        end
       elseif d.logRef and btn == "RightButton" then
         local e = d.logRef.s.log[d.logRef.i]
         local list = { { (e and e[7]) and "Count it in this farm" or "Leave it out of this farm", function() C.FarmEditEntry(d.logRef.s, d.logRef.i) end } }
@@ -3235,7 +3247,7 @@ local function build()
               if not (data and data.s and data.s.sync and C.FarmSync) then return end
               local n = 0
               for _, ev in ipairs(data.s.sync.chain) do
-                if ev.kind == "L" and tonumber((ev.data or ""):match("^(%d+)")) == data.id then C.FarmSync.Observe("V", ev.seq .. ":" .. data.vend); n = n + 1 end
+                if ev.kind == "L" and tonumber((ev.data or ""):match("^(%d+)")) == data.id and ev.origin ~= C.FarmSync.First(UnitName and UnitName("player")) then C.FarmSync.Observe("V", ev.seq .. ":" .. data.vend); n = n + 1 end
               end
               if C.Log then C.Log("dispute", data.id, data.vend, n) end
               C.Print(string.format("disputed %s: it now counts at its vendor price (%s each) for everyone in this farm.", data.name, C.Money(data.vend)))

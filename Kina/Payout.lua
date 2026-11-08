@@ -329,16 +329,25 @@ C.On("TRADE_MONEY_CHANGED", readTrade)
 C.On("TRADE_ACCEPT_UPDATE", function(_, me, them)
   readTrade()
   if tr and not tr.closed then
-    if me == 1 or me == true then tr.iAcc = true end
-    if them == 1 or them == true then tr.theyAcc = true end
+    -- 0.9.1 (security): remember WHEN each side accepted and drop it when they take it
+    -- back; an offer only counts if it stood long enough for the other side to take it
+    local now = GetTime and GetTime() or 0
+    if me == 1 or me == true then tr.iAcc = true; tr.iAccAt = tr.iAccAt or now else tr.iAcc, tr.iAccAt = nil, nil end
+    if them == 1 or them == true then tr.theyAcc = true; tr.theyAccAt = tr.theyAccAt or now else tr.theyAcc, tr.theyAccAt = nil, nil end
   end
 end)
 -- 1.3.0: a payment offered and turned down. The debtor put the whole amount in the trade
 -- and accepted, the creditor didn't, and the trade was cancelled: both Kinas note it.
 -- If that debt then runs out of time, it doesn't count against the debtor; the creditor's
 -- Kina takes the hit instead (-50 rep, -100 for a second time within 30 days).
+C.OFFER_STAND = 15 -- seconds an accepted full payment must stand before a cancel counts as refused
 local function noteRefusal(t)
   if not (t and t.who) then return end
+  -- 0.9.1 (security): accepting and cancelling at once was a free "offer" that pushed the
+  -- penalty onto the creditor; now the accepted offer must have stood 15 seconds
+  local now = GetTime and GetTime() or 0
+  if t.iAcc and not (t.iAccAt and now - t.iAccAt >= C.OFFER_STAND) then t.iAcc = nil end
+  if t.theyAcc and not (t.theyAccAt and now - t.theyAccAt >= C.OFFER_STAND) then t.theyAcc = nil end
   local who = t.who:match("^[^%-]+")
   for _, d in ipairs(C.Debts()) do
     if (d.who or ""):match("^[^%-]+") == who and d.s and not d.topup then
@@ -551,7 +560,16 @@ function C.OnDebtClock(from, secs, ref)
     if d.s and first(d.who) == who and (((d.s.sync and d.s.sync.sid) or ("t" .. tostring(d.s.start or 0))) == ref) then
       local sp = d.s.split or {}; d.s.split = sp
       sp.pclock = sp.pclock or {}
-      if (tonumber(secs) or 0) > (sp.pclock[d.key] or 0) then sp.pclock[d.key] = tonumber(secs) end
+      -- 0.9.1 (security): their count can't run faster than the real clock (since the
+      -- farm ended, and since their last count), so a made-up number can't make a
+      -- debt past due on the spot
+      sp.pclockAt = sp.pclockAt or {}
+      local n = tonumber(secs) or 0
+      local prev, prevAt = sp.pclock[d.key] or 0, sp.pclockAt[d.key]
+      n = math.min(n, math.max(0, C.Now() - (d.s.stop or C.Now())))
+      if prevAt then n = math.min(n, prev + (C.Now() - prevAt) + 60) end
+      if n > prev then sp.pclock[d.key] = n end
+      sp.pclockAt[d.key] = C.Now()
     end
   end
 end
