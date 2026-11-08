@@ -57,7 +57,7 @@ frame:SetScript("OnEvent", function(_, _, prefix, msg, channel, from)
 end)
 
 local function line(state, text)
-  local col = state == "PASS" and "|cff7CFC00" or (state == "WARN" and "|cffffc94a" or "|cffff4040")
+  local col = state == "PASS" and "|cff7CFC00" or (state == "WARN" and "|cffffc54a" or "|cffff4040")
   C.Print(col .. state .. "|r " .. text)
   return { state, text }
 end
@@ -65,7 +65,7 @@ end
 function T.Run()
   local out = {}
   local function add(state, text) out[#out + 1] = line(state, text) end
-  C.Print("|cffffc94aself-test|r (version " .. tostring(C.version) .. ")")
+  C.Print("|cffffc54aself-test|r (version " .. tostring(C.version) .. ")")
   -- 1. game functions
   local missing = {}
   for _, n in ipairs(NEEDS) do if not exists(n[1]) then missing[#missing + 1] = n[1] .. " (" .. n[2] .. ")" end end

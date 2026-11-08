@@ -6,7 +6,7 @@ local _, C = ...
 local U = {}
 C.Rules = U
 local DAY, WEEK = 86400, 7 * 86400
-local RED, GREY, GOLD = "|cffff4030", "|cff9d9d9d", "|cffffc94a"
+local RED, GREY, GOLD = "|cffff4030", "|cff9d9d9d", "|cffffc54a"
 
 ------------------------------------------------------------------ the rules window
 local win

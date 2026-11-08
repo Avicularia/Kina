@@ -500,7 +500,7 @@ end)
 -- plate every few seconds, and gold sparks drifting up off it. Runs only while shown.
 function K.PlaqueFX(plate, w, h, count)
   local halo = plate:CreateTexture(nil, "BACKGROUND", nil, -3)
-  halo:SetTexture(P .. "fx_halo"); halo:SetBlendMode("ADD"); halo:SetVertexColor(1, 0.65, 0.07)
+  halo:SetTexture(P .. "fx_halo"); halo:SetBlendMode("ADD"); halo:SetVertexColor(1, 0.59, 0)
   halo:SetPoint("CENTER", plate, "CENTER", 0, 0); halo:SetSize(w * 1.22, h * 1.75)
   local clip = CreateFrame("Frame", nil, plate); clip:SetPoint("CENTER", plate, "CENTER", 0, 0); clip:SetSize(w * 0.74, h * 0.62)
   if clip.SetClipsChildren then clip:SetClipsChildren(true) end
@@ -511,7 +511,7 @@ function K.PlaqueFX(plate, w, h, count)
   local sparks = {}
   count = count or 22
   for i = 1, count do
-    local s = fx:CreateTexture(nil, "OVERLAY"); s:SetTexture(P .. "fx_spark"); s:SetBlendMode("ADD"); s:SetVertexColor(1, 0.74, 0.27)
+    local s = fx:CreateTexture(nil, "OVERLAY"); s:SetTexture(P .. "fx_spark"); s:SetBlendMode("ADD"); s:SetVertexColor(1, 0.67, 0.2)
     sparks[i] = { tex = s, x = math.random() * w * 0.9 - w * 0.45, life = math.random(), speed = 0.25 + math.random() * 0.35,
       size = 4 + math.random() * 7, wob = math.random() * 6.28 }
   end

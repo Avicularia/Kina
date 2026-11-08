@@ -557,7 +557,7 @@ local function onHello(from, rest, channel)
     S.newerSeen = S.newerSeen or {}
     if not S.newerSeen[f[14]] then
       S.newerSeen[f[14]] = true
-      C.Print(string.format("|cffffc94a%s is on Kina %s, you're on %s: update Kina|r (download the new zip, replace the Kina folder, /reload).", C.Books and C.Books.Name and C.Books.Name(from) or from, f[14], tostring(C.version)))
+      C.Print(string.format("|cffffc54a%s is on Kina %s, you're on %s: update Kina|r (download the new zip, replace the Kina folder, /reload).", C.Books and C.Books.Name and C.Books.Name(from) or from, f[14], tostring(C.version)))
     end
   end
   if C.FarmSync and C.FarmSync.Upgrade and inMyGroup(from) then pcall(C.FarmSync.Upgrade) end
@@ -1168,7 +1168,7 @@ end
 function S.UpdateText()
   local u = C.settings and C.settings.updCheck
   if not u then return "asks the Kina users in your group and guild which version they run" end
-  if u.ver then return "|cffffc94aKina " .. u.ver .. " is out|r (you have " .. tostring(C.version) .. "): " .. C.UPDATE_URL end
+  if u.ver then return "|cffffc54aKina " .. u.ver .. " is out|r (you have " .. tostring(C.version) .. "): " .. C.UPDATE_URL end
   return "|cff7CFC00up to date|r as of " .. (date and date("%b %d %H:%M", u.t) or "") .. " (" .. (u.n or 0) .. " Kina users checked)"
 end
 function S.CheckUpdates()
@@ -1181,7 +1181,7 @@ function S.CheckUpdates()
     local best = S.NewestHeard()
     C.settings.updCheck = { t = C.Now(), n = n, ver = best and best.ver or nil }
     if best then
-      C.Print(string.format("|cffffc94aA newer Kina is out: %s|r (you have %s; %s runs it). Update with the CurseForge app, or download it from %s, replace the Kina folder and /reload.",
+      C.Print(string.format("|cffffc54aA newer Kina is out: %s|r (you have %s; %s runs it). Update with the CurseForge app, or download it from %s, replace the Kina folder and /reload.",
         tostring(best.ver or ("build " .. best.build)), tostring(C.version), tostring(best.who or "a Kina user"), C.UPDATE_URL))
     elseif n == 0 then
       C.Print("no other Kina users to ask right now. The CurseForge app shows Kina updates, or check " .. C.UPDATE_URL .. ".")

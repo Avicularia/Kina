@@ -11,7 +11,7 @@ local floor = math.floor
 
 local HEAD  = { 1.00, 0.82, 0.35 }  -- 1.5.4: Kina gold
 local LABEL = { 0.80, 0.80, 0.80 }
-local GOLD  = { 1, 0.69, 0 }
+local GOLD  = { 1, 0.62, 0 }
 local DIM   = { 0.60, 0.60, 0.60 }
 local GOOD  = { 0.40, 1.00, 0.50 }
 local WARN  = { 1.00, 0.55, 0.35 }
@@ -131,7 +131,7 @@ local function addLines(tip, id)
   local r = C.Item(id)
   if not r then return end
   -- 1.5.4 (Taylor): one clean block, headed by the Kina coin
-  tip:AddLine("|TInterface\\AddOns\\Kina\\Media\\KinaLogo:14:14|t |cffffd75aKina|r", 1, 1, 1)
+  tip:AddLine("|TInterface\\AddOns\\Kina\\Media\\KinaLogo:14:14|t |cffffcf55Kina|r", 1, 1, 1)
 
   -- Vendor
   local v, how = C.VendorPrice(id)

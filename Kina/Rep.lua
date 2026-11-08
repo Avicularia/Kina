@@ -411,7 +411,7 @@ end
 function C.RepLine()
   local m = R.Mine()
   if not m.ok then return "|cffff8040Rep -|r" end
-  return "|cffffc94aLv " .. R.Roman(m.level) .. "|r"
+  return "|cffffc54aLv " .. R.Roman(m.level) .. "|r"
 end
 function C.RepDetail()
   local m = R.Mine()
@@ -481,7 +481,7 @@ C.On("PLAYER_LOGIN", function() lastLevel = R.Mine().level end)
 function R.Check()
   local m = R.Mine()
   if lastLevel and m.ok and m.level > lastLevel then
-    C.Print("|cffffc94aKina level " .. R.Roman(m.level) .. "!|r")
+    C.Print("|cffffc54aKina level " .. R.Roman(m.level) .. "!|r")
     if C.PlayCue then pcall(C.PlayCue, "start") end
   end
   lastLevel = m.level

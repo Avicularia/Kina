@@ -11,7 +11,7 @@ local W, H = 300, 212
 local function ironOn() return C.Skin and C.Skin.On() end
 local w -- the widget frame
 
-local GOLD = { 1, 0.71, 0.15 }
+local GOLD = { 1, 0.63, 0.06 }
 local BG = { 0.03, 0.05, 0.11 }
 local TILE = { 0.07, 0.10, 0.20 }
 
@@ -119,7 +119,7 @@ local function showBest(s)
   if id then
     local r = C.Item(id)
     w.bestIcon:SetTexture(itemIcon(id) or "Interface\\Icons\\INV_Misc_QuestionMark"); w.bestIcon:Show()
-    w.best:SetText(string.format("|cff9d9d9dBest|r  %s%s  |cffffc94a%s|r", (r and r.name or ("item " .. id)):sub(1, 22), n > 1 and (" x" .. n) or "", C.Money(v)))
+    w.best:SetText(string.format("|cff9d9d9dBest|r  %s%s  |cffffc54a%s|r", (r and r.name or ("item " .. id)):sub(1, 22), n > 1 and (" x" .. n) or "", C.Money(v)))
     if lastBest and lastBest ~= id and v >= 10000 then w.flash = 1.5 end
     lastBest = id
   else
@@ -185,7 +185,7 @@ local function partyStrip()
       c.cos.plate:SetSize(44, 22); C.Cos.Font(c.cos.num, 9, "OUTLINE")
       c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.name:SetPoint("BOTTOM", 0, 0); c.name:SetWidth(70)
       if c.name.SetWordWrap then c.name:SetWordWrap(false) end
-      local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.75, 0.25, 0.08)
+      local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.67, 0.17, 0.08)
       c:SetScript("OnClick", function(self) if self.who and C.Profile then C.Profile.Show(self.who) end end)
       c:SetScript("OnEnter", function(self)
         if not (GameTooltip and self.who) then return end
@@ -254,9 +254,9 @@ function C.RefreshWidget()
           local n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
           chip(n > 2 and "GROUP" or "DUO", 0.10, 0.35, 0.15)
         end
-        w.clock:SetText((v.paused and "|cffffc94a" or "|cffffffff") .. clock(secs) .. "|r")
+        w.clock:SetText((v.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
         w.rate:SetText(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r")
-        setSub("per hour, group" .. (v.noSplit and " |cffffc94ano split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
+        setSub("per hour, group" .. (v.noSplit and " |cffffc54ano split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
         setTile(w.tNet, signed(v.net), "same for all")
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
@@ -284,7 +284,7 @@ function C.RefreshWidget()
     local sum = C.SessionSummary(s)
     local secs = C.SessionSecs(s)
     if s.paused then chip("PAUSED", 0.55, 0.42, 0.05) else chip("SOLO", 0.12, 0.25, 0.50) end
-    w.clock:SetText((s.paused and "|cffffc94a" or "|cffffffff") .. clock(secs) .. "|r")
+    w.clock:SetText((s.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
     w.rate:SetText(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r")
     setSub("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
     setTile(w.tNet, signed(sum.total), ((sum.used or 0) > 0) and ("used " .. C.Money(sum.used)) or "what you looted")
@@ -322,7 +322,7 @@ function C.RefreshWidget()
     -- 0.9.8 (Taylor): while the farm's split waits for a fresh auction scan there is no
     -- number yet: the split from the old prices isn't what anyone will owe
     if last and last.hold and not last.hold.done then
-      w.status:SetText("|cffffc94awaiting for the auction house scan|r")
+      w.status:SetText("|cffffc54awaiting for the auction house scan|r")
     elseif tr and tr[1] then
       -- what's still open between you and the group on that farm (part payments count)
       local r = C.Books and C.Books.Farm(last)
@@ -339,15 +339,15 @@ function C.RefreshWidget()
         local nm = C.Books.Name(tot.to)
         local farms = string.format(" |cff9d9d9d(%d farms)|r", tot.n)
         w.status:SetText(C.PayDue() and ("|cffff8040you owe " .. nm .. " " .. C.Money(tot.amt) .. "|r" .. farms)
-          or ("|cffffc94a" .. nm .. " owes you " .. C.Money(tot.amt) .. "|r" .. farms))
+          or ("|cffffc54a" .. nm .. " owes you " .. C.Money(tot.amt) .. "|r" .. farms))
       elseif d then
         local left = C.Money(math.floor(d.amt - d.done))
         local more = #open > 1 and string.format(" |cff9d9d9d(+%d more)|r", #open - 1) or ""
         w.status:SetText(d.dir == "owe" and ("|cffff8040you owe " .. C.Books.Name(d.who) .. " " .. left .. "|r" .. more)
-          or ("|cffffc94a" .. C.Books.Name(d.who) .. " owes you " .. left .. "|r" .. more))
+          or ("|cffffc54a" .. C.Books.Name(d.who) .. " owes you " .. left .. "|r" .. more))
       elseif r and #r.debts > 0 then w.status:SetText("|cff7CFC00split settled|r")
       else w.status:SetText("|cff7CFC00" .. tr[1].from .. " pays " .. tr[1].to .. " " .. C.Money(tr[1].amt) .. "|r") end
-    elseif last and last.g and not last.settled and last.gview then w.status:SetText("|cffffc94asplit: waiting for the leader's numbers|r")
+    elseif last and last.g and not last.settled and last.gview then w.status:SetText("|cffffc54asplit: waiting for the leader's numbers|r")
     else w.status:SetText("") end
     w.go:SetText("|cff7CFC00Start|r")
     showBest(nil)
@@ -456,7 +456,7 @@ local function build()
       vpop:SetSize(46, 150); vpop:SetFrameStrata("TOOLTIP"); vpop:EnableMouse(true)
       if vpop.SetBackdrop then
         vpop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-        vpop:SetBackdropColor(0.06, 0.05, 0.04, 0.96); vpop:SetBackdropBorderColor(0.89, 0.62, 0.11, 1)
+        vpop:SetBackdropColor(0.06, 0.05, 0.04, 0.96); vpop:SetBackdropBorderColor(0.94, 0.58, 0.03, 1)
       end
       vpop.pct = vpop:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); vpop.pct:SetPoint("BOTTOM", 0, 8)
       local sb = C.Skin and C.Skin.Scrollbar and C.Skin.Scrollbar(vpop, function(v)
@@ -571,7 +571,7 @@ local function build()
     w:SetSize(W, IH)
     -- header: logo, KINA, mode, level ... Sound, close
     icon:ClearAllPoints(); icon:SetPoint("TOPLEFT", 10, -5); icon:SetSize(18, 18)
-    fx(title, 14); title:SetText("Kina"); title:SetTextColor(1, 0.69, 0.07)
+    fx(title, 14); title:SetText("Kina"); title:SetTextColor(1, 0.73, 0.14)
     title:ClearAllPoints(); title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
     w.chip.text:Hide()
     -- your Kina level: hover the logo (it's also on the You tab)
@@ -586,15 +586,13 @@ local function build()
     -- 1.5.3 (Taylor): the same KINA nameplate as the main window, centred on the top edge;
     -- the sound toggle is a speaker in the top-left corner, opposite the close X
     icon:Hide(); title:Hide()
-    local plate = CreateFrame("Frame", nil, w); plate:SetSize(190, 48); plate:SetPoint("CENTER", w, "TOP", 0, 2)
+    -- 0.9.16 (Taylor): the widget wears the new banner nameplate too
+    local plate = CreateFrame("Frame", nil, w); plate:SetSize(196, 56); plate:SetPoint("CENTER", w, "TOP", 0, 2)
     plate:SetFrameLevel(w:GetFrameLevel() + 45)
-    local pt = plate:CreateTexture(nil, "BACKGROUND"); pt:SetAllPoints(); pt:SetTexture(C.Cos and C.Cos.Tex("kina_plaque") or nil)
-    local pc = plate:CreateTexture(nil, "OVERLAY"); pc:SetSize(30, 30); pc:SetPoint("CENTER", plate, "CENTER", -50, 0)
-    pc:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo")
-    local pw = plate:CreateTexture(nil, "ARTWORK"); pw:SetSize(100, 25); pw:SetPoint("CENTER", plate, "CENTER", 11, 0)
-    pw:SetTexture(C.Cos and C.Cos.Tex("kina_word") or nil)
+    local pt = plate:CreateTexture(nil, "ARTWORK"); pt:SetAllPoints(); pt:SetTexture(C.Cos and C.Cos.Tex("kina_nameplate") or nil)
+    pt:SetTexCoord(0, 1, 0, 295 / 512)
     if C.DragBy then C.DragBy(w, plate) end
-    if C.Cos and C.Cos.PlaqueFX then pcall(C.Cos.PlaqueFX, plate, 190, 48, 14) end -- 1.5.5
+    if C.Cos and C.Cos.PlaqueFX then pcall(C.Cos.PlaqueFX, plate, 196, 56, 14) end -- 1.5.5
     -- hovering the plate shows your Kina level (what the little level button did)
     plate:SetScript("OnEnter", function(self)
       if not GameTooltip then return end
@@ -658,11 +656,11 @@ local function build()
     card:SetPoint("TOPLEFT", w, "TOPLEFT", 10, -146); card:SetPoint("RIGHT", w, "RIGHT", -10, 0); card:SetHeight(66)
     if card.SetBackdrop then
       card:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-      card:SetBackdropColor(0.14, 0.12, 0.10, 0.95); card:SetBackdropBorderColor(0.63, 0.46, 0.16, 1)
+      card:SetBackdropColor(0.14, 0.12, 0.10, 0.95); card:SetBackdropBorderColor(0.66, 0.44, 0.11, 1)
     end
     local kick = card:CreateFontString(nil, "OVERLAY"); fx(kick, 8); kick:SetPoint("TOPLEFT", 8, -6); kick:SetText("|cff9a8f7aLAST FARM|r")
     local zone = card:CreateFontString(nil, "OVERLAY"); if C.Cos then C.Cos.Font(zone, 14, "OUTLINE") end
-    zone:SetPoint("TOPLEFT", 8, -17); zone:SetTextColor(1, 0.77, 0.33); zone:SetWidth(W - 130); zone:SetJustifyH("LEFT")
+    zone:SetPoint("TOPLEFT", 8, -17); zone:SetTextColor(1, 0.79, 0.39); zone:SetWidth(W - 130); zone:SetJustifyH("LEFT")
     local l1 = card:CreateFontString(nil, "OVERLAY"); fx(l1, 10); l1:SetPoint("TOPLEFT", 8, -36); l1:SetWidth(W - 40); l1:SetJustifyH("LEFT")
     local l2 = card:CreateFontString(nil, "OVERLAY"); fx(l2, 10); l2:SetPoint("TOPLEFT", 8, -50); l2:SetWidth(W - 40); l2:SetJustifyH("LEFT")
     for _, fs in ipairs({ zone, l1, l2 }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end

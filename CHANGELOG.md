@@ -1,3 +1,8 @@
+# Kina 0.9.16 (beta)
+
+- The widget wears the new nameplate too.
+- Stronger banner gold across the interface: tabs, buttons, headings and text.
+
 # Kina 0.9.15 (beta)
 
 - New Kina coin logo and a new nameplate on the Kina window.

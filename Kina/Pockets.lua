@@ -194,7 +194,7 @@ local function newBadge(parent, anchorTo, kind)
   b.kind, b.anchorTo = kind, anchorTo
   b:SetFrameLevel(parent:GetFrameLevel() + 10)
   b.icon = b:CreateTexture(nil, "OVERLAY"); b.icon:SetTexture(P.ICON); b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); b.text:SetText("|cffffc94aPockets!|r")
+  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); b.text:SetText("|cffffc54aPockets!|r")
   layout(b); b:Hide()
   badges[#badges + 1] = b
   return b

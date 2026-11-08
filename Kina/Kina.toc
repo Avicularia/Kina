@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 0.9.15
+## Version: 0.9.16
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets

@@ -5,7 +5,7 @@
 local _, C = ...
 
 local panels, builders = {}, {}
-local GOLD, GREY, GREEN, ORANGE = "|cffffc94a", "|cff9d9d9d", "|cff7CFC00", "|cffff8040"
+local GOLD, GREY, GREEN, ORANGE = "|cffffc54a", "|cff9d9d9d", "|cff7CFC00", "|cffff8040"
 
 local function ui() return C.UI end
 local function money(v) return (v and v >= 1) and C.Money(math.floor(v + 0.5)) or (GREY .. "-|r") end
@@ -35,7 +35,7 @@ local function bar(parent, r, g, b)
   if fill.SetGradient and CreateColor then pcall(fill.SetGradient, fill, "VERTICAL", CreateColor(r * 0.55, g * 0.55, b * 0.55, 0.9), CreateColor(r, g, b, 0.9)) end
   local edge = {}
   for _, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
-    local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.89, 0.62, 0.11, 0.8)
+    local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.94, 0.57, 0.03, 0.8)
     t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
     edge[#edge + 1] = t
   end
@@ -52,10 +52,10 @@ end
 local function heading(parent, s, noRule)
   local t = text(parent, "GameFontNormal")
   -- 1.5.5: panel titles in the Kina serif, with a fine rule under the first one
-  if C.Cos and C.Cos.Font then C.Cos.Font(t, 15, ""); t:SetTextColor(1, 0.75, 0.29) end
+  if C.Cos and C.Cos.Font then C.Cos.Font(t, 15, ""); t:SetTextColor(1, 0.78, 0.34) end
   t:SetText(s)
   if not noRule then
-    local rule = parent:CreateTexture(nil, "ARTWORK"); rule:SetHeight(1); rule:SetColorTexture(0.49, 0.37, 0.14, 0.9)
+    local rule = parent:CreateTexture(nil, "ARTWORK"); rule:SetHeight(1); rule:SetColorTexture(0.52, 0.35, 0.11, 0.9)
     rule:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -38); rule:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -38)
   end
   return t
@@ -128,7 +128,7 @@ local function youPage(p, them)
     local y = -((i - 1) % 7) * 24
     if (i - 1) % 2 == 0 then -- 1.5.5: zebra rows
       local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(22)
-      z:SetColorTexture(1, 0.85, 0.56, 0.04)
+      z:SetColorTexture(1, 0.8, 0.51, 0.04)
     end
     local l = text(col, "GameFontHighlightSmall"); l:SetPoint("TOPLEFT", 0, y)
     local r = text(col, "GameFontHighlight", "RIGHT"); r:SetPoint("TOPRIGHT", 0, y)
@@ -196,7 +196,7 @@ local function youPage(p, them)
   end
   local function standingLine(stName, pts, vn, vbad)
     return C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (pts or 0) .. " rep|r"
-      .. ((vn or 0) > 0 and ("   |T" .. C.Vouch.UP_ICON .. ":16|t|cffffc94a" .. vn .. "|r") or "")
+      .. ((vn or 0) > 0 and ("   |T" .. C.Vouch.UP_ICON .. ":16|t|cffffc54a" .. vn .. "|r") or "")
       .. ((vbad or 0) > 0 and ("  |T" .. C.Vouch.DOWN_ICON .. ":16|t" .. C.Vouch.RED .. vbad .. "|r") or "")
   end
 
@@ -337,7 +337,7 @@ builders.debts = function(p)
     local b = CreateFrame("Button", nil, left)
     b:SetPoint("TOPLEFT", 10, -46 - (i - 1) * 40); b:SetSize(230, 36)
     local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.07)
-    b.sel = b:CreateTexture(nil, "BACKGROUND"); b.sel:SetAllPoints(); b.sel:SetColorTexture(0.89, 0.62, 0.11, 0.16); b.sel:Hide()
+    b.sel = b:CreateTexture(nil, "BACKGROUND"); b.sel:SetAllPoints(); b.sel:SetColorTexture(0.94, 0.57, 0.03, 0.16); b.sel:Hide()
     b.name = text(b, "GameFontNormal"); b.name:SetPoint("TOPLEFT", 8, -3); b.name:SetWidth(214)
     b.sub = text(b, "GameFontHighlightSmall"); b.sub:SetPoint("TOPLEFT", 8, -20); b.sub:SetWidth(214)
     b:SetScript("OnClick", function(self) p.selected = self.who; p.refresh() end)
@@ -367,7 +367,7 @@ builders.debts = function(p)
   for i = 1, 6 do
     local l = CreateFrame("Frame", nil, card)
     l:SetPoint("TOPLEFT", 14, -62 - (i - 1) * 62); l:SetPoint("RIGHT", card, "RIGHT", -14, 0); l:SetHeight(56)
-    local sep = l:CreateTexture(nil, "BACKGROUND"); sep:SetPoint("BOTTOMLEFT", 0, 0); sep:SetPoint("BOTTOMRIGHT", 0, 0); sep:SetHeight(1); sep:SetColorTexture(0.89, 0.62, 0.11, 0.25)
+    local sep = l:CreateTexture(nil, "BACKGROUND"); sep:SetPoint("BOTTOMLEFT", 0, 0); sep:SetPoint("BOTTOMRIGHT", 0, 0); sep:SetHeight(1); sep:SetColorTexture(0.94, 0.57, 0.03, 0.25)
     l.what = text(l, "GameFontHighlight"); l.what:SetPoint("TOPLEFT", 4, -4); l.what:SetWidth(380)
     l.status = text(l, "GameFontHighlightSmall"); l.status:SetPoint("TOPLEFT", l.what, "BOTTOMLEFT", 0, -4); l.status:SetWidth(380)
     l.amt = text(l, "GameFontNormal", "RIGHT"); l.amt:SetPoint("TOPRIGHT", -4, -4); l.amt:SetWidth(140)
@@ -599,16 +599,16 @@ local function rankRow(parent, i, w, clickable)
   r.sub = text(r, "GameFontHighlightSmall", "RIGHT"); r.sub:SetPoint("TOPRIGHT", r.val, "BOTTOMRIGHT", 0, -2)
   local tray = r:CreateTexture(nil, "BACKGROUND"); tray:SetPoint("BOTTOMLEFT", 28, 3); tray:SetPoint("BOTTOMRIGHT", -4, 3); tray:SetHeight(3)
   tray:SetColorTexture(1, 1, 1, 0.06)
-  r.fill = r:CreateTexture(nil, "ARTWORK"); r.fill:SetPoint("BOTTOMLEFT", 28, 3); r.fill:SetHeight(3); r.fill:SetColorTexture(1, 0.7, 0.15, 0.85)
+  r.fill = r:CreateTexture(nil, "ARTWORK"); r.fill:SetPoint("BOTTOMLEFT", 28, 3); r.fill:SetHeight(3); r.fill:SetColorTexture(1, 0.62, 0.06, 0.85)
   r.barW = w - 32
   if clickable then
-    local hl = r:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.75, 0.25, 0.08)
-    r.sel = r:CreateTexture(nil, "BACKGROUND", nil, -1); r.sel:SetAllPoints(); r.sel:SetColorTexture(0.89, 0.62, 0.11, 0.16); r.sel:Hide()
+    local hl = r:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.67, 0.17, 0.08)
+    r.sel = r:CreateTexture(nil, "BACKGROUND", nil, -1); r.sel:SetAllPoints(); r.sel:SetColorTexture(0.94, 0.57, 0.03, 0.16); r.sel:Hide()
   end
   function r:Bar(frac) if frac and frac > 0 then self.fill:Show(); self.fill:SetWidth(math.max(2, self.barW * math.min(1, frac))) else self.fill:Hide() end end
   return r
 end
-local RANK = { "|cffffc94a", "|cffd9d9d9", "|cffd08a4a", "|cff9d9d9d", "|cff9d9d9d" }
+local RANK = { "|cffffc54a", "|cffd9d9d9", "|cffd08a4a", "|cff9d9d9d", "|cff9d9d9d" }
 
 builders.youVouch = function(p)
   -- left: totals and every kind
@@ -656,7 +656,7 @@ builders.youVouch = function(p)
   p.refresh = function()
     local st = C.VouchStats()
     local V = C.Vouch
-    big:SetText(icon(false, 26) .. " |cffffc94a" .. st.got .. "|r     " .. icon(true, 26) .. " " .. RED .. st.gotBad .. "|r")
+    big:SetText(icon(false, 26) .. " |cffffc54a" .. st.got .. "|r     " .. icon(true, 26) .. " " .. RED .. st.gotBad .. "|r")
     bigSub:SetText(GREY .. "from " .. #st.list .. (#st.list == 1 and " player" or " players") .. "|r")
     for i = 1, 8 do
       local bad = V.IsBad(i)
@@ -808,7 +808,7 @@ builders.collections = function(p)
   local rows = {}
   for i = 1, 10 do
     local r = CreateFrame("Frame", nil, L); r:SetPoint("TOPLEFT", 14, -46 - (i - 1) * 44); r:SetPoint("RIGHT", L, "RIGHT", -14, 0); r:SetHeight(40)
-    local sep = r:CreateTexture(nil, "BACKGROUND"); sep:SetPoint("BOTTOMLEFT"); sep:SetPoint("BOTTOMRIGHT"); sep:SetHeight(1); sep:SetColorTexture(0.89, 0.62, 0.11, 0.2)
+    local sep = r:CreateTexture(nil, "BACKGROUND"); sep:SetPoint("BOTTOMLEFT"); sep:SetPoint("BOTTOMRIGHT"); sep:SetHeight(1); sep:SetColorTexture(0.94, 0.57, 0.03, 0.2)
     r.port = r:CreateTexture(nil, "ARTWORK"); r.port:SetSize(30, 30); r.port:SetPoint("LEFT", 2, 0)
     if r.port.SetMask then pcall(r.port.SetMask, r.port, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
     r.stamp = text(r, "GameFontNormalSmall"); r.stamp:SetPoint("LEFT", 40, 8); r.stamp:SetWidth(80)

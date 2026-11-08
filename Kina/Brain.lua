@@ -35,7 +35,7 @@ local function duoVerdict(eliteMax, eliteN, lvl)
   local d = eliteMax - lvl
   if d <= -8 then return 5, "|cff7CFC00trivial|r", "elites are " .. -d .. " levels below you: pull whole packs" end
   if d <= -3 then return 4, "|cff7CFC00easy duo|r", "Ben tanks in bear form, your pet takes adds: pull 2-3 at a time" end
-  if d <= 0 then return 3, "|cffffc94aduo with care|r", "elites at your level: single pulls, Ben ready to switch to healing" end
+  if d <= 0 then return 3, "|cffffc54aduo with care|r", "elites at your level: single pulls, Ben ready to switch to healing" end
   if d <= 2 then return 2, "|cffff8040hard|r", "elites above you: one at a time, trap/hibernate the extras, expect deaths" end
   return 1, "|cffff4040not yet|r", "elites " .. d .. " levels above you: come back at level " .. (eliteMax - 1)
 end

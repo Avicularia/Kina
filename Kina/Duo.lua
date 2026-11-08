@@ -124,7 +124,7 @@ function C.TradeSkill(n) return TRADE[n] ~= nil end
 function C.YouLines()
   local me = myProfile()
   local ps = profList(me.profs)
-  local l1 = string.format("|cffffc94a%s|r %s %s   |cff9d9d9dprofessions:|r %s", me.name, niceClass(me.class), tostring(me.level or "?"),
+  local l1 = string.format("|cffffc54a%s|r %s %s   |cff9d9d9dprofessions:|r %s", me.name, niceClass(me.class), tostring(me.level or "?"),
     #ps > 0 and table.concat(ps, ", ") or "|cffff8040none read yet (open your skills window once)|r")
   if C.char.lockpicking then
     l1 = l1 .. string.format("   |cff9d9d9dlockpicking:|r %d/%d", C.char.lockpicking, C.char.lockpickingMax or C.char.lockpicking)

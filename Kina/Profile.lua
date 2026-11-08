@@ -6,7 +6,7 @@ local _, C = ...
 -- /kina profile [Name] (your target when no name).
 local P = {}
 C.Profile = P
-local GREY, ORANGE, GREEN, GOLD = "|cff9d9d9d", "|cffff9933", "|cff7CFC00", "|cffffc94a"
+local GREY, ORANGE, GREEN, GOLD = "|cff9d9d9d", "|cffff9933", "|cff7CFC00", "|cffffc54a"
 local function first(n) return n and (tostring(n):match("^([^%-]+)") or tostring(n)) or "" end
 local function lower(n) return first(n):lower() end
 local function safe(v) return not (issecretvalue and issecretvalue(v)) end
@@ -142,7 +142,7 @@ local function build()
   card:RegisterForDrag("LeftButton"); card:SetScript("OnDragStart", card.StartMoving); card:SetScript("OnDragStop", card.StopMovingOrSizing)
   if card.SetBackdrop then
     card:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-    card:SetBackdropColor(0.05, 0.04, 0.03, 0.96); card:SetBackdropBorderColor(0.89, 0.62, 0.11, 1)
+    card:SetBackdropColor(0.05, 0.04, 0.03, 0.96); card:SetBackdropBorderColor(0.94, 0.58, 0.03, 1)
   end
   local x = CreateFrame("Button", nil, card, "UIPanelCloseButton"); x:SetPoint("TOPRIGHT", -2, -2)
   local o = { frame = card }
