@@ -165,6 +165,21 @@ function H.Check(s)
     return
   end
   -- the leader re-prices and tells everyone; the others wait for that
+  -- 0.9.7: only once the leader HAS a scan from after the farm (its own, or the one a
+  -- groupmate just made, which their Kina shares): re-pricing from the leader's old
+  -- prices let the debt start with stale prices when the partner was the one who scanned
+  if h.leader and lower(h.leader) == lower(myName()) and C.Share and C.Share.NewestScan then
+    local nt = C.Share.NewestScan()
+    if (nt or 0) <= (s.stop or 0) then
+      if not h.waitPrices then
+        h.waitPrices = C.Now()
+        C.Print("a fresh auction scan was made for this farm: waiting for its prices to reach your Kina before re-pricing the split...")
+        if C.Share.Announce then pcall(C.Share.Announce, true) end
+      end
+      return
+    end
+    h.waitPrices = nil
+  end
   if h.leader and lower(h.leader) == lower(myName()) and s.sync and C.FarmSync and C.FarmSync.Totals then
     local ok, t = pcall(C.FarmSync.Totals, s.sync, function(id, sfx) return C.SplitValue and (C.SplitValue(id, sfx)) or 0 end)
     if ok and t and t.byLooter then
@@ -188,14 +203,24 @@ ticker:SetScript("OnUpdate", function(_, el)
     local s = C.db.sessions[i]
     local h = s.hold
     if h and not h.done then
+      if h.waitPrices then
+        -- the leader is waiting for a groupmate's fresh scan to arrive
+        if C.Now() - h.waitPrices > 600 then
+          h.done = true; h.waitPrices = nil
+          C.Print("the fresh auction scan never reached your Kina (is data sharing on for both of you?): the split stands as it was.")
+        else H.Check(s) end
+      end
       if h.me == "scan" and C.market and C.market.scanTime and s.stop and C.market.scanTime > s.stop then
         h.me = "done"
         if C.Share and C.Share.SendHold then C.Share.SendHold("prh", 1, sidOf(s), members(s)) end
+        -- (share the new scan with the group, so the farm leader can price from it)
+        if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
         C.Print("|cff7CFC00scan done:|r this farm's loot will be priced from it.")
         H.Check(s)
       elseif h.me == "wait" and C.market and C.market.scanTime and s.stop and C.market.scanTime > s.stop then
         -- scanned without answering the window: that counts as scanning
         H.Answer(s, "done")
+        if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
       end
       if h.ready and C.Now() - h.ready > 600 then
         h.done = true; C.Print("the farm leader didn't send new prices: the split stands as it was.")

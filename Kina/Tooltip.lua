@@ -220,7 +220,7 @@ local function handle(tip, data)
   local ok, err = pcall(addLines, tip, id)
   if not ok and C.debug then C.Print("tooltip error: " .. tostring(err)) end
   tip:Show()
-  if C.settings.tipOnly and rebuiltFor[tip] ~= id and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
+  if C.settings.tipOnly and C_Timer and C_Timer.After and tip.NumLines and tip.GetName and tip:GetName() then
     local keep, name = tip:NumLines(), tip:GetName()
     C_Timer.After(0, function() pcall(C.TipOnlyKina, tip, name, keep, id) end)
   end
@@ -228,36 +228,36 @@ end
 -- 1.5.4 (Taylor): "the only thing I need to see is the part you added": with Settings >
 -- "Only Kina in item tooltips" on, the lines other add-ons put under Kina's block are
 -- dropped (the tooltip is rebuilt from the game's own lines and Kina's)
-function C.TipOnlyKina(tip, name, keep, id)
-  if not tip:IsShown() or shown[tip] ~= id or tip:NumLines() <= keep then return end
-  if InCombatLockdown and InCombatLockdown() then return end
-  local rows = {}
-  for i = 1, keep do
+-- 0.9.6: the lines other add-ons add after Kina's block are hidden (text cleared, line
+-- hidden, tooltip trimmed to Kina's last line) instead of rebuilding the tooltip: a
+-- rebuild made the game and the other add-ons fill it again (it flashed, or they came
+-- back). Lines added later still are caught by the tooltip's own update.
+local keepFor = setmetatable({}, { __mode = "k" })
+local function trim(tip)
+  local k = keepFor[tip]
+  if not (k and tip:IsShown() and tip.NumLines and tip.GetName) then return end
+  local name = tip:GetName()
+  local n = tip:NumLines() or 0
+  if not name or n <= k.n then return end
+  local hid = false
+  for i = k.n + 1, n do
     local L, R = _G[name .. "TextLeft" .. i], _G[name .. "TextRight" .. i]
-    local lt = L and L:GetText()
-    if lt and issecretvalue and issecretvalue(lt) then return end
-    local rt = R and R:IsShown() and R:GetText() or nil
-    local lr, lg, lb = 1, 1, 1; if L then lr, lg, lb = L:GetTextColor() end
-    local rr, rg, rb = 1, 1, 1; if R then rr, rg, rb = R:GetTextColor() end
-    -- the game draws the sell price with coins next to the text: keep it as text
-    if lt and SELL_PRICE and lt:find(SELL_PRICE, 1, true) and C.VendorPrice then
-      local v = C.VendorPrice(id); if v and v > 0 then lt = SELL_PRICE .. " " .. C.Money(v) end
-    end
-    rows[i] = { lt or " ", rt, lr, lg, lb, rr, rg, rb }
+    if L and L:IsShown() then L:SetText(""); L:Hide(); hid = true end
+    if R and R:IsShown() then R:SetText(""); R:Hide() end
   end
-  rebuilding[tip] = true
-  rebuiltFor[tip] = id
-  local ok = pcall(function()
-    tip:ClearLines()
-    for i, r in ipairs(rows) do
-      if r[2] and r[2] ~= "" then tip:AddDoubleLine(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
-      else tip:AddLine(r[1], r[3], r[4], r[5], #r[1] > 48) end
-    end
-    shown[tip] = id
-    tip:Show()
-  end)
-  rebuilding[tip] = nil
+  if hid then
+    local last = _G[name .. "TextLeft" .. k.n]
+    local top, bottom = tip:GetTop(), last and last:GetBottom()
+    if top and bottom and top > bottom then tip:SetHeight(top - bottom + 11) end
+  end
 end
+function C.TipOnlyKina(tip, name, keep, id)
+  if not tip:IsShown() or shown[tip] ~= id then return end
+  if InCombatLockdown and InCombatLockdown() then return end
+  keepFor[tip] = { n = keep, id = id }
+  trim(tip)
+end
+C._TipTrim = trim
 
 C._TooltipAdd = addLines -- for tests
 local hooked = false
@@ -266,8 +266,14 @@ local function install()
   hooked = true
   for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
     if tip and tip.HookScript then
-      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil end end)
-      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil end)
+      tip:HookScript("OnTooltipCleared", function(self) if not rebuilding[self] then shown[self] = nil; keepFor[self] = nil end end)
+      tip:HookScript("OnHide", function(self) rebuiltFor[self] = nil; keepFor[self] = nil end)
+      -- (a few times a second while shown: hide lines other add-ons add late)
+      local acc = 0
+      tip:HookScript("OnUpdate", function(self, el)
+        acc = acc + (el or 0); if acc < 0.15 then return end; acc = 0
+        if C.settings and C.settings.tipOnly and keepFor[self] then pcall(trim, self) end
+      end)
     end
   end
   local TDP = TooltipDataProcessor

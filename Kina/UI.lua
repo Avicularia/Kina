@@ -2818,7 +2818,9 @@ local function build()
   if C.Skin and C.Skin.On() then C.Skin.StripTemplate(f) end
   -- never bigger than the screen (a saved size from a broken drag is shrunk back)
   local screenW, screenH = (UIParent:GetWidth() or 1900) - 20, (UIParent:GetHeight() or 1200) - 20
-  local MINW, MINH = 780, 420
+  -- (0.9.6: tall enough for the You and profile pages, which overlapped in a small window)
+  local MINW, MINH = math.min(880, screenW), math.min(660, screenH)
+  ui.w, ui.h = math.max(ui.w or 0, MINW), math.max(ui.h or 0, MINH)
   local saved = C.settings.pos.mainSize
   if type(saved) == "table" and saved[1] then
     ui.w = math.max(MINW, math.min(screenW, saved[1])); ui.h = math.max(MINH, math.min(screenH, saved[2]))
@@ -3044,7 +3046,7 @@ local function build()
   sb:SetScript("OnTextChanged", function(self) ui.search[ui.tab or "Hot"] = self:GetText(); ui.offset = 0; C.Refresh() end)
   sb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   sb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-  local sl = C.Text(ui.tabBand or f, "OVERLAY", "GameFontDisableSmall"); sl:SetPoint("RIGHT", sb, "LEFT", -6, 0); sl:SetText("Search")
+  local sl = C.Text(ui.tabBand or f, "OVERLAY", "GameFontDisableSmall"); sl:SetPoint("RIGHT", sb, "LEFT", -6, 0); sl:SetText("Search"); ui.searchLabel = sl
   ui.searchBox = sb
   -- bottom bar
   local scan = button(f, "Scan AH", 80, function() C.StartScanLoop() end); scan:SetPoint("BOTTOMRIGHT", -32, 10)
@@ -3698,6 +3700,17 @@ function C.Refresh()
       local on = tab == "Profile"
       ui.profileTabX:SetTextColor(on and 0.18 or 0.91, on and 0.12 or 0.78, on and 0.04 or 0.47)
     else ui.profileTab:Hide(); if ui.profileDia then ui.profileDia:Hide() end end
+    -- 0.9.6: the search box gives way when the tabs need the room (a small window)
+    if ui.searchBox and ui.tabBand and ui.tabBand.GetRight then
+      local last
+      for _, b in pairs(ui.tabButtons) do local r = b.GetRight and b:GetRight(); if r and (not last or r > last) then last = r end end
+      if ui.profileTab:IsShown() then local r = ui.profileTab:GetRight(); if r and (not last or r > last) then last = r end end
+      local right = ui.tabBand:GetRight()
+      local room = (last and right) and (right - last) or 999
+      if room >= 220 then ui.searchBox:SetWidth(130); ui.searchBox:Show(); ui.searchLabel:Show()
+      elseif room >= 100 then ui.searchBox:SetWidth(room - 40); ui.searchBox:Show(); ui.searchLabel:Hide()
+      else ui.searchBox:Hide(); ui.searchLabel:Hide() end
+    end
   end
   for name, b in pairs(ui.tabButtons) do
     if name == tab then b:LockHighlight() else b:UnlockHighlight() end

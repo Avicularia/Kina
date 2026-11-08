@@ -8,7 +8,7 @@ local P = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Cos\\"
 K.FONT = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Fonts\\Cinzel-Bold.ttf"
 local RING = { Unproven = "ring_base", Vouched = "ring_vouched", Reliable = "ring_reliable", Trusted = "ring_trusted",
   Honored = "ring_honored", Revered = "ring_revered", Exalted = "ring_exalted",
-  Delinquent = "ring_disgraced", Disgraced = "ring_disgraced", Oathbreaker = "ring_disgraced", Blacklisted = "ring_disgraced" }
+  Delinquent = "ring_delinquent", Disgraced = "ring_disgraced", Oathbreaker = "ring_oathbreaker", Blacklisted = "ring_oathbreaker" }
 local PROF = { Mining = "prof_mining", Herbalism = "prof_herbalism", Skinning = "prof_skinning", Enchanting = "prof_enchanting" }
 function K.Tex(name) return P .. name end
 function K.RingFor(standing) return P .. (RING[standing or "Unproven"] or "ring_base") end
@@ -33,21 +33,35 @@ end
 local COLOR = { Unproven = "|cffbfbfbf", Vouched = "|cffd8d8d8", Reliable = "|cffd9a35a", Trusted = "|cffe0b060",
   Honored = "|cffe8d8a0", Revered = "|cfff2e6b8", Exalted = "|cffffd34d", Delinquent = "|cffff6040", Disgraced = "|cffff4030", Oathbreaker = "|cffd02020", Blacklisted = "|cff8a1010" }
 function K.StandingColor(st) return COLOR[st or "Unproven"] or "|cffbfbfbf" end
--- 1.5.4 (Taylor): every tier from Vouched up has its own glow, stronger each step, with
--- more going on as you climb: Reliable breathes, Trusted breathes deeper, Honored adds a
--- spark travelling round the ring, Revered adds slow turning light rays, Exalted all of it
--- brighter with two sparks. Dishonour is deliberately NOT pretty: no glow at all, the
--- portrait goes grey (Delinquent half grey), and the ring is dimmed.
--- { r, g, b, base alpha, breathe depth, breathe speed, sparks, rays alpha }
+-- 0.9.7 (Taylor, mocks approved): every tier's look, in one family. Round soft halos
+-- (no more blurry copies of the ring), getting bigger and warmer as you climb; Trusted
+-- adds a glint that runs round the rim; Honored adds two circling sparks and rising
+-- embers; Revered a violet-and-gold double halo, turning rays and more embers; Exalted
+-- all of it, brightest. Dishonour is deliberately NOT pretty: no glow, a grey portrait,
+-- dimmed or broken rings, and at Oathbreaker and Blacklisted a dark red shadow that
+-- throbs in from the edge.
+--  halo  = { r, g, b, size (x portrait), alpha, breathe depth, breathe speed }
+--  halo2 = an inner second halo (same fields); rays = { alpha, r, g, b }
+--  sparks / sparkTint, embers (at full size) / emberTints, glint = true
 local FX = {
-  Vouched = { 0.95, 0.60, 0.40, 0.18, 0, 0, 0, 0 },
-  Reliable = { 0.55, 0.95, 0.60, 0.24, 0.08, 1.2, 0, 0 },
-  Trusted = { 0.65, 0.80, 1.00, 0.30, 0.12, 1.6, 0, 0 },
-  Honored = { 1.00, 0.85, 0.45, 0.38, 0.14, 1.8, 1, 0 },
-  Revered = { 0.85, 0.65, 1.00, 0.46, 0.16, 2.0, 1, 0.22 },
-  Exalted = { 1.00, 0.82, 0.35, 0.58, 0.20, 2.4, 2, 0.38 },
+  Vouched  = { halo = { 0.95, 0.70, 0.45, 1.55, 0.20, 0, 0 } },
+  Reliable = { halo = { 0.55, 0.95, 0.60, 1.60, 0.26, 0.15, 0.9 } },
+  Trusted  = { halo = { 0.59, 0.75, 1.00, 1.75, 0.34, 0.05, 0.8 }, glint = true },
+  Honored  = { halo = { 1.00, 0.77, 0.35, 2.15, 0.62, 0.18, 1.6 }, sparks = 2, sparkTint = { 1, 0.80, 0.42 },
+               embers = 16, emberTints = { { 1, 0.80, 0.42 } } },
+  Revered  = { halo = { 0.67, 0.43, 1.00, 2.40, 0.55, 0.15, 1.8 }, halo2 = { 1.00, 0.80, 0.43, 1.55, 0.45, 0.15, 1.8 },
+               rays = { 0.42, 0.95, 0.75, 1.00 }, sparks = 2, sparkTint = { 0.85, 0.60, 1.00 },
+               embers = 20, emberTints = { { 0.85, 0.60, 1.00 }, { 1, 0.80, 0.42 } } },
+  Exalted  = { halo = { 1.00, 0.76, 0.30, 2.60, 0.75, 0.20, 2.4 }, halo2 = { 1.00, 0.95, 0.78, 1.60, 0.50, 0.20, 2.4 },
+               rays = { 0.55, 1.00, 0.82, 0.40 }, sparks = 2, sparkTint = { 1, 0.95, 0.80 }, glint = true,
+               embers = 26, emberTints = { { 1, 0.80, 0.42 }, { 1, 0.95, 0.80 } } },
 }
+-- grey portrait (Delinquent half grey), how dark the portrait gets, the ring's dimming,
+-- and the creeping red shadow (alpha) for the worst
 local SHAME = { Delinquent = 0.5, Disgraced = 1, Oathbreaker = 1, Blacklisted = 1 }
+local DARK = { Delinquent = 0.9, Disgraced = 0.85, Oathbreaker = 0.62, Blacklisted = 0.5 }
+local RINGDIM = { Delinquent = 0.85, Disgraced = 0.78, Oathbreaker = 0.72, Blacklisted = 0.6 }
+local VIGNETTE = { Oathbreaker = 0.8, Blacklisted = 1 }
 function K.Portrait(box, portrait)
   local o = {}
   if portrait.SetMask then pcall(portrait.SetMask, portrait, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
@@ -55,17 +69,21 @@ function K.Portrait(box, portrait)
   o.portrait = portrait
   local W = box:GetWidth() or 80
   o.W = W
-  o.rays = box:CreateTexture(nil, "BACKGROUND", nil, -4)
-  o.rays:SetPoint("CENTER", portrait, "CENTER"); o.rays:SetSize(W * 1.95, W * 1.95); o.rays:SetBlendMode("ADD"); o.rays:SetTexture(P .. "fx_rays"); o.rays:Hide()
-  o.glow = box:CreateTexture(nil, "BACKGROUND", nil, -2)
-  o.glow:SetPoint("CENTER", portrait, "CENTER"); o.glow:SetSize(W * 1.45, W * 1.45); o.glow:SetBlendMode("ADD")
+  local function addTex(layer, sub, file, size)
+    local t = box:CreateTexture(nil, layer, nil, sub); t:SetPoint("CENTER", portrait, "CENTER"); t:SetSize(size, size)
+    t:SetTexture(P .. file); t:SetBlendMode("ADD"); t:Hide(); return t
+  end
+  o.halo = addTex("BACKGROUND", -5, "fx_round", W * 2)
+  o.halo2 = addTex("BACKGROUND", -4, "fx_round", W * 1.5)
+  o.rays = addTex("BACKGROUND", -3, "fx_rays", W * 1.95)
+  o.glow = addTex("BACKGROUND", -2, "fx_round", W) -- (kept for older callers; unused)
   o.ring = box:CreateTexture(nil, "OVERLAY", nil, 2)
   o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
+  o.vig = box:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vignette"); o.vig:Hide()
+  o.glint = addTex("OVERLAY", 3, "fx_glint", W * 1.30)
   o.sparks = {}
-  for i = 1, 2 do
-    local sp = box:CreateTexture(nil, "OVERLAY", nil, 6); sp:SetSize(W * 0.32, W * 0.32); sp:SetBlendMode("ADD"); sp:SetTexture(P .. "fx_spark"); sp:Hide()
-    o.sparks[i] = sp
-  end
+  for i = 1, 2 do o.sparks[i] = addTex("OVERLAY", 6, "fx_spark", W * 0.32) end
+  o.embers = {}
   o.plate = box:CreateTexture(nil, "OVERLAY", nil, 4)
   o.plate:SetSize(36, 36); o.plate:SetPoint("CENTER", o.ring, "BOTTOM", 0, 4)
   o.plate:SetTexture(P .. "level_plate")
@@ -73,50 +91,102 @@ function K.Portrait(box, portrait)
   K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, 1); o.num:SetTextColor(1, 0.86, 0.45)
   o.badge = box:CreateTexture(nil, "OVERLAY", nil, 5)
   o.badge:SetPoint("CENTER", o.ring, "TOP", 0, 2)
+  o.badgeGlow = box:CreateTexture(nil, "OVERLAY", nil, 4); o.badgeGlow:SetPoint("CENTER", o.badge, "CENTER")
+  o.badgeGlow:SetTexture(P .. "fx_spark"); o.badgeGlow:SetBlendMode("ADD"); o.badgeGlow:SetVertexColor(0.35, 1, 0.35); o.badgeGlow:Hide()
   local t = 0
   local pulser = CreateFrame("Frame", nil, box)
   pulser:SetScript("OnUpdate", function(_, el)
-    local fx = o.fx
-    if not fx or not box:IsVisible() then return end
+    if not box:IsVisible() then return end
+    if el > 0.2 then el = 0.2 end
     t = t + el
-    local base, depth, speed = fx[4], fx[5], fx[6]
-    o.glow:SetAlpha(base + (depth > 0 and depth * math.sin(t * speed) or 0))
-    if fx[8] > 0 and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, t * 0.12); o.rays:SetAlpha(fx[8] * (0.8 + 0.2 * math.sin(t * 1.3))) end
-    for i = 1, fx[7] do
-      local sp = o.sparks[i]
-      local a = t * 0.9 + (i - 1) * math.pi
-      local rr = W * 0.57
-      sp:ClearAllPoints(); sp:SetPoint("CENTER", o.ring, "CENTER", math.cos(a) * rr, math.sin(a) * rr)
-      sp:SetAlpha(0.55 + 0.45 * math.sin(t * 3 + i))
+    local fx = o.fx
+    if fx then
+      local function breathe(h, tex) if h then tex:SetAlpha(math.max(0, math.min(1, h[5] * (1 + h[6] * math.sin(t * (h[7] > 0 and h[7] or 1)))))) end end
+      breathe(fx.halo, o.halo); breathe(fx.halo2, o.halo2)
+      if fx.rays and o.rays.SetRotation then pcall(o.rays.SetRotation, o.rays, t * 0.12); o.rays:SetAlpha(fx.rays[1] * (0.8 + 0.2 * math.sin(t * 1.3))) end
+      for i = 1, (fx.sparks or 0) do
+        local sp = o.sparks[i]
+        local a = t * 0.9 + (i - 1) * math.pi
+        local rr = W * 0.57
+        sp:ClearAllPoints(); sp:SetPoint("CENTER", o.ring, "CENTER", math.cos(a) * rr, math.sin(a) * rr)
+        sp:SetAlpha(0.55 + 0.45 * math.sin(t * 3 + i))
+      end
+      if fx.glint and o.glint.SetRotation then
+        -- a glint runs a quarter of the way round the rim every 4.2 s
+        local k = (t % 4.2) / 1.0
+        if k <= 1 then
+          pcall(o.glint.SetRotation, o.glint, math.pi * 0.75 - k * math.pi * 0.5)
+          o.glint:SetAlpha(math.sin(k * math.pi)); o.glint:Show()
+        else o.glint:Hide() end
+      end
+      for _, p in ipairs(o.embers) do
+        if p.on then
+          p.life = p.life + el * p.speed
+          if p.life >= 1 then p.life = 0; p.x = math.random() * 1.1 - 0.55; p.size = 0.05 + math.random() * 0.06 end
+          local s = W * p.size * (1 - p.life * 0.5)
+          p.tex:SetSize(s, s); p.tex:ClearAllPoints()
+          p.tex:SetPoint("CENTER", portrait, "CENTER", p.x * W + math.sin(p.life * 6 + p.wob) * W * 0.03, -W * 0.35 + p.life * W * 1.1)
+          p.tex:SetAlpha(math.sin(p.life * math.pi) * 0.85)
+        end
+      end
     end
+    if o.vigOn then o.vig:SetAlpha(o.vigOn * (0.8 + 0.2 * math.sin(t * 0.7))) end
+    if o.badgeGlow:IsShown() then o.badgeGlow:SetAlpha(0.55 + 0.25 * math.sin(t * 1.5)) end
   end)
   return o
+end
+local function setHalo(tex, h, W)
+  if not h then tex:Hide(); return end
+  tex:SetVertexColor(h[1], h[2], h[3]); tex:SetSize(W * h[4], W * h[4]); tex:SetAlpha(h[5]); tex:Show()
 end
 function K.UpdatePortrait(o, standing, level, recruits, starter)
   if not o then return end
   o.ring:SetTexture(K.RingFor(standing))
   local fx = FX[standing or ""]
   o.fx = fx
-  if fx then
-    o.glow:SetTexture(K.RingFor(standing)); o.glow:SetVertexColor(fx[1], fx[2], fx[3]); o.glow:SetAlpha(fx[4]); o.glow:Show()
-    if fx[8] > 0 then o.rays:SetVertexColor(fx[1], fx[2], fx[3]); o.rays:Show() else o.rays:Hide() end
-    for i = 1, 2 do if i <= fx[7] then o.sparks[i]:SetVertexColor(1, 0.95, 0.8); o.sparks[i]:Show() else o.sparks[i]:Hide() end end
-  else
-    o.glow:Hide(); o.rays:Hide(); for i = 1, 2 do o.sparks[i]:Hide() end
+  local W = o.W or 80
+  setHalo(o.halo, fx and fx.halo, W); setHalo(o.halo2, fx and fx.halo2, W)
+  o.glow:Hide()
+  if fx and fx.rays then o.rays:SetVertexColor(fx.rays[2], fx.rays[3], fx.rays[4]); o.rays:Show() else o.rays:Hide() end
+  for i = 1, 2 do
+    local on = fx and (fx.sparks or 0) >= i
+    if on then local c = fx.sparkTint or { 1, 0.95, 0.8 }; o.sparks[i]:SetVertexColor(c[1], c[2], c[3]); o.sparks[i]:Show() else o.sparks[i]:Hide() end
   end
-  -- dishonour: grey portrait, dimmed ring
+  if not (fx and fx.glint) then o.glint:Hide() end
+  -- embers: fewer on small portraits (the party strip)
+  local want = fx and fx.embers or 0
+  if W < 120 then want = math.floor(want * W / 160) end
+  for i = 1, want do
+    local p = o.embers[i]
+    if not p then
+      local tx = o.portrait:GetParent():CreateTexture(nil, "OVERLAY", nil, 7); tx:SetTexture(P .. "fx_spark"); tx:SetBlendMode("ADD")
+      p = { tex = tx, x = math.random() * 1.1 - 0.55, life = math.random(), speed = 0.18 + math.random() * 0.25, size = 0.05 + math.random() * 0.06, wob = math.random() * 6.28 }
+      o.embers[i] = p
+    end
+    local c = fx.emberTints[(i - 1) % #fx.emberTints + 1]
+    p.tex:SetVertexColor(c[1], c[2], c[3]); p.tex:Show(); p.on = true
+  end
+  for i = want + 1, #o.embers do o.embers[i].on = false; o.embers[i].tex:Hide() end
+  -- dishonour: grey, darker portrait; dimmed or broken ring; the red shadow
   local sh = SHAME[standing or ""]
   if o.portrait then
     if o.portrait.SetDesaturation then pcall(o.portrait.SetDesaturation, o.portrait, sh or 0)
     elseif o.portrait.SetDesaturated then pcall(o.portrait.SetDesaturated, o.portrait, sh ~= nil) end
-    o.portrait:SetVertexColor(sh and 0.75 or 1, sh and 0.72 or 1, sh and 0.68 or 1)
+    local dk = DARK[standing or ""] or 1
+    o.portrait:SetVertexColor(dk, dk * (sh and 0.96 or 1), dk * (sh and 0.92 or 1))
   end
-  o.ring:SetVertexColor(sh and 0.7 or 1, sh and 0.66 or 1, sh and 0.62 or 1)
+  local rd = RINGDIM[standing or ""] or 1
+  o.ring:SetVertexColor(rd, rd * (sh and 0.95 or 1), rd * (sh and 0.9 or 1))
+  o.vigOn = VIGNETTE[standing or ""]
+  if o.vigOn then o.vig:Show() else o.vig:Hide() end
   o.num:SetText(C.Rep and C.Rep.Roman and C.Rep.Roman(level or 1) or tostring(level or 1))
   local star, wide = K.StarFor(recruits)
   -- 1.5.3 (Taylor: the mentor star was tiny): sized from the portrait, and bigger
-  local W = o.W or 80
-  if starter then o.badge:SetTexture(P .. "leaf"); o.badge:SetSize(W * 0.48, W * 0.48); o.badge:Show()
+  -- 0.9.7 (Taylor): the new player leaf is bright green with a soft green glow
+  o.badgeGlow:Hide()
+  if starter then
+    o.badge:SetTexture(P .. "leaf_green"); o.badge:SetSize(W * 0.48, W * 0.48); o.badge:Show()
+    o.badgeGlow:SetSize(W * 1.0, W * 1.0); o.badgeGlow:Show()
   elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(W * 1.25, W * 0.62) else o.badge:SetSize(W * 0.6, W * 0.6) end; o.badge:Show()
   else o.badge:Hide() end
 end

@@ -428,37 +428,40 @@ function S.MyStanding()
   standCache, standAt = (ok and m and m.rep) or 0, GetTime and GetTime() or 0
   return standCache
 end
-function S.StandingOf(name)
+-- the Kina user (author) a character name belongs to: any character they've said hello from
+local function authorFor(name)
   local d = db()
-  local want = tostring(name or ""):lower():match("^[^%-]+")
+  local want = tostring(name or ""):lower():match("^[^%-%s]+")
+  if not want then return nil end
+  local best
   for _, a in pairs(d.authors or {}) do
-    if a.stand and a.name and tostring(a.name):lower():match("^[^%-]+") == want then return a.stand end
+    local hit = (a.name and tostring(a.name):lower():match("^[^%-%s]+") == want)
+      or (a.char and a.char.from and tostring(a.char.from):lower():match("^[^%-%s]+") == want)
+      or (type(a.chars) == "table" and a.chars[want] ~= nil)
+    if hit and (not best or (a.seen or 0) > (best.seen or 0)) then best = a end
   end
+  return best, want
+end
+S.AuthorFor = authorFor
+function S.StandingOf(name)
+  local a = authorFor(name)
+  return a and a.stand or nil
 end
 -- 1.4.0: what a Kina user told us about their character (class, level, professions)
 -- 1.5.1: everything their Kina last told mine, for their profile card
 function S.ProfileOf(name)
-  local d = db()
-  local want = tostring(name or ""):lower():match("^[^%-]+")
-  local best
-  for _, a in pairs(d.authors or {}) do
-    local nm = (a.char and a.char.from) or a.name
-    if nm and tostring(nm):lower():match("^[^%-]+") == want and (not best or (a.seen or 0) > (best.seen or 0)) then best = a end
-  end
+  local best, want = authorFor(name)
   if not best then return nil end
+  -- that character's own class and level when we know them (else the last one we heard)
+  local ch = (type(best.chars) == "table" and best.chars[want]) or best.char
   local nt = S.Notable(name)
-  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = best.char, ver = best.ver, build = best.build,
+  return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = ch, ver = best.ver, build = best.build,
     scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil }
 end
 function S.CharOf(name)
-  local d = db()
-  local want = tostring(name or ""):lower():match("^[^%-]+")
-  local best
-  for _, a in pairs(d.authors or {}) do
-    local ch = a.char
-    if ch and ch.from and tostring(ch.from):lower():match("^[^%-]+") == want and (not best or (ch.t or 0) > (best.t or 0)) then best = ch end
-  end
-  return best
+  local best, want = authorFor(name)
+  if not best then return nil end
+  return (type(best.chars) == "table" and best.chars[want]) or best.char
 end
 -- 1.2.9: does a Kina user in my group (seen in the last 30 min) have this profession?
 function S.GroupHasProf(prof)
@@ -558,6 +561,17 @@ local function onHello(from, rest, channel)
     local profs = {}
     for pn, sk in (f[11] or ""):gmatch("([%a ]+)=(%w+)") do profs[pn] = n36(sk, 1000) end
     a.char = { class = f[9], level = n36(f[10], 100), profs = profs, from = from, t = C.Now() }
+    -- 0.9.6: every character this Kina user has said hello from (their standing and Kina
+    -- level are the same on all of them; Ben opening "Hybana" while Taylor played Hy
+    -- found nothing). At most 12, newest kept.
+    local ck = tostring(from):lower():match("^[^%-%s]+")
+    if ck then
+      a.chars = type(a.chars) == "table" and a.chars or {}
+      a.chars[ck] = a.char
+      local n, old, ot = 0
+      for k, c in pairs(a.chars) do n = n + 1; if not ot or (c.t or 0) < ot then old, ot = k, c.t or 0 end end
+      if n > 12 and old then a.chars[old] = nil end
+    end
     if C.OnKinaMate then pcall(C.OnKinaMate, name or from, a.char) end
   end
   -- their Kina reputation (unverified until the Kina server exists)
@@ -777,6 +791,16 @@ local function buildSnapshots()
   return list
 end
 
+-- 0.9.7: the newest auction scan Kina can price from (yours or a groupmate's), and whose
+function S.NewestScan()
+  local t, who = C.market.scanTime or 0, nil
+  local mk, d = C.MarketKey(), db()
+  for _, a in pairs(d.opts.enabled and d.authors or {}) do
+    local m = a.market
+    if m and m.mkey == mk and (m.t or 0) > t then t, who = m.t, a.name end
+  end
+  return t, who
+end
 -- Returns the item row, the name of who scanned it (nil = you) and the scan time.
 function S.MarketItem(id)
   if snapshots and snapshots.ownT ~= C.market.scanTime then snapshots = nil end
