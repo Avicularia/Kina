@@ -15,7 +15,7 @@ local _, C = ...
 -- Messages (Share.lua, prefix KinaShare): N|uid|mentor|name (credit), A|uid|recruitUid (thanks).
 local M = {}
 C.Mentor = M
-local GOLD, GREEN = "|cffffd100", "|cff33ff66"
+local GOLD, GREEN = "|cffffc94a", "|cff33ff66"
 local RETRY = 600
 
 local function db()

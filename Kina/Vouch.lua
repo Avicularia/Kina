@@ -178,11 +178,11 @@ function V.ThumbButton(parent, bad, w, h, label)
   if b.SetBackdrop then
     b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     if bad then b:SetBackdropColor(0.40, 0.04, 0.03, 0.95); b:SetBackdropBorderColor(1, 0.18, 0.12, 1)
-    else b:SetBackdropColor(0.16, 0.12, 0.04, 0.95); b:SetBackdropBorderColor(0.95, 0.75, 0.30, 1) end
+    else b:SetBackdropColor(0.16, 0.12, 0.04, 0.95); b:SetBackdropBorderColor(1, 0.7, 0.15, 1) end
   end
   local ic = b:CreateTexture(nil, "ARTWORK"); ic:SetSize(h - 4, h - 4); ic:SetPoint("LEFT", 4, 0); ic:SetTexture(bad and DOWN or UP)
   local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); t:SetPoint("LEFT", ic, "RIGHT", 4, 0); t:SetPoint("RIGHT", -4, 0)
-  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Disgraced") .. "|r") or ("|cffffd100" .. (label or "Commend") .. "|r"))
+  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Disgraced") .. "|r") or ("|cffffc94a" .. (label or "Commend") .. "|r"))
   local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetPoint("TOPLEFT", 2, -2); hl:SetPoint("BOTTOMRIGHT", -2, 2)
   hl:SetColorTexture(bad and 1 or 1, bad and 0.2 or 0.85, bad and 0.15 or 0.4, 0.18)
   b:SetMotionScriptsWhileDisabled(true)
@@ -203,7 +203,7 @@ local function makeCard(parent)
   c:SetSize(CARD_W, CARD_H)
   if c.SetBackdrop then
     c:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
-    c:SetBackdropColor(0.10, 0.08, 0.06, 0.92); c:SetBackdropBorderColor(0.55, 0.45, 0.25, 1)
+    c:SetBackdropColor(0.10, 0.08, 0.06, 0.92); c:SetBackdropBorderColor(0.58, 0.44, 0.18, 1)
   end
   c.box = CreateFrame("Button", nil, c); c.box:SetSize(64, 64); c.box:SetPoint("TOP", 0, -24)
   c.box:SetScript("OnClick", function() if c.who and C.Profile and not c.preview then C.Profile.Show(c.who) end end) -- 1.5.1
@@ -235,11 +235,11 @@ local function fillCard(c, e)
         if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.18, 0.12, 1) end
       else
         c.result:SetText(c.gaveKind and ("|cff7CFC00|T" .. UP .. ":16|t " .. V.KINDS[c.gaveKind] .. "|r") or "|cff9d9d9ddone today|r")
-        if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.82, 0.3, 1) end
+        if c.SetBackdropBorderColor then c:SetBackdropBorderColor(1, 0.71, 0.13, 1) end
       end
     else
       c.up:Show(); c.down:Show(); c.result:Hide()
-      if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.55, 0.45, 0.25, 1) end
+      if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.58, 0.44, 0.18, 1) end
       -- 1.5.3: only 2 good commendations per farm; bad ones stay open
       c.upOK = c.preview and ((pop and pop.previewGood or 0) < V.GOOD_PER_FARM) or (not c.preview and V.CanVouch(e.who, 1))
       c.up:SetAlpha(c.upOK and 1 or 0.35)
@@ -277,11 +277,11 @@ function V.ShowPrompt(preview)
     pop:RegisterForDrag("LeftButton"); pop:SetScript("OnDragStart", pop.StartMoving); pop:SetScript("OnDragStop", pop.StopMovingOrSizing)
     if pop.SetBackdrop then
       pop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-      pop:SetBackdropColor(0.05, 0.04, 0.03, 0.95); pop:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
+      pop:SetBackdropColor(0.05, 0.04, 0.03, 0.95); pop:SetBackdropBorderColor(0.89, 0.62, 0.11, 1)
     end
     pop.title = pop:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); pop.title:SetPoint("TOP", 0, -12)
     if C.Cos then C.Cos.Font(pop.title, 20, "OUTLINE") end
-    pop.title:SetText("Commend your party"); pop.title:SetTextColor(1, 0.85, 0.45)
+    pop.title:SetText("Commend your party"); pop.title:SetTextColor(1, 0.76, 0.31)
     pop.sub = pop:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); pop.sub:SetPoint("TOP", pop.title, "BOTTOM", 0, -4)
     -- 1.5.4 (Taylor): this window is the ONLY place to commend. No timer, no Escape:
     -- it stays until you click Done, and then that farm's commendations are closed.

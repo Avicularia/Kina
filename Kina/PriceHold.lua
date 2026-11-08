@@ -43,12 +43,12 @@ local function window()
   win:SetScript("OnDragStart", win.StartMoving); win:SetScript("OnDragStop", win.StopMovingOrSizing)
   if win.SetBackdrop then
     win:SetBackdrop({ bgFile = "Interface\\AddOns\\Kina\\Media\\Cos\\bg_texture", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-    win:SetBackdropBorderColor(0.85, 0.66, 0.30, 1)
+    win:SetBackdropBorderColor(0.89, 0.63, 0.17, 1)
   end
   win.title = win:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); win.title:SetPoint("TOP", 0, -16)
   if C.Cos then C.Cos.Font(win.title, 22, "") end
-  win.title:SetTextColor(1, 0.84, 0.43); win.title:SetText("Price the loot")
-  local rule = win:CreateTexture(nil, "ARTWORK"); rule:SetPoint("TOPLEFT", 26, -46); rule:SetPoint("TOPRIGHT", -26, -46); rule:SetHeight(1); rule:SetColorTexture(0.47, 0.38, 0.20, 1)
+  win.title:SetTextColor(1, 0.75, 0.29); win.title:SetText("Price the loot")
+  local rule = win:CreateTexture(nil, "ARTWORK"); rule:SetPoint("TOPLEFT", 26, -46); rule:SetPoint("TOPRIGHT", -26, -46); rule:SetHeight(1); rule:SetColorTexture(0.49, 0.37, 0.14, 1)
   win.body = win:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); win.body:SetPoint("TOPLEFT", 26, -60); win.body:SetPoint("RIGHT", win, "RIGHT", -26, 0)
   win.body:SetJustifyH("LEFT"); win.body:SetJustifyV("TOP"); if win.body.SetSpacing then win.body:SetSpacing(3) end
   win.wait = win:CreateFontString(nil, "OVERLAY", "GameFontNormal"); win.wait:SetPoint("TOPLEFT", win.body, "BOTTOMLEFT", 0, -10); win.wait:SetPoint("RIGHT", win, "RIGHT", -26, 0)
@@ -59,7 +59,7 @@ local function window()
   return win
 end
 local function stateText(st)
-  if st == "done" then return "|cff7CFC00scanned|r" elseif st == "skip" then return "|cff9d9d9dskipped|r" elseif st == "scan" then return "|cffffd100scanning|r" end
+  if st == "done" then return "|cff7CFC00scanned|r" elseif st == "skip" then return "|cff9d9d9dskipped|r" elseif st == "scan" then return "|cffffc94ascanning|r" end
   return "|cffff9933waiting|r"
 end
 function H.ShowWindow(s)
@@ -72,7 +72,7 @@ function H.ShowWindow(s)
     local h = s.hold or {}
     local parts = { myName() .. " " .. stateText(h.me) }
     for _, who in ipairs(members(s)) do parts[#parts + 1] = who .. " " .. stateText(h.peers and h.peers[lower(who)]) end
-    w.wait:SetText("|cffffd100Kina users:|r  " .. table.concat(parts, "   "))
+    w.wait:SetText("|cffffc94aKina users:|r  " .. table.concat(parts, "   "))
   end
   w.refresh = refresh
   w.scan:SetScript("OnClick", function() H.Answer(s, "scan"); w:Hide() end)
@@ -87,7 +87,7 @@ function H.Preview(on)
   if not on then if win and win.s and win.s.preview then win:Hide() end; return win end
   local s = { preview = true, label = "Sample farm", hold = { me = "wait", peers = {} } }
   H.ShowWindow(s)
-  win.wait:SetText("|cffffd100Kina users:|r  " .. myName() .. " " .. stateText("wait") .. "   Triforce " .. stateText("done") .. "   Elwyn " .. stateText("skip"))
+  win.wait:SetText("|cffffc94aKina users:|r  " .. myName() .. " " .. stateText("wait") .. "   Triforce " .. stateText("done") .. "   Elwyn " .. stateText("skip"))
   win.scan:SetScript("OnClick", function() win:Hide() end)
   win.skip:SetScript("OnClick", function() win:Hide() end)
   return win
@@ -108,7 +108,7 @@ function H.Answer(s, what)
     if C.Share and C.Share.SendHold then C.Share.SendHold("prh", what == "done" and 1 or 2, sidOf(s), members(s)) end
     if what == "skip" then C.Print("you skipped the AH scan for this farm's prices.") end
   else
-    C.Print("|cffffd100Kina will price this farm's loot from your next auction house scan.|r Open an auction house and press Scan AH.")
+    C.Print("|cffffc94aKina will price this farm's loot from your next auction house scan.|r Open an auction house and press Scan AH.")
   end
   H.Check(s)
 end
@@ -144,7 +144,7 @@ function H.Apply(s, by)
   local total, each, transfers = C.FarmSync.Split(by)
   s.split.total, s.split.each, s.split.incomes, s.split.transfers = total, each, by, transfers
   s.hold.done = true
-  C.Print(string.format("|cffffd100Farm split re-priced|r (%s) from fresh auction prices:", s.label or "farm"))
+  C.Print(string.format("|cffffc94aFarm split re-priced|r (%s) from fresh auction prices:", s.label or "farm"))
   if #transfers == 0 then C.Print("   Everyone is even: nobody owes anything.") end
   for _, tr in ipairs(transfers) do C.Print(string.format("   |cff7CFC00%s pays %s %s|r", tr.from, tr.to, C.Money(tr.amt))) end
   if C.RefreshWidget then pcall(C.RefreshWidget) end

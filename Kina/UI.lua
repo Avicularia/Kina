@@ -95,7 +95,7 @@ local FARM_SHOW = {
   { key = "druid", label = "Druid routes", druid = true, kinds = { ["Underwater herbs"] = true, Underwater = true, ["Niche herb"] = true, ["Chest run"] = true, ["Stealth nodes"] = true } },
 }
 C.FarmShow = FARM_SHOW
-local KIND_COLOR = { Camp = "|cff7CFC00", Kill = "|cffffffff", ["Pick+Kill"] = "|cffffd100", Pick = "|cffffd100", Junkbox = "|cffffd100",
+local KIND_COLOR = { Camp = "|cff7CFC00", Kill = "|cffffffff", ["Pick+Kill"] = "|cffffc94a", Pick = "|cffffc94a", Junkbox = "|cffffc94a",
   Lockpick = "|cff9fc5ff", Service = "|cff9fc5ff", ["Chest run"] = "|cffc69cff", ["Stealth nodes"] = "|cffc69cff",
   ["Underwater herbs"] = "|cff60e0c0", Underwater = "|cff60e0c0", ["Niche herb"] = "|cff60e0c0" }
 
@@ -106,7 +106,7 @@ local function planText(plan)
     local what = r.kind == "Lockpick" and ("lockpicking at " .. r.name) or r.name
     local val = (C.settings.farmMetric == "hour" and r.perHour and r.perHour > 0) and (C.Money(r.perHour) .. "/h")
       or (r.per and r.per > 0 and (C.Money(r.per) .. "/kill")) or (r.perText or "")
-    parts[#parts + 1] = string.format("|cffffd100%d|r %s%s|r %s", i, KIND_COLOR[r.kind] or "", what, val)
+    parts[#parts + 1] = string.format("|cffffc94a%d|r %s%s|r %s", i, KIND_COLOR[r.kind] or "", what, val)
   end
   return "Now: " .. table.concat(parts, "   ") .. "   |cff9d9d9d(click #1)|r"
 end
@@ -224,7 +224,7 @@ tabs.Farms = function()
   local metricCol = ({ kill = 3, common = 4, hour = 5 })[C.settings.farmMetric or "kill"] or 3
   if not ui.sort.Farms or ui.sort.Farms.auto then ui.sort.Farms = { col = metricCol, desc = true, auto = true } end
   local yours = group > 1 and " (yours)" or ""
-  if searching then head = "|cffffd100Search:|r every mob Kina knows (any level), by name or by what it drops. Clear the box to go back to your level range." end
+  if searching then head = "|cffffc94aSearch:|r every mob Kina knows (any level), by name or by what it drops. Clear the box to go back to your level range." end
   return head, { "Farm (level)", "Type", "Per kill" .. yours, "No rare" .. yours, "Gold/hour" .. yours, "Evidence", "Distance", "Where" },
     { 0, 200, 270, 360, 450, 540, 650, 730 }, out,
     { top = 22, farms = true, searched = searching, headClick = plan[1] and function() C.ShowFarmRow(plan[1]) end }
@@ -238,7 +238,7 @@ local function roiText(roi) return roi and string.format("%.0f%%", roi * 100) or
 -- Deals: what you can verify on screen right now. Buy price now vs. a vendor price
 -- or today's cheapest material listings. No forecasts here (see Investments).
 -- Guardian: chance of ending up with less gold than you paid, for the number you'd buy
-local function lossColor(p) return p <= 0.05 and "|cff7CFC00" or (p <= 0.3 and "|cffffd100" or "|cffff6060") end
+local function lossColor(p) return p <= 0.05 and "|cff7CFC00" or (p <= 0.3 and "|cffffc94a" or "|cffff6060") end
 -- The lowest price to list each material at and still not lose money on what you
 -- paid: every material's price scaled down by the same share (paid / worth now).
 local function minPrices(d)
@@ -273,19 +273,19 @@ local function minSellTip(d)
   if not m or #m == 0 then return "" end
   local lines = {}
   for _, x in ipairs(m) do lines[#lines + 1] = string.format("   %s: list at %s or more (cheapest now %s)", itemName(x.mat), C.Money(x.min), C.Money(x.now)) end
-  return "\n|cffffd100Sell at least|r (to get back what you paid, after the 5% cut):\n" .. table.concat(lines, "\n")
+  return "\n|cffffc94aSell at least|r (to get back what you paid, after the 5% cut):\n" .. table.concat(lines, "\n")
 end
 guardCell = function(d)
   if not d.loss then return "-" end
   return lossColor(d.loss) .. string.format("%.0f%%", d.loss * 100) .. "|r |cff9d9d9d(" .. (d.lossN or d.units) .. ")|r"
 end
 guardTip = function(d)
-  if not d.lossGrid then return d.kind == "AH->Vendor" and "\n|cffffd100Guardian 0%:|r a vendor pays a fixed price, no luck involved." or "" end
+  if not d.lossGrid then return d.kind == "AH->Vendor" and "\n|cffffc94aGuardian 0%:|r a vendor pays a fixed price, no luck involved." or "" end
   local parts, ks = {}, {}
   for k in pairs(d.lossGrid) do ks[#ks + 1] = k end
   table.sort(ks)
   for _, k in ipairs(ks) do parts[#parts + 1] = string.format("%d: %s%.0f%%|r", k, lossColor(d.lossGrid[k]), d.lossGrid[k] * 100) end
-  return string.format("\n|cffffd100Guardian:|r chance you get back less than you paid if you buy %d (what your gold covers)%s.\n   bought: %s%s",
+  return string.format("\n|cffffc94aGuardian:|r chance you get back less than you paid if you buy %d (what your gold covers)%s.\n   bought: %s%s",
     d.lossN or d.units, d.lossN ~= d.units and (", Kina counts " .. d.units) or "", table.concat(parts, "   "),
     d.safeN and string.format("\n   Safe from about %d bought (5%% or less).", d.safeN) or "\n   No sample size here is safe: the average depends on rare drops.")
 end
@@ -314,8 +314,8 @@ tabs.Deals = function()
         (d.expected >= 0 and "|cff7CFC00" or "|cffff6060") .. C.Money(d.expected) .. "|r", roiText(d.roi),
         guardCell(d), minSellCell(d) },
       sort = { itemName(d.id), d.kind, d.maxEach or d.buy, d.units, d.deposits, d.cash, d.expected, d.roi or 0, d.loss or 0, minSellSort(d), d.score },
-      tip = string.format("|cffffd100Sniper:|r max price each %s, how many %d, spend up to %s\n"
-        .. "|cffffd100Cash needed:|r %s = %s to buy + %s deposits\n"
+      tip = string.format("|cffffc94aSniper:|r max price each %s, how many %d, spend up to %s\n"
+        .. "|cffffc94aCash needed:|r %s = %s to buy + %s deposits\n"
         .. "Average paid %s, %s %s each: %s profit per item (ROI %s), %s total after %s for your time.\n%s%s",
         C.Money(d.maxEach or d.buy), d.units, C.Money(d.capital),
         C.Money(d.cash), C.Money(d.capital), C.Money(d.deposits),
@@ -327,7 +327,7 @@ tabs.Deals = function()
   if not ui.sort.Deals or ui.sort.Deals.auto then ui.sort.Deals = { col = 11, desc = true, auto = true } end
   local age = C.ScanAgeMinutes()
   local head = string.format("%s Buy at or under Max each (sniper settings). Your time: %s per trade. Scan %s. Gold %s.",
-    passive and "|cff7CFC00Passive (nothing lost waiting):|r" or "|cffffd100Deals right now:|r vendor flips and disenchants at today's prices.",
+    passive and "|cff7CFC00Passive (nothing lost waiting):|r" or "|cffffc94aDeals right now:|r vendor flips and disenchants at today's prices.",
     C.Money(E.Overhead()), age and (age .. " min ago") or "none yet", C.Money(gold))
     .. ((C.market.quick and C.market.quick.complete and (C.market.quick.t or 0) > (C.market.scanTime or 0))
       and string.format(" |cff7CFC00Quick scan %ds ago: deals checked against it.|r", C.Now() - C.market.quick.t) or "")
@@ -363,7 +363,7 @@ tabs.Invest = function()
   local gold = (GetMoney and GetMoney()) or 0
   local function conf(d)
     local c = d.confidence or 1
-    local col = c >= 0.8 and "|cff7CFC00" or (c >= 0.4 and "|cffffd100" or "|cffff6060")
+    local col = c >= 0.8 and "|cff7CFC00" or (c >= 0.4 and "|cffffc94a" or "|cffff6060")
     return col .. string.format("%.0f%%", c * 100) .. (d.measured and "" or "~") .. "|r"
   end
   local list = E.Investments()
@@ -386,11 +386,11 @@ tabs.Invest = function()
         roiText(d.roi), conf(d), E.Hours(d.hours) },
       sort = { itemName(d.id), d.kind, d.maxEach or d.buy, d.units, d.deposits, d.cash, d.expected, d.roi or 0,
         d.confidence or 1, d.hours or 0, passive and d.passiveScore or d.score },
-      tip = string.format("|cffffd100Sniper:|r max price each %s, how many %d, spend up to %s\n"
-        .. "|cffffd100Cash needed:|r %s = %s to buy + %s deposits to list %s\n"
+      tip = string.format("|cffffc94aSniper:|r max price each %s, how many %d, spend up to %s\n"
+        .. "|cffffc94aCash needed:|r %s = %s to buy + %s deposits to list %s\n"
         .. "Average paid %s, receive %s each after the cut: %s profit per item (ROI %s).\n"
         .. "Expected: %s after %s of relist deposits and %s for your time.\n"
-        .. "|cffffd100Confidence %s|r that everything sells within the time the profit lasts; sold out in about %s.%s\n"
+        .. "|cffffc94aConfidence %s|r that everything sells within the time the profit lasts; sold out in about %s.%s\n"
         .. "   = buyers in time %s x price holds above break-even %s%s\n%s%s",
         C.Money(d.maxEach or d.buy), d.units, C.Money(d.capital),
         C.Money(d.cash), C.Money(d.capital), C.Money(d.deposits), d.kind == "Disenchant" and "the materials" or "them",
@@ -407,7 +407,7 @@ tabs.Invest = function()
   -- how much history there is so far
   local ready, total = 0, 0
   for id in pairs(C.market.items) do total = total + 1; if C.Econ.DataStatus(id) then ready = ready + 1 end end
-  local head = string.format("|cffffd100Investments|r (resale, merchant->AH): only items with %d+ days and %d+ scans of history where Kina has SEEN them sell. %d of %d items qualify so far%s",
+  local head = string.format("|cffffc94aInvestments|r (resale, merchant->AH): only items with %d+ days and %d+ scans of history where Kina has SEEN them sell. %d of %d items qualify so far%s",
     C.settings.investDays or 7, C.settings.investScans or 10, ready, total,
     ready == 0 and ": scan regularly (and share with your party) and this fills in." or ". Confidence and timing come from that history.")
   local empty
@@ -455,7 +455,7 @@ local function statusCell(r)
   if r.status == "learned" then
     return (COLOR_HEX[r.color] or "|cffffffff") .. "Learned|r"
   elseif r.status == "can" then return "|cff40ff40Can learn|r"
-  elseif r.status == "find" then return "|cffffcc00Find pattern|r"
+  elseif r.status == "find" then return "|cffffc94aFind pattern|r"
   elseif r.status == "low" then return string.format("|cffff4040Skill %d|r", r.l or 0)
   end
   return "|cff808080No prof.|r"
@@ -506,7 +506,7 @@ tabs.Crafts = function()
   end
   local note = ""
   if prof ~= "ALL" and C.MySkill(prof) and not C.KnowsBookOf(prof) then
-    note = "  |cffffcc00Open your " .. prof .. " window once so Kina knows which recipes you have.|r"
+    note = "  |cffffc94aOpen your " .. prof .. " window once so Kina knows which recipes you have.|r"
   end
   return suggestionText(ready, goal) .. note,
     { "Recipe", "Profession", "Status", "Sells for", "Reagents", "Profit", "Vs mats", "Learn from" },
@@ -602,11 +602,11 @@ tabs.Hot = function()
   local out = {}
   local rows = C.Hot and C.Hot.Rows() or {}
   for _, r in ipairs(rows) do
-    local spike = r.spike and ((r.spike >= 2 and "|cffff8040" or (r.spike >= 1.3 and "|cffffd100" or "|cff9d9d9d")) .. string.format("%.1fx", r.spike) .. "|r") or "-"
+    local spike = r.spike and ((r.spike >= 2 and "|cffff8040" or (r.spike >= 1.3 and "|cffffc94a" or "|cff9d9d9d")) .. string.format("%.1fx", r.spike) .. "|r") or "-"
     if r.kind == "Craft" then
       local who
       if r.status == "learned" then who = "|cff7CFC00you can make it|r"
-      elseif r.status == "can" then who = "|cffffd100learn it (" .. (r.learn or "?") .. ")|r"
+      elseif r.status == "can" then who = "|cffffc94alearn it (" .. (r.learn or "?") .. ")|r"
       elseif r.status == "low" then who = string.format("|cffff8040needs %s %d (you %d)|r", r.prof, r.need or 0, r.skill or 0)
       else who = string.format("|cff9d9d9dneeds %s %d%s|r", r.prof, r.need or 1, r.learnCost and (", " .. C.Money(r.learnCost)) or "") end
       out[#out + 1] = { hot = "craft", hotKey = "craft:" .. tostring(r.prof), id = r.id, roi = (r.cost and r.cost > 0) and r.profit / r.cost or nil, cols = { itemCell(r.id, (r.n or 1) > 1 and (" x" .. r.n) or ""), "make " .. (r.prof or ""),
@@ -688,7 +688,7 @@ tabs.Dungeons = function()
           or "\nNo timed runs yet: start the farm widget at the entrance, stop it when you're out. Kina learns your real clear time and income.") }
   end
   if not ui.sort.Dungeons then ui.sort.Dungeons = { col = 5, desc = true } end
-  local head = string.format("|cffffd100Duo dungeons|r for your hunter + druid at level %d%s. |cff9d9d9d~ = estimate at today's prices; your timed runs take over as you play.|r",
+  local head = string.format("|cffffc94aDuo dungeons|r for your hunter + druid at level %d%s. |cff9d9d9d~ = estimate at today's prices; your timed runs take over as you play.|r",
     lvl, partner and string.format(" (you %d, partner %d)", me, partner) or "")
   return head, { "Where (levels)", "Duo?", "Elites", "Per run", "Gold/hour", "Your runs", "Best", "Why" },
     { 0, 190, 290, 360, 440, 520, 610, 760 }, out, { empty = (#out == 0) and "No dungeon or elite data near your level yet." or nil }
@@ -717,7 +717,7 @@ tabs["Skill up"] = function()
     parts[#parts + 1] = string.format("%s %d: |cff7CFC00%s|r (%s)", prof, s.skill, s.r.name or itemName(s.r.out),
       s.perPoint < 0 and ("earns " .. C.Money(-s.perPoint) .. "/point") or (C.Money(s.perPoint) .. "/point"))
   end
-  local head = #parts > 0 and ("|cffffd100Cheapest now|r  " .. table.concat(parts, "   |   ")) or "Open each profession window once so Kina knows your skills and recipes."
+  local head = #parts > 0 and ("|cffffc94aCheapest now|r  " .. table.concat(parts, "   |   ")) or "Open each profession window once so Kina knows your skills and recipes."
   if not ui.sort["Skill up"] then ui.sort["Skill up"] = { col = 6 } end
   return head, { "Make", "Profession", "Skill-up", "Mats cost", "Sells for", "Cost per point", "Learn" },
     { 0, 220, 330, 410, 490, 580, 690 }, out, { empty = (#out == 0) and "No priced recipes yet: scan the AH, and open your profession windows." or nil }
@@ -779,8 +779,8 @@ tabs.Ledger = function()
   for _, r in ipairs(flips) do
     local status
     if r.left == 0 then status = "|cff7CFC00done|r"
-    elseif r.done == 0 then status = "|cffffd100holding " .. r.left .. "|r"
-    else status = "|cffffd100" .. r.done .. " done, " .. r.left .. " held|r" end
+    elseif r.done == 0 then status = "|cffffc94aholding " .. r.left .. "|r"
+    else status = "|cffffc94a" .. r.done .. " done, " .. r.left .. " held|r" end
     if r.done > 0 then profit = profit + r.result; spent = spent + r.avg * r.done; n = n + 1
       realized = realized + (r.realized or 0); unsoldMats = unsoldMats + (r.matsEstimate or 0) end
     if r.left > 0 then holding = holding + r.left; holdValue = holdValue + r.avg * r.left end
@@ -798,7 +798,7 @@ tabs.Ledger = function()
   end
   local hours = C.TradeHours(flips)
   local span = ui.ledgerDays and ("last " .. ui.ledgerDays .. " days") or "all time"
-  local head = string.format("|cffffd100Trading, %s:|r %s%s|r profit on %d flips (ROI %s)   |cffffd100%s / hour|r over %s of trading%s",
+  local head = string.format("|cffffc94aTrading, %s:|r %s%s|r profit on %d flips (ROI %s)   |cffffc94a%s / hour|r over %s of trading%s",
     span, profit >= 0 and "|cff7CFC00+" or "|cffff6060-", C.Money(math.abs(profit)), n,
     spent > 0 and string.format("%.0f%%", profit / spent * 100) or "-",
     hours > 0 and C.Money(profit / hours) or "-",
@@ -840,7 +840,7 @@ local function farmLog(s, live)
   local gf = C.GroupFarm and C.GroupFarm(s)
   local grouped = gf and (gf.synced or (s.party and #s.party > 0) or (not s.stop and C.GroupSize and C.GroupSize() > 1))
   if grouped and (gf.synced or (s.g and (next(s.g.loot) or s.g.coin > 0))) then
-    row("", "|cffffd100Group total|r", "everything the group looted (loot lines) + coin, what the widget shows", "", signedMoney(gf.net))
+    row("", "|cffffc94aGroup total|r", "everything the group looted (loot lines) + coin, what the widget shows", "", signedMoney(gf.net))
     -- each player's line has their own consumables taken out, so it's the admin view only
     if C.Admin() or (gf.used or 0) == 0 then
       for who, v in pairs(gf.byLooter) do row("", "   " .. who, ((gf.used or 0) > 0) and "looted, minus what they used" or "looted", "", signedMoney(v)) end
@@ -853,11 +853,11 @@ local function farmLog(s, live)
     local live = not gf.synced and not s.gsplit and not s.stop and C.groupLive and C.Now and (GetTime and GetTime() or 0) - C.groupLive.t < 60 and C.groupLive
     local by = s.gsplit and s.gsplit.by or (live and live.by) or gf.byLooter
     if gf.synced and s.sync and C.FarmSync and C.FarmSync.Totals(s.sync).noSplit then
-      row("", "|cffffd100Split|r", "no split: this farm only shares its numbers (chosen at Start)", "", "")
+      row("", "|cffffc94aSplit|r", "no split: this farm only shares its numbers (chosen at Start)", "", "")
     elseif C.Settle and next(by) then
       local total, each, transfers = C.Settle(by)
       local lead = C.FarmLeader and select(1, C.FarmLeader()) or "the leader"
-      row("", "|cffffd100Split|r", s.gsplit and ("what each looted, " .. tostring(s.gsplit.from) .. "'s prices (coin is already split by the game)")
+      row("", "|cffffc94aSplit|r", s.gsplit and ("what each looted, " .. tostring(s.gsplit.from) .. "'s prices (coin is already split by the game)")
         or (s.stop and ("|cffff8040NOT FINAL: at your prices. Waiting for " .. tostring(lead) .. "'s split; theirs is the one to pay.|r"))
         or (live and ("so far, " .. tostring(live.from) .. "'s numbers (final at Stop)"))
         or ("so far (the final split comes from " .. tostring(lead) .. "'s Kina at Stop)"), "", "")
@@ -868,7 +868,7 @@ local function farmLog(s, live)
   end
   if sum.income then
     -- P1.0.2: a farm = what you looted. Buying, selling, crafting, the bank and the mailbox don't count.
-    row("", "|cffffd100Your net|r", "coin you looted + items you looted (today's price) - consumables you used", "", signedMoney(sum.total))
+    row("", "|cffffc94aYour net|r", "coin you looted + items you looted (today's price) - consumables you used", "", signedMoney(sum.total))
     row("", "   coin looted", ((s.money.pickpocket or 0) > 0) and ("incl. " .. C.Money(s.money.pickpocket) .. " pick pocketed") or "", "", signedMoney(sum.cash))
     row("", "   items looted", "every drop, skin and pick at today's farm price (rolls at their own price)", "", signedMoney(sum.items))
     if (sum.used or 0) > 0 then row("", "   consumables used", "", "", signedMoney(-sum.used)) end
@@ -889,8 +889,8 @@ local function farmLog(s, live)
         .. ", other " .. C.Money(s.money.other or 0) .. ", spent " .. C.Money(-(s.money.spent or 0)) .. " (trading and errands, not farming)|r", "", "")
     end
   else
-  row("", "|cffffd100Your net|r", "your gold change + your items change (below)", "", signedMoney(sum.total))
-  row("", "|cffffd100Gold|r", "your gold now minus your gold at Start", "", signedMoney(sum.cash))
+  row("", "|cffffc94aYour net|r", "your gold change + your items change (below)", "", signedMoney(sum.total))
+  row("", "|cffffc94aGold|r", "your gold now minus your gold at Start", "", signedMoney(sum.cash))
   local parts = 0
   for _, k in ipairs({ "coin", "pickpocket", "vendor", "mail", "other", "spent" }) do
     local v = s.money and s.money[k]
@@ -903,7 +903,7 @@ local function farmLog(s, live)
   if sum.cash and math.abs(parts - sum.cash) > 1 then
     row("", "   |cffff8040not explained|r", "gold that changed while Kina wasn't watching (e.g. a /reload)", "", signedMoney(sum.cash - parts))
   end
-  row("", "|cffffd100Items|r", "bags + bank + AH listings: count now minus count at Start, x price each", "", signedMoney(sum.items))
+  row("", "|cffffc94aItems|r", "bags + bank + AH listings: count now minus count at Start, x price each", "", signedMoney(sum.items))
   local changes = (live and s.startCounts and C.ItemChanges(s.startCounts, C.Holdings())) or s.itemChanges or {}
   for i = 1, math.min(#changes, 60) do
     local c = changes[i]
@@ -915,7 +915,7 @@ local function farmLog(s, live)
   if s.sync then
     local ex = C.FarmSync and C.FarmSync.Excluded(s.sync) or {}
     local seqText = string.format("%d entries, fingerprint %s", s.sync.head or 0, tostring(s.sync.hash))
-    row("", "|cffffd100Shared log|r", "the same on every Kina in this farm (" .. seqText .. "); right-click an entry to leave it out or count it again", "", "")
+    row("", "|cffffc94aShared log|r", "the same on every Kina in this farm (" .. seqText .. "); right-click an entry to leave it out or count it again", "", "")
     -- newest first; whether each entry fell in a pause is worked out oldest-first
     local pausedAt, pz = {}, false
     for i, ev in ipairs(s.sync.chain) do if ev.kind == "P" then pz = ev.data == "1" end; pausedAt[i] = pz end
@@ -949,7 +949,7 @@ local function farmLog(s, live)
     syncSeq = nil
     row("", "", "", "", "")
   end
-  row("", "|cffffd100Events|r", "newest first. Right-click a kill or drop to leave it out (|cffff8040out|r) or count it again: " .. (s.log and #s.log or 0) .. " recorded" .. ((s.log and #s.log >= 600) and " (oldest dropped)" or ""), "", "")
+  row("", "|cffffc94aEvents|r", "newest first. Right-click a kill or drop to leave it out (|cffff8040out|r) or count it again: " .. (s.log and #s.log or 0) .. " recorded" .. ((s.log and #s.log >= 600) and " (oldest dropped)" or ""), "", "")
   if not s.log then row("", "   |cff9d9d9d(events are recorded from 0.11.4 on)|r", "", "", "") end
   local logList = s.log or {}
   for li = #logList, 1, -1 do -- newest first
@@ -987,7 +987,7 @@ end
 -- Public Kina: the Ledger is the books. Farms (one row each, click for details),
 -- Gold flow (in and out), and XP (history and what's still waiting). Numbers from Books.lua.
 if C.PUBLIC then
-  local GREY, GOLDC, GREEN, ORANGE = "|cff9d9d9d", "|cffffd100", "|cff7CFC00", "|cffff8040"
+  local GREY, GOLDC, GREEN, ORANGE = "|cff9d9d9d", "|cffffc94a", "|cff7CFC00", "|cffff8040"
   local function money(v) return (v and v ~= 0) and C.Money(math.floor(v + 0.5)) or (GREY .. "-|r") end
   local function day(t) return t and date("%m/%d", t) or "" end
   local function period() return ui.ledgerDays and (ui.ledgerDays .. " days") or "all time" end
@@ -1164,7 +1164,7 @@ if C.PUBLIC then
           elseif g.kind == "vouchgave" then what = string.format("vouched for %s", C.Books.Name(g.who))
           elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           elseif g.kind == "lapsed" then what = string.format("%sa debt to %s lapsed unpaid (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
-          elseif g.kind == "tour" then what = string.format("|cffffd100finished the Kina tour (+%d rep)|r", g.rep or 0)
+          elseif g.kind == "tour" then what = string.format("|cffffc94afinished the Kina tour (+%d rep)|r", g.rep or 0)
           elseif g.kind == "jail" then what = "took the one-time pardon: standing back to 1"
           elseif g.kind == "decay" then what = string.format("%sidle week(s) (%+d rep)|r", GREY, g.rep or 0)
           elseif g.kind == "breakpoint" then what = string.format("%stoo many thumbs down: standing dropped to -99 (%d rep)|r", ORANGE, g.rep or 0)
@@ -1210,7 +1210,7 @@ tabs.Session = function()
     local s = live and C.session or (type(ui.logOf) == "table" and ui.logOf) or nil
     if s then
       local out = farmLog(s, live)
-      return string.format("|cffffd100Farm log: %s|r%s   |cff9d9d9d(click here to go back to all farms)|r", s.label or "farm", live and " (running)" or ""),
+      return string.format("|cffffc94aFarm log: %s|r%s   |cff9d9d9d(click here to go back to all farms)|r", s.label or "farm", live and " (running)" or ""),
         { "When", "What", "Details", "Count", "Value" }, { 0, 60, 240, 620, 690 }, out,
         { headClick = function() ui.logOf = nil; ui.offset = 0; C.Refresh() end }
     end
@@ -1238,9 +1238,9 @@ tabs.Session = function()
     end
   end
   local tiles = { { "Farms", tostring(n), "all time" }, { "Time farmed", string.format("%.1f h", secs / 3600) },
-    { "Earned", "|cffffd100" .. C.Money(math.floor(tot)) .. "|r" }, { "Average per hour", "|cffffd100" .. C.Money(secs > 0 and math.floor(tot * 3600 / secs) or 0) .. "|r" },
-    { "Best farm", best and ("|cffffd100" .. C.Money(math.floor(best.result.perHour or 0)) .. "/h|r") or "-", best and best.label or nil } }
-  return "|cffffd100Farms|r  |cff9d9d9dclick a farm to open its log|r",
+    { "Earned", "|cffffc94a" .. C.Money(math.floor(tot)) .. "|r" }, { "Average per hour", "|cffffc94a" .. C.Money(secs > 0 and math.floor(tot * 3600 / secs) or 0) .. "|r" },
+    { "Best farm", best and ("|cffffc94a" .. C.Money(math.floor(best.result.perHour or 0)) .. "/h|r") or "-", best and best.label or nil } }
+  return "|cffffc94aFarms|r  |cff9d9d9dclick a farm to open its log|r",
     { "Farm", "Length", "Total", "Per hour", "Made of", "Kills" }, { 0, 220, 300, 400, 500, 790 }, out, { tiles = tiles }
 end
 
@@ -1594,7 +1594,7 @@ local function drawGraph(id)
     local bar = g.bars[i + 1]
     if not bar then bar = g:CreateTexture(nil, "ARTWORK"); bar:SetColorTexture(0.3, 0.76, 0.97, 0.55); g.bars[i + 1] = bar end
     local dot = g.dots[i + 1]
-    if not dot then dot = g:CreateTexture(nil, "OVERLAY"); dot:SetColorTexture(1, 0.82, 0, 1); dot:SetSize(5, 5); g.dots[i + 1] = dot end
+    if not dot then dot = g:CreateTexture(nil, "OVERLAY"); dot:SetColorTexture(1, 0.69, 0, 1); dot:SetSize(5, 5); g.dots[i + 1] = dot end
     bar:Hide(); dot:Hide()
     if p and maxV > 0 then
       points = points + 1
@@ -1684,7 +1684,7 @@ function C.ShowItem(id)
   if #ex > 0 then
     local pay = {}
     for _, e in ipairs(ex) do pay[#pay + 1] = e[1] .. " " .. C.Money(e[2]) end
-    lines[#lines + 1] = "|cffffd100Pay at most|r (break-even): " .. table.concat(pay, ", ")
+    lines[#lines + 1] = "|cffffc94aPay at most|r (break-even): " .. table.concat(pay, ", ")
     if mi and mi.m then lines[#lines + 1] = C.ProfitAtText(id, mi.m) .. " |cff9d9d9d(scan)|r" end
   end
   do
@@ -1740,7 +1740,7 @@ function C.ShowMob(npc, farm)
   for _, n in ipairs(notes) do lines[#lines + 1] = "- " .. n end
   if farm then
     local g = farm.group or 1
-    lines[#lines + 1] = string.format("|cffffd100Per kill: %s|r   no rare (<%s%%): %s   per hour: %s%s",
+    lines[#lines + 1] = string.format("|cffffc94aPer kill: %s|r   no rare (<%s%%): %s   per hour: %s%s",
       C.Money(farm.perKill), tostring(C.settings.rareRate or 2.5), C.Money(farm.perKillCommon or 0),
       farm.rate and C.Money(farm.rate.rate) or "0", g > 1 and string.format("   (yours: totals / %d in group)", g) or "")
     lines[#lines + 1] = string.format("   coin %s (%s)   skins %s%s", C.Money(farm.coin), farm.coinBasis == "prior" and "level estimate until you loot 10" or farm.coinBasis,
@@ -1760,18 +1760,18 @@ function C.ShowMob(npc, farm)
       lines[#lines + 1] = "   gathering: not measured yet (run the farm widget here and Kina counts the nodes you pick)"
     end
     if farm.rate then
-      lines[#lines + 1] = string.format("|cffffd100Gold/hour (yours): %s|r  from %d timed farm%s %s (%.1f h)", C.Money(farm.rate.rate),
+      lines[#lines + 1] = string.format("|cffffc94aGold/hour (yours): %s|r  from %d timed farm%s %s (%.1f h)", C.Money(farm.rate.rate),
         farm.rate.n, farm.rate.n == 1 and "" or "s", farm.rate.label, farm.rate.hours)
     else
-      lines[#lines + 1] = "|cffffd100Gold/hour: 0|r  no timed farm here with this group yet (farm widget: start at the flight path, stop back at the AH)"
+      lines[#lines + 1] = "|cffffc94aGold/hour: 0|r  no timed farm here with this group yet (farm widget: start at the flight path, stop back at the AH)"
     end
     local rg = farm.rogue
     if rg then
-      lines[#lines + 1] = string.format("|cffffd100Rogue extras per kill %s|r%s: pockets coin %s, pocket items %s, junkboxes %s",
+      lines[#lines + 1] = string.format("|cffffc94aRogue extras per kill %s|r%s: pockets coin %s, pocket items %s, junkboxes %s",
         C.Money(rg.total), rg.estimated and " (estimate)" or "", C.Money(rg.coin), C.Money(rg.items), C.Money(rg.boxes))
       if rg.boxHow then lines[#lines + 1] = "   junkboxes valued: " .. rg.boxHow end
       local pct = (farm.perKill or 0) > 0 and rg.total / farm.perKill * 100 or 0
-      local verdict = pct >= 15 and "|cff7CFC00worth it|r" or (pct >= 5 and "|cffffd100small gain|r" or "|cffff6060not worth the time|r")
+      local verdict = pct >= 15 and "|cff7CFC00worth it|r" or (pct >= 5 and "|cffffc94asmall gain|r" or "|cffff6060not worth the time|r")
       lines[#lines + 1] = string.format("Picking adds %s per kill (%+.0f%%) %s", C.Money(rg.total), pct, verdict)
     end
   end
@@ -1779,7 +1779,7 @@ function C.ShowMob(npc, farm)
     local pk = C.PickBreakdown(npc)
     if pk then
       local pph = C.settings.picksPerHour or 120
-      lines[#lines + 1] = string.format("|cffffd100Pick only, per pick %s|r: coin %s, items %s, junkboxes %s",
+      lines[#lines + 1] = string.format("|cffffc94aPick only, per pick %s|r: coin %s, items %s, junkboxes %s",
         C.Money(pk.total), C.Money(pk.coin), C.Money(pk.items), C.Money(pk.boxes))
       if pk.boxHow then lines[#lines + 1] = "   junkboxes valued: " .. pk.boxHow end
       lines[#lines + 1] = string.format("Per hour at %d picks/hour: %s (no kills)", pph, C.Money(pk.total * pph))
@@ -1842,11 +1842,11 @@ function C.ShowFlip(r)
   placeDetail()
   local lines = { qualityColor(r.id) .. itemName(r.id) .. "|r",
     string.format("Bought %d for %s (%s each)", r.bought, C.Money(r.paid), C.Money(r.avg)),
-    r.done > 0 and string.format("|cffffd100Result on %d done: got back %s, %s%s|r profit", r.done, C.Money(r.got),
+    r.done > 0 and string.format("|cffffc94aResult on %d done: got back %s, %s%s|r profit", r.done, C.Money(r.got),
       r.result >= 0 and "|cff7CFC00+" or "|cffff6060-", C.Money(math.abs(r.result))) or "Nothing sold or disenchanted yet." }
   if r.left > 0 then lines[#lines + 1] = string.format("%d still held (%s each): counted once you sell or disenchant them.", r.left, C.Money(r.avg)) end
   if r.de > 0 then
-    lines[#lines + 1] = string.format("|cffffd100Disenchanted %d:|r materials worth %s today, after the AH cut%s", r.de, C.Money(r.matsNow),
+    lines[#lines + 1] = string.format("|cffffc94aDisenchanted %d:|r materials worth %s today, after the AH cut%s", r.de, C.Money(r.matsNow),
       r.matsKnown and "" or " (some unpriced)")
     local mats = {}
     for m, n in pairs(r.mats) do mats[#mats + 1] = { m, n } end
@@ -1859,7 +1859,7 @@ function C.ShowFlip(r)
   if r.vendorN > 0 then lines[#lines + 1] = string.format("Sold %d to a vendor for %s", r.vendorN, C.Money(r.vendor)) end
   if r.ahN > 0 then lines[#lines + 1] = string.format("Sold %d on the AH for %s (after the cut)", r.ahN, C.Money(r.ah)) end
   if r.deposits > 0 then lines[#lines + 1] = string.format("Deposits paid: %s", C.Money(r.deposits)) end
-  lines[#lines + 1] = "|cffffd100What happened|r"
+  lines[#lines + 1] = "|cffffc94aWhat happened|r"
   for _, e in ipairs(r.events) do
     if #lines >= 25 then break end
     lines[#lines + 1] = "  " .. stepText(e) .. (e.fixed and " |cff9d9d9d(item corrected by the purchase mail)|r" or "")
@@ -2026,10 +2026,10 @@ function C.ShowCamp(r)
     .. ((C.CampName(c) ~= c.name) and (" |cff9d9d9d(" .. c.name .. ")|r") or ""), string.format("%s, levels %d-%d   %s", c.zone, c.lo, c.hi,
     c.src == "C" and "|cffff8040source: Classic guide (Forever may differ)|r" or "source: WoW Forever guide") }
   if c.note then lines[#lines + 1] = c.note end
-  lines[#lines + 1] = string.format("|cffffd100Per kill: %s|r   no rare: %s   per hour: %s", C.Money(r.per or 0), C.Money(r.perCommon or 0),
+  lines[#lines + 1] = string.format("|cffffc94aPer kill: %s|r   no rare: %s   per hour: %s", C.Money(r.per or 0), C.Money(r.perCommon or 0),
     (r.perHour and r.perHour > 0) and (C.Money(r.perHour) .. " (" .. (r.rateFarms or 0) .. " timed farm" .. ((r.rateFarms or 0) == 1 and "" or "s") .. ")") or "time it")
   lines[#lines + 1] = r.measuredMix and "Mix: your kills here (timed farms)" or "Mix: equal share per mob type until you time a farm here"
-  lines[#lines + 1] = "|cffffd100Mob types|r  (share x per kill)"
+  lines[#lines + 1] = "|cffffc94aMob types|r  (share x per kill)"
   table.sort(r.campParts, function(a, b) return (a.w or 0) > (b.w or 0) end)
   local wsum = 0
   for _, p in ipairs(r.campParts) do wsum = wsum + (p.w or 0) end
@@ -2041,8 +2041,8 @@ function C.ShowCamp(r)
   end
   if beasts > 0 then
     local avg = skin / math.max(wsum, 1e-9)
-    lines[#lines + 1] = avg > 0 and string.format("  |cffffd100Skinning|r  %s per kill on average (included above)", C.Money(avg))
-      or "  |cffffd100Skinning|r  not counted: nobody in your group has Skinning (or Kina doesn't know it yet)"
+    lines[#lines + 1] = avg > 0 and string.format("  |cffffc94aSkinning|r  %s per kill on average (included above)", C.Money(avg))
+      or "  |cffffc94aSkinning|r  not counted: nobody in your group has Skinning (or Kina doesn't know it yet)"
   end
   -- (called directly: "f and f()" would keep only the first of its five results)
   local ok, map, x, y, n, all, pinned = pcall(C.CampCenter, c)
@@ -2284,7 +2284,7 @@ local function buildScanBar(f)
   bar:SetMinMaxValues(0, 1); bar:SetValue(0)
   local bg = bar:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.035, 0.03, 0.025, 0.85)
   local function edge(p1, p2, horiz)
-    local t = bar:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(0.78, 0.62, 0.30, 0.95)
+    local t = bar:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(0.82, 0.59, 0.19, 0.95)
     t:SetPoint(p1, -1, 1); t:SetPoint(p2, 1, -1)
     if horiz then t:SetHeight(1) else t:SetWidth(1) end
   end
@@ -2451,9 +2451,9 @@ local function buildSettings(f)
     if C.Skin and C.Skin.Panel then C.Skin.Panel(card) end
     local fs = card:CreateFontString(nil, "OVERLAY"); fs:SetPoint("TOPLEFT", 14, -10)
     if C.Cos then C.Cos.Font(fs, 15, "") else fs:SetFontObject(GameFontNormal) end
-    fs:SetTextColor(1, 0.84, 0.43); fs:SetText(text)
+    fs:SetTextColor(1, 0.75, 0.29); fs:SetText(text)
     local rule = card:CreateTexture(nil, "ARTWORK"); rule:SetPoint("TOPLEFT", 12, -32); rule:SetPoint("TOPRIGHT", -12, -32); rule:SetHeight(1)
-    rule:SetColorTexture(0.47, 0.38, 0.20, 1)
+    rule:SetColorTexture(0.49, 0.37, 0.14, 1)
     y = y + 42
   end
   local function note(getText)
@@ -2469,7 +2469,7 @@ local function buildSettings(f)
     local sw = b:CreateTexture(nil, "ARTWORK"); sw:SetSize(34, 17); sw:SetPoint("LEFT", 0, 0)
     local fs = C.Text(b, "OVERLAY", "GameFontHighlight"); fs:SetPoint("LEFT", sw, "RIGHT", 10, 0); fs:SetPoint("RIGHT", b, "RIGHT", 0, 0)
     fs:SetJustifyH("LEFT"); if fs.SetWordWrap then fs:SetWordWrap(false) end
-    local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.4, 0.06)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.75, 0.25, 0.06)
     if tip then
       b:SetScript("OnEnter", function(self) C.TipOwner(self); GameTooltip:AddLine(tip, 1, 1, 1, true); GameTooltip:Show() end)
       b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2648,7 +2648,7 @@ local function buildSettings(f)
     sl:SetOrientation("HORIZONTAL"); sl:SetSize(150, 16)
     sl:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + (COLW - 10 - INSET) - 150, -6 - y + 1)
     local track = sl:CreateTexture(nil, "BACKGROUND")
-    track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(4); track:SetColorTexture(0.78, 0.6, 0.25, 0.55)
+    track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(4); track:SetColorTexture(0.82, 0.57, 0.13, 0.55)
     sl:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
     sl:SetMinMaxValues(0.7, 1.5); sl:SetValueStep(0.05)
     if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
@@ -2890,9 +2890,17 @@ local function build()
         local word = plateF:CreateTexture(nil, "ARTWORK"); word:SetSize(150, 38); word:SetPoint("CENTER", plateF, "CENTER", 15, 0)
         word:SetTexture(C.Cos.Tex("kina_word"))
         local ver = plateF:CreateFontString(nil, "OVERLAY"); ver:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE"); ver:SetPoint("TOP", plateF, "BOTTOM", 0, 6)
-        ver:SetText("|cffc9b27av" .. C.version .. "|r")
+        ver:SetText("|cffe0aa50v" .. C.version .. "|r")
+        -- 0.9.15 (Taylor, "banner 1, compact"): the nameplate is the CurseForge banner's
+        -- plate: the Kina coin set in a jewelled ring, KINA in carved gold, the ledger.
+        -- One painted texture (Media/Cos/kina_nameplate: the plate fills the top 295 of 512).
+        shade:Hide(); coin:Hide(); word:Hide()
+        local np = plateF:CreateTexture(nil, "ARTWORK"); np:SetSize(296, 85); np:SetPoint("CENTER", plateF, "CENTER", 0, -5)
+        np:SetTexture(C.Cos.Tex("kina_nameplate")); np:SetTexCoord(0, 1, 0, 295 / 512)
+        ui.nameplate = np
+        ver:ClearAllPoints(); ver:SetPoint("LEFT", np, "RIGHT", 2, -10)
         title:Hide()
-        if C.Cos.PlaqueFX then local okP, fxo = pcall(C.Cos.PlaqueFX, plateF, 284, 71, 26); if okP then ui.plaqueFX = fxo end end -- 1.5.5: halo, sweep, sparks
+        if C.Cos.PlaqueFX then local okP, fxo = pcall(C.Cos.PlaqueFX, plateF, 296, 85, 26); if okP then ui.plaqueFX = fxo end end -- 1.5.5: halo, sweep, sparks
         -- 1.5.1: grabbing the banner moves the window too
         if C.DragBy then C.DragBy(f, plateF) end
       end
@@ -2935,23 +2943,23 @@ local function build()
     bg:SetVertexColor(1, 1, 1, 1)
     if bg.SetGradient and CreateColor then pcall(bg.SetGradient, bg, "VERTICAL", CreateColor(0.035, 0.028, 0.02, 0.96), CreateColor(0.09, 0.07, 0.05, 0.96))
     else bg:SetColorTexture(0.06, 0.05, 0.035, 0.96) end
-    local top = band:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1); top:SetColorTexture(0.47, 0.38, 0.20, 1)
-    local bot = band:CreateTexture(nil, "BORDER"); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT"); bot:SetHeight(2); bot:SetColorTexture(0.84, 0.67, 0.31, 1)
-    local bot2 = band:CreateTexture(nil, "BORDER"); bot2:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 40, -1); bot2:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", -40, -1); bot2:SetHeight(1); bot2:SetColorTexture(0.35, 0.27, 0.14, 1)
+    local top = band:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1); top:SetColorTexture(0.49, 0.37, 0.14, 1)
+    local bot = band:CreateTexture(nil, "BORDER"); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT"); bot:SetHeight(2); bot:SetColorTexture(0.88, 0.64, 0.19, 1)
+    local bot2 = band:CreateTexture(nil, "BORDER"); bot2:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 40, -1); bot2:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", -40, -1); bot2:SetHeight(1); bot2:SetColorTexture(0.37, 0.26, 0.09, 1)
     ui.tabBand = band
   end
   local function tabLook(b, on, over)
     local a = tabArt[b]
     if not a then return end
     if on then
-      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.60, 0.44, 0.17, 1), CreateColor(0.87, 0.69, 0.33, 1)) else a.fill:SetColorTexture(0.8, 0.62, 0.28, 1) end
-      for _, t in ipairs(a.rim) do t:SetColorTexture(1, 0.84, 0.47, 1) end
-      a.shine:SetColorTexture(1, 0.94, 0.75, 0.9); a.label:SetTextColor(0.18, 0.12, 0.04); a.label:SetShadowColor(1, 0.9, 0.6, 0.35); a.notch:Show()
+      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.63, 0.42, 0.07, 1), CreateColor(0.91, 0.66, 0.21, 1)) else a.fill:SetColorTexture(0.84, 0.59, 0.16, 1) end
+      for _, t in ipairs(a.rim) do t:SetColorTexture(1, 0.77, 0.33, 1) end
+      a.shine:SetColorTexture(1, 0.89, 0.67, 0.9); a.label:SetTextColor(0.19, 0.12, 0.01); a.label:SetShadowColor(1, 0.83, 0.49, 0.35); a.notch:Show()
     else
       local k = over and 1.25 or 1
-      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.13 * k, 0.10 * k, 0.07 * k, 1), CreateColor(0.23 * k, 0.19 * k, 0.13 * k, 1)) else a.fill:SetColorTexture(0.18, 0.15, 0.1, 1) end
-      for _, t in ipairs(a.rim) do t:SetColorTexture(0.69 * k, 0.54 * k, 0.26 * k, 1) end
-      a.shine:SetColorTexture(0.47, 0.38, 0.24, 0.8); a.label:SetTextColor(0.91, 0.78, 0.47); a.label:SetShadowColor(0, 0, 0, 1); a.notch:Hide()
+      if a.fill.SetGradient and CreateColor then pcall(a.fill.SetGradient, a.fill, "VERTICAL", CreateColor(0.13 * k, 0.10 * k, 0.07 * k, 1), CreateColor(0.24 * k, 0.19 * k, 0.11 * k, 1)) else a.fill:SetColorTexture(0.19, 0.15, 0.08, 1) end
+      for _, t in ipairs(a.rim) do t:SetColorTexture(0.72 * k, 0.52 * k, 0.16 * k, 1) end
+      a.shine:SetColorTexture(0.49, 0.38, 0.19, 0.8); a.label:SetTextColor(0.96, 0.75, 0.37); a.label:SetShadowColor(0, 0, 0, 1); a.notch:Hide()
     end
   end
   ui.tabLook = tabLook
@@ -2973,13 +2981,13 @@ local function build()
       a.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); C.Cos.Font(a.label, 13, ""); a.label:SetPoint("CENTER", 0, 0)
       a.label:SetShadowOffset(1, -1); a.label:SetText(name)
       a.notch = b:CreateTexture(nil, "OVERLAY"); a.notch:SetSize(8, 8); a.notch:SetPoint("CENTER", b, "BOTTOM", 0, -3)
-      a.notch:SetColorTexture(0.84, 0.67, 0.31, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
+      a.notch:SetColorTexture(0.88, 0.64, 0.19, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
       tabArt[b] = a
       local w = math.floor((a.label:GetStringWidth() or (#name * 8)) + 28)
       b:SetSize(math.max(58, w), 24); b:SetPoint("LEFT", ui.tabBand, "LEFT", x, 1)
       if x > 10 then
         local dia = ui.tabBand:CreateTexture(nil, "ARTWORK"); dia:SetSize(5, 5); dia:SetPoint("CENTER", ui.tabBand, "LEFT", x - 7, 1)
-        dia:SetColorTexture(0.69, 0.54, 0.26, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
+        dia:SetColorTexture(0.72, 0.52, 0.16, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
       end
       x = x + b:GetWidth() + 14
       b:SetScript("OnClick", onTabClick)
@@ -3014,7 +3022,7 @@ local function build()
     a.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); C.Cos.Font(a.label, 13, ""); a.label:SetPoint("LEFT", 12, 0)
     a.label:SetShadowOffset(1, -1)
     a.notch = b:CreateTexture(nil, "OVERLAY"); a.notch:SetSize(8, 8); a.notch:SetPoint("CENTER", b, "BOTTOM", 0, -3)
-    a.notch:SetColorTexture(0.84, 0.67, 0.31, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
+    a.notch:SetColorTexture(0.88, 0.64, 0.19, 1); if a.notch.SetRotation then pcall(a.notch.SetRotation, a.notch, math.pi / 4) end
     tabArt[b] = a
     local close = CreateFrame("Button", nil, b); close:SetSize(16, 16); close:SetPoint("RIGHT", -5, 0); close:SetFrameLevel(b:GetFrameLevel() + 2)
     local cx = close:CreateFontString(nil, "OVERLAY", "GameFontNormal"); cx:SetPoint("CENTER", 0, 1); cx:SetText("x")
@@ -3028,7 +3036,7 @@ local function build()
     end)
     if x > 10 then
       local dia = ui.tabBand:CreateTexture(nil, "ARTWORK"); dia:SetSize(5, 5); dia:SetPoint("CENTER", ui.tabBand, "LEFT", x - 7, 1)
-      dia:SetColorTexture(0.69, 0.54, 0.26, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
+      dia:SetColorTexture(0.72, 0.52, 0.16, 1); if dia.SetRotation then pcall(dia.SetRotation, dia, math.pi / 4) end
       ui.profileDia = dia
     end
     b:SetPoint("LEFT", ui.tabBand, "LEFT", x, 1); b:SetSize(140, 24)
@@ -3305,9 +3313,9 @@ local function build()
     local row = CreateFrame("Button", nil, f)
     row:SetSize(W - 24, ROW_H); row:SetPoint("TOPLEFT", 12, -94 - (r - 1) * ROW_H)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    local hl = row:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.85, 0.45, 0.09)
+    local hl = row:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.76, 0.31, 0.09)
     -- 1.5.5: every other row a touch lighter, so long tables read across
-    row.zebra = row:CreateTexture(nil, "BACKGROUND"); row.zebra:SetAllPoints(); row.zebra:SetColorTexture(1, 0.9, 0.66, 0.035); row.zebra:Hide()
+    row.zebra = row:CreateTexture(nil, "BACKGROUND"); row.zebra:SetAllPoints(); row.zebra:SetColorTexture(1, 0.85, 0.56, 0.035); row.zebra:Hide()
     row.cells = {}
     for i = 1, 10 do
       local t = C.Text(row, "OVERLAY", "GameFontHighlightSmall")
@@ -3583,7 +3591,7 @@ function C.Refresh()
         local on = (ui.ledgerView or "farms") == v and not ui.bookOf
         if on then b:LockHighlight() else b:UnlockHighlight() end
         local fs = b.GetFontString and b:GetFontString()
-        if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
+        if fs then if on then fs:SetTextColor(1, 0.72, 0.13) else fs:SetTextColor(0.85, 0.85, 0.85) end end
       end
       ui.viewBar:ClearAllPoints(); ui.viewBar:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (ui.baseTop or 0))
     else ui.viewBar:Hide() end
@@ -3595,7 +3603,7 @@ function C.Refresh()
         local on = (ui.youView or "you") == v
         if on then b:LockHighlight() else b:UnlockHighlight() end
         local fs = b.GetFontString and b:GetFontString()
-        if fs then if on then fs:SetTextColor(1, 0.85, 0.3) else fs:SetTextColor(0.85, 0.85, 0.85) end end
+        if fs then if on then fs:SetTextColor(1, 0.72, 0.13) else fs:SetTextColor(0.85, 0.85, 0.85) end end
       end
       ui.youBar:ClearAllPoints(); ui.youBar:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", 16, -52 - (ui.baseTop or 0))
     else ui.youBar:Hide() end

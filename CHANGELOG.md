@@ -1,3 +1,9 @@
+# Kina 0.9.15 (beta)
+
+- New Kina coin logo and a new nameplate on the Kina window.
+- The interface's gold and glows match the new logo.
+- 3D portraits use the game's own portrait camera, framed on the face for every race.
+
 # Kina 0.9.14 (beta)
 
 - Solo farms run until you press Stop (time logged off doesn't count).

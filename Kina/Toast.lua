@@ -6,7 +6,7 @@ local ADDON, C = ...
 -- 5 minutes (more merge into it); never in combat (it waits); follows the fanfare setting.
 local T = {}
 C.Toast = T
-local GOLD, GREEN, GREY = "|cffffd100", "|cff7CFC00", "|cff9d9d9d"
+local GOLD, GREEN, GREY = "|cffffc94a", "|cff7CFC00", "|cff9d9d9d"
 local frame, last, waiting = nil, {}, {}
 
 local function build()
@@ -15,7 +15,7 @@ local function build()
   f:SetSize(380, 104); f:SetPoint("TOP", UIParent, "TOP", 0, -140); f:SetFrameStrata("HIGH")
   if f.SetBackdrop then
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-    f:SetBackdropColor(0.05, 0.04, 0.03, 0.92); f:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
+    f:SetBackdropColor(0.05, 0.04, 0.03, 0.92); f:SetBackdropBorderColor(0.89, 0.62, 0.11, 1)
   end
   local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
   f.title = f:CreateFontString(nil, "OVERLAY"); f.title:SetFont(font, 17, "OUTLINE"); f.title:SetPoint("TOP", 0, -10)
@@ -307,7 +307,7 @@ function T.Vouched(from, kindName, rep, bad)
     C.Print(string.format("|cffff4030%s gave you a bad commendation: %s (%d rep).|r", from, kindName or "", rep or 0))
     return
   end
-  show({ head = from .. " vouched for you!", sub = "|cffffd100" .. (kindName or "") .. "|r", gains = "|cff4fc3f7+" .. (rep or 0) .. " rep|r" })
+  show({ head = from .. " vouched for you!", sub = "|cffffc94a" .. (kindName or "") .. "|r", gains = "|cff4fc3f7+" .. (rep or 0) .. " rep|r" })
   if C.PlayCue then C.PlayCue("standing") end
   C.Print(string.format("|cff4fc3f7%s vouched for you: %s (+%d rep).|r", from, kindName or "", rep or 0))
 end

@@ -216,7 +216,7 @@ function C.ShowGroupSplit(s)
   local total, each, transfers = settle(by)
   s.split = { total = total, each = each, incomes = by, transfers = transfers, loot = true }
   s.settled, s.gsplitShown = true, true
-  C.Print(string.format("|cffffd100Farm split|r (%s): the group looted %s, %s each (%s's prices; coin is already split by the game).",
+  C.Print(string.format("|cffffc94aFarm split|r (%s): the group looted %s, %s each (%s's prices; coin is already split by the game).",
     s.label or "farm", C.Money(total), C.Money(each), tostring(s.gsplit.from or "leader")))
   -- (each person's figure has their consumables taken out: admin view only)
   if C.Admin() then for who, v in pairs(by) do C.Print(string.format("   %s looted %s", who, C.Money(v))) end end
@@ -252,7 +252,7 @@ function C.TrySettle(s)
   local total, each, transfers = settle(incomes)
   s.split = { total = total, each = each, incomes = incomes, transfers = transfers }
   s.settled = true
-  C.Print(string.format("|cffffd100Farm split|r (%s): %d players gathered %s, %s each.", s.label or "farm", #s.party + 1, C.Money(total), C.Money(each)))
+  C.Print(string.format("|cffffc94aFarm split|r (%s): %d players gathered %s, %s each.", s.label or "farm", #s.party + 1, C.Money(total), C.Money(each)))
   for who, v in pairs(incomes) do C.Print(string.format("   %s gathered %s", who == "you" and "You" or who, C.Money(v))) end
   if #transfers == 0 then C.Print("   Everyone is even: nobody owes anything.") end
   for _, t in ipairs(transfers) do

@@ -142,7 +142,7 @@ function F.Begin(s, label, camp)
   s.g = nil -- the shared log replaces the old group numbers
   -- 1.0.10: "don't split" goes into the log, so every widget and every split agrees
   if C.settings.farmNoSplit then n:Observe("N", "1") end
-  C.Print("group farm started: Kina users in your group get an invite to join." .. (C.settings.farmNoSplit and " |cffffd100No split:|r numbers are shared, nobody owes anything." or ""))
+  C.Print("group farm started: Kina users in your group get an invite to join." .. (C.settings.farmNoSplit and " |cffffc94aNo split:|r numbers are shared, nobody owes anything." or ""))
   return true
 end
 

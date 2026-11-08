@@ -100,7 +100,7 @@ end
 
 function Q.ButtonText()
   if Q.active then
-    if Q.needClick then return string.format("|cffffd100Quick scan: click for page %d|r", Q.pages + 1) end
+    if Q.needClick then return string.format("|cffffc94aQuick scan: click for page %d|r", Q.pages + 1) end
     return string.format("|cff7CFC00Quick scan: %d items...|r", count())
   end
   if Q.last then return string.format("Quick scan (%d under vendor)", #Q.last.found) end

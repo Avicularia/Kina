@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "0.9.14"
+C.version = "0.9.15"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 169
+C.BUILD = 170
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -332,7 +332,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         -- first time ever: one line on what Kina is for
         if C.PUBLIC and not C.settings.welcomed then
           C.settings.welcomed = C.Now()
-          C.Print("|cffffd100Welcome!|r Press Start on the Kina widget when you farm. Group with other Kina users and everyone's widget shows the same totals, the split and who owes whom; pay with one click and your Kina level grows.")
+          C.Print("|cffffc94aWelcome!|r Press Start on the Kina widget when you farm. Group with other Kina users and everyone's widget shows the same totals, the split and who owes whom; pay with one click and your Kina level grows.")
         end
         if C.dataRepaired then C.Print("|cffff8040some of Kina's saved data was damaged and has been cleaned up (" .. C.dataRepaired .. " entries).|r") end
         if C.migrated then C.Print("your Kina Scout C data was moved over. You can delete the old KinaScoutC folder after this session.") end
@@ -483,17 +483,17 @@ function C.StyleGrip(grip, tip)
   end
   grip:SetSize(26, 26)
   local bg = grip:CreateTexture(nil, "BACKGROUND")
-  bg:SetAllPoints(); bg:SetColorTexture(1, 0.82, 0, 0.18)
+  bg:SetAllPoints(); bg:SetColorTexture(1, 0.69, 0, 0.18)
   grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
   grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
   grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
   local n = grip.GetNormalTexture and grip:GetNormalTexture()
-  if n and n.SetVertexColor then n:SetVertexColor(1, 0.85, 0.2) end
+  if n and n.SetVertexColor then n:SetVertexColor(1, 0.69, 0.01) end
   grip:SetScript("OnEnter", function(self)
-    bg:SetColorTexture(1, 0.82, 0, 0.4)
+    bg:SetColorTexture(1, 0.69, 0, 0.4)
     if GameTooltip then C.TipOwner(self); GameTooltip:AddLine(tip or "Drag to resize", 1, 1, 1, true); GameTooltip:Show() end
   end)
-  grip:SetScript("OnLeave", function() bg:SetColorTexture(1, 0.82, 0, 0.18); if GameTooltip then GameTooltip:Hide() end end)
+  grip:SetScript("OnLeave", function() bg:SetColorTexture(1, 0.69, 0, 0.18); if GameTooltip then GameTooltip:Hide() end end)
 end
 
 -- Corner grip that scales a window (details panel, farm widget). The window's
@@ -571,9 +571,9 @@ C.On("PLAYER_LOGIN", function()
   if not (s and C.After) then return end
   C.After(6, function()
     if s.fresh then
-      C.Print(string.format("|cffffd100new realm, new Kina profile:|r Kina level, standing and record start fresh on %s. Your %s profile is kept for when you play there.", s.to, s.from))
+      C.Print(string.format("|cffffc94anew realm, new Kina profile:|r Kina level, standing and record start fresh on %s. Your %s profile is kept for when you play there.", s.to, s.from))
     else
-      C.Print(string.format("|cffffd100welcome back to %s:|r your Kina profile here is back (your %s one is kept).", s.to, s.from))
+      C.Print(string.format("|cffffc94awelcome back to %s:|r your Kina profile here is back (your %s one is kept).", s.to, s.from))
     end
   end)
 end)

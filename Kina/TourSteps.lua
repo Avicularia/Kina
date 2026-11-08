@@ -8,7 +8,7 @@ local _, C = ...
 -- change them here too if a rule changes.
 local T = C.Tour
 if not T then return end
-local G, GR, R, W = "|cffffd100", "|cff9d9d9d", "|cffff6a50", "|r"
+local G, GR, R, W = "|cffffc94a", "|cff9d9d9d", "|cffff6a50", "|r"
 
 local function widget(part, part2)
   return function()

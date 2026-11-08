@@ -2,7 +2,7 @@ local _, C = ...
 -- Kina: the Help tab, "How Kina works" (0.9.1). Topics down the left, the words on the
 -- right. Plain data: edit TOPICS to change, add or remove a topic. The numbers match
 -- Rep.lua / Payout.lua / Vouch.lua / Rules.lua: change them here too if a rule changes.
-local G, GR, R = "|cffffd100", "|cff9d9d9d", "|cffff6a50"
+local G, GR, R = "|cffffc94a", "|cff9d9d9d", "|cffff6a50"
 local function H(s) return "\n" .. G .. s .. "|r\n" end
 
 local TOPICS = {
@@ -132,7 +132,7 @@ C.RegisterPanel("help", function(p)
   local page = K.box(p); page:SetPoint("TOPLEFT", nav, "TOPRIGHT", 10, 0); page:SetPoint("BOTTOMRIGHT", 0, 0)
   local head = K.text(nav, "GameFontNormal"); head:SetPoint("TOPLEFT", 14, -12)
   if C.Cos and C.Cos.Font then C.Cos.Font(head, 15, "") end
-  head:SetTextColor(1, 0.84, 0.43); head:SetText("How Kina works")
+  head:SetTextColor(1, 0.75, 0.29); head:SetText("How Kina works")
   local sel = 1
   local btns = {}
   local title = K.heading(page, "")

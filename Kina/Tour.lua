@@ -30,7 +30,7 @@ function T.Remove(id)
 end
 function T.Find(id) for i, s in ipairs(T.steps) do if s.id == id then return i, s end end end
 
-local GOLD, GREY, RED = "|cffffd100", "|cff9d9d9d", "|cffff6a50"
+local GOLD, GREY, RED = "|cffffc94a", "|cff9d9d9d", "|cffff6a50"
 local CARD_W = 360
 local ov, card, idx, current
 
@@ -45,14 +45,14 @@ local function overlay()
   for i = 1, 4 do local t = ov:CreateTexture(nil, "BACKGROUND"); t:SetColorTexture(0, 0, 0, 0.62); ov.pane[i] = t end
   ov.ring = CreateFrame("Frame", nil, ov); ov.ring:SetFrameLevel(5)
   ov.edge = {}
-  for i = 1, 4 do local t = ov.ring:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(1, 0.82, 0.38, 1); ov.edge[i] = t end
+  for i = 1, 4 do local t = ov.ring:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(1, 0.73, 0.23, 1); ov.edge[i] = t end
   ov.glow = ov.ring:CreateTexture(nil, "ARTWORK")
   local halo = C.Cos and C.Cos.Tex and C.Cos.Tex("fx_halo")
   if halo then ov.glow:SetTexture(halo); if ov.glow.SetBlendMode then ov.glow:SetBlendMode("ADD") end
-  else ov.glow:SetColorTexture(1, 0.8, 0.3, 0.15) end
-  ov.glow:SetVertexColor(1, 0.78, 0.35, 0.9)
-  ov.link = ov:CreateTexture(nil, "OVERLAY"); ov.link:SetColorTexture(1, 0.82, 0.38, 0.9)
-  ov.dot = ov:CreateTexture(nil, "OVERLAY"); ov.dot:SetSize(7, 7); ov.dot:SetColorTexture(1, 0.9, 0.55, 1)
+  else ov.glow:SetColorTexture(1, 0.7, 0.13, 0.15) end
+  ov.glow:SetVertexColor(1, 0.71, 0.19, 0.9)
+  ov.link = ov:CreateTexture(nil, "OVERLAY"); ov.link:SetColorTexture(1, 0.73, 0.23, 0.9)
+  ov.dot = ov:CreateTexture(nil, "OVERLAY"); ov.dot:SetSize(7, 7); ov.dot:SetColorTexture(1, 0.81, 0.43, 1)
   local acc = 0
   ov:SetScript("OnUpdate", function(_, el)
     acc = acc + el
@@ -122,15 +122,15 @@ local function makeCard()
   if C.Skin and C.Skin.Panel then C.Skin.Panel(card, 6)
   elseif card.SetBackdrop then
     card:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-    card:SetBackdropColor(0.07, 0.06, 0.05, 0.97); card:SetBackdropBorderColor(0.85, 0.66, 0.3, 1)
+    card:SetBackdropColor(0.07, 0.06, 0.05, 0.97); card:SetBackdropBorderColor(0.89, 0.63, 0.17, 1)
   end
   card.step = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); card.step:SetPoint("TOPLEFT", 18, -14)
-  card.step:SetTextColor(0.75, 0.62, 0.38)
+  card.step:SetTextColor(0.79, 0.61, 0.3)
   card.title = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); card.title:SetPoint("TOPLEFT", 18, -30); card.title:SetWidth(CARD_W - 36)
   card.title:SetJustifyH("LEFT")
   if C.Cos and C.Cos.Font then C.Cos.Font(card.title, 19, "") end
-  card.title:SetTextColor(1, 0.84, 0.43)
-  card.rule = card:CreateTexture(nil, "ARTWORK"); card.rule:SetHeight(1); card.rule:SetColorTexture(0.47, 0.38, 0.2, 1)
+  card.title:SetTextColor(1, 0.75, 0.29)
+  card.rule = card:CreateTexture(nil, "ARTWORK"); card.rule:SetHeight(1); card.rule:SetColorTexture(0.49, 0.37, 0.14, 1)
   card.rule:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", 0, -8); card.rule:SetWidth(CARD_W - 36)
   card.body = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); card.body:SetPoint("TOPLEFT", card.rule, "BOTTOMLEFT", 0, -10)
   card.body:SetWidth(CARD_W - 36); card.body:SetJustifyH("LEFT"); card.body:SetJustifyV("TOP")
@@ -182,7 +182,7 @@ local function layoutCard(step)
     if p then
       if i <= #T.steps then
         p:ClearAllPoints(); p:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 18 + (i - 1) * 9, 44); p:Show()
-        if i == idx then p:SetColorTexture(1, 0.82, 0.38, 1) elseif i < idx then p:SetColorTexture(0.6, 0.48, 0.25, 1) else p:SetColorTexture(0.3, 0.27, 0.22, 1) end
+        if i == idx then p:SetColorTexture(1, 0.73, 0.23, 1) elseif i < idx then p:SetColorTexture(0.63, 0.46, 0.17, 1) else p:SetColorTexture(0.32, 0.27, 0.2, 1) end
       else p:Hide() end
     end
   end
@@ -282,7 +282,7 @@ function T.Reward()
   C.settings.tourRewarded = true
   C.Log("tour", "done")
   local R = C.Rep or {}
-  C.Print(string.format("|cffffd100Tour complete: +%d XP and +%d standing.|r Welcome to Kina!", R.TOUR_XP or 50, R.TOUR_REP or 20))
+  C.Print(string.format("|cffffc94aTour complete: +%d XP and +%d standing.|r Welcome to Kina!", R.TOUR_XP or 50, R.TOUR_REP or 20))
   if C.PlayCue then pcall(C.PlayCue, "settled") end
   if C.Refresh then pcall(C.Refresh) end
   if C.RefreshWidget then pcall(C.RefreshWidget) end

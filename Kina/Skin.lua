@@ -201,12 +201,12 @@ function S.Button(b, border)
   fill:SetTexture("Interface\\Buttons\\WHITE8X8")
   local rim = {}
   for i, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
-    local t = b:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.78, 0.62, 0.30, 0.95)
+    local t = b:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.82, 0.59, 0.19, 0.95)
     t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
     rim[i] = t
   end
   local shine = b:CreateTexture(nil, "BORDER", nil, 1); shine:SetPoint("TOPLEFT", 2, -2); shine:SetPoint("TOPRIGHT", -2, -2); shine:SetHeight(1)
-  shine:SetColorTexture(1, 0.9, 0.6, 0.22)
+  shine:SetColorTexture(1, 0.83, 0.49, 0.22)
   b.kinaSkin = { fill = fill, rim = rim }
   local function state()
     hideRegions(b)
@@ -214,11 +214,11 @@ function S.Button(b, border)
     if b.kinaSel then c = BTN.sel elseif b.kinaDown then c = BTN.down elseif b.kinaOver then c = BTN.over end
     grad(fill, c)
     local bright = (b.kinaOver or b.kinaSel) and 1 or 0.8
-    for _, t in ipairs(rim) do t:SetColorTexture(0.98 * bright, 0.78 * bright, 0.36 * bright, 0.95) end
+    for _, t in ipairs(rim) do t:SetColorTexture(1 * bright, 0.72 * bright, 0.21 * bright, 0.95) end
     local fs = b.GetFontString and b:GetFontString()
     local off = b.IsEnabled and not b:IsEnabled()
     b:SetAlpha(off and 0.45 or 1)
-    if fs then if b.kinaSel then fs:SetTextColor(1, 0.86, 0.35) else fs:SetTextColor(0.92, 0.84, 0.62) end end
+    if fs then if b.kinaSel then fs:SetTextColor(1, 0.74, 0.19) else fs:SetTextColor(0.97, 0.83, 0.56) end end
   end
   b.kinaState = state
   b:HookScript("OnEnter", function() b.kinaOver = true; state() end)
@@ -244,11 +244,11 @@ function S.Panel(f, border)
   fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMRIGHT", -1, 1)
   fill:SetColorTexture(0.035, 0.03, 0.025, 0.66)
   for _, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
-    local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.47, 0.38, 0.20, 1)
+    local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.49, 0.37, 0.14, 1)
     t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
   end
   local top = f:CreateTexture(nil, "BORDER", nil, 1); top:SetPoint("TOPLEFT", 8, -2); top:SetPoint("TOPRIGHT", -8, -2); top:SetHeight(1)
-  top:SetColorTexture(0.85, 0.68, 0.36, 0.55)
+  top:SetColorTexture(0.89, 0.66, 0.25, 0.55)
   f.kinaSkin = { fill = fill }
 end
 
@@ -346,7 +346,7 @@ function S.Scrollbar(parent, onScroll)
     thumb:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th)
   else
     local bg = sb:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.45)
-    thumb:SetColorTexture(0.96, 0.78, 0.30, 0.85); thumb:SetSize(12, 24)
+    thumb:SetColorTexture(1, 0.71, 0.15, 0.85); thumb:SetSize(12, 24)
   end
   if sb.SetThumbTexture then sb:SetThumbTexture(thumb) end
   sb:SetScript("OnValueChanged", function(self, v)

@@ -274,7 +274,7 @@ function C.ClassFarmRows(opts)
       local show, status = fits(r, L, opts.lo, opts.hi), nil
       if r.kind == "Lockpick" then
         show = L >= 16 and lp < (r.skillTo or 300) and r.skill <= math.max(lpCap, 1)
-        if show then status = lp >= r.skill and "|cff40ff40now|r" or ("|cffffcc00at " .. r.skill .. "|r") end
+        if show then status = lp >= r.skill and "|cff40ff40now|r" or ("|cffffc94aat " .. r.skill .. "|r") end
       elseif r.kind == "Service" then
         show = L >= 16
       end

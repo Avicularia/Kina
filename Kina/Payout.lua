@@ -130,7 +130,7 @@ function C.OnFarmItemSold(e)
         if share > 0 then
           for _, who in ipairs(f.partners) do
             p.owed[who] = (p.owed[who] or 0) + share
-            C.Print(string.format("|cffffd100%s|r from the %s farm sold for %s. The split counted it at %s, so you owe %s %s more (Pay button on the widget).",
+            C.Print(string.format("|cffffc94a%s|r from the %s farm sold for %s. The split counted it at %s, so you owe %s %s more (Pay button on the widget).",
               e.item or ("item " .. e.id), tostring(f.label or "group"), C.Money(math.floor(each)), C.Money(f.v), who, C.Money(share)))
           end
         end
@@ -225,7 +225,7 @@ C.On("TRADE_SHOW", function()
       C.Print(string.format("Kina put %s in the trade for %s.", C.Money(amt), p.to))
       C.AskAcceptTrade(string.format("Kina put %s in the trade for %s. Accept?", C.Money(amt), p.to))
     elseif not SetTradeMoney or C.tradeMoneyProtected then
-      C.Print(string.format("|cffffd100Type %s in the trade window's gold box|r; Kina offers Accept once it's there.", C.Money(amt)))
+      C.Print(string.format("|cffffc94aType %s in the trade window's gold box|r; Kina offers Accept once it's there.", C.Money(amt)))
     elseif tries < 10 then C.After(0.3, put)
     else
       C.Print(string.format("|cffff8040Kina couldn't put the money in. Type %s in the trade window yourself|r; Kina will offer Accept once it's there.", C.Money(amt)))
@@ -378,7 +378,7 @@ local function noteRefusal(t)
       local sp = d.s.split or {}; d.s.split = sp
       if d.dir == "owe" and t.iAcc and not t.theyAcc and (t.mine or 0) >= math.floor(d.amt) then
         sp.offered = sp.offered or {}; sp.offered[d.key] = C.Now()
-        C.Print(string.format("|cffffd100Kina noted that you offered %s the full %s and the trade was cancelled.|r If they never take it, the debt won't count against you.", C.Books.Name(d.who), C.Money(math.floor(d.amt))))
+        C.Print(string.format("|cffffc94aKina noted that you offered %s the full %s and the trade was cancelled.|r If they never take it, the debt won't count against you.", C.Books.Name(d.who), C.Money(math.floor(d.amt))))
       elseif d.dir == "owed" and t.theyAcc and not t.iAcc and (t.theirs or 0) >= math.floor(d.amt) then
         sp.refusedSeen = sp.refusedSeen or {}; sp.refusedSeen[d.key] = C.Now()
         C.Print(string.format("|cffff8040%s offered the full %s and the trade was cancelled.|r If the debt runs out of time after an offer, it costs YOUR standing, not theirs.", C.Books.Name(d.who), C.Money(math.floor(d.amt))))
@@ -651,7 +651,7 @@ function C.OnDebtNote(kind, from, amt, ref)
       local sp = d.s.split
       if kind == "plea" and d.dir == "owed" then
         sp.pleaFrom = sp.pleaFrom or {}; sp.pleaFrom[d.key] = true
-        C.Print(string.format("|cffffd100%s asks for more time|r to pay the %s from %s. Open Kina > Ledger > Debts to give %d more hours or forgive it.",
+        C.Print(string.format("|cffffc94a%s asks for more time|r to pay the %s from %s. Open Kina > Ledger > Debts to give %d more hours or forgive it.",
           C.Books.Name(from), C.Money(math.floor(d.amt)), d.farm or "farm", C.EXTEND_DAYS))
       elseif kind == "ext" and d.dir == "owe" then
         sp.ext = sp.ext or {}; sp.ext[d.key] = math.min(C.MAX_HOURS - C.DEBT_HOURS, (tonumber(sp.ext[d.key]) or 0) + math.min(C.EXTEND_HOURS, tonumber(amt) or C.EXTEND_HOURS))
@@ -876,7 +876,7 @@ function C.RefreshSettle()
       row.d = d
       row.cb:Show(); row.text:Show()
       local when = d.t and date and date("%b %d", d.t) or "-"
-      row.text:SetText(string.format("%s  |cffffd100%s|r  %s  %s  %s", when, d.who, d.farm,
+      row.text:SetText(string.format("%s  |cffffc94a%s|r  %s  %s  %s", when, d.who, d.farm,
         d.dir == "owe" and "|cffff8080you owe|r" or "|cff7CFC00owes you|r", C.Money(d.amt)))
     else row.d = nil; row.cb:Hide(); row.text:Hide(); row.cb:SetChecked(false) end
   end

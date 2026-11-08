@@ -620,7 +620,7 @@ local function repairIdleStops()
         if ok and sum then s.result = sum end
         local secs = math.floor(s.stop - s.start - (s.pausedSecs or 0))
         if C.Log then C.Log("farmfix", s.sync.sid or "", secs) end
-        C.Print(string.format("|cffffd100Fixed:|r your %s farm stopped itself by mistake; it now counts as %d minutes.", s.label or "group", math.floor(secs / 60)))
+        C.Print(string.format("|cffffc94aFixed:|r your %s farm stopped itself by mistake; it now counts as %d minutes.", s.label or "group", math.floor(secs / 60)))
       end
     end
   end
@@ -894,7 +894,7 @@ function C.StopSession(at, why, silent, fromParty)
     local total, each, transfers = C.FarmSync.Split(by)
     if t.noSplit then transfers = {}; s.noSplit = true end
     if t.nVotes and not t.noSplit then
-      C.Print("|cffffd100\"Don't split\" only counts when it comes from the players who'd be paid.|r The split stands; they can forgive what they're owed.")
+      C.Print("|cffffc94a\"Don't split\" only counts when it comes from the players who'd be paid.|r The split stands; they can forgive what they're owed.")
     end
     -- 0.9.1 (security): the log has loot in my name I never looted: record no debts
     if (s.sync.forged or 0) > 0 then
@@ -905,7 +905,7 @@ function C.StopSession(at, why, silent, fromParty)
     if not t.noSplit and C.SplitValue and s.sync.leader ~= C.FarmSync.First(UnitName and UnitName("player")) then
       local okm, mt = pcall(C.FarmSync.Totals, s.sync, function(id, sfx) return (C.SplitValue(id, sfx)) or 0 end)
       if okm and mt and math.abs((mt.items or 0) - (t.items or 0)) > math.max(10000, 0.25 * math.max(mt.items or 0, t.items or 0)) then
-        C.Print(string.format("|cffffd100Heads up:|r %s's prices put this farm's loot at %s; your prices say %s. Right-click a farm log item to dispute it, or scan the AH when asked.",
+        C.Print(string.format("|cffffc94aHeads up:|r %s's prices put this farm's loot at %s; your prices say %s. Right-click a farm log item to dispute it, or scan the AH when asked.",
           tostring(s.sync.leader), C.Money(t.items or 0), C.Money(mt.items or 0)))
       end
     end
@@ -915,7 +915,7 @@ function C.StopSession(at, why, silent, fromParty)
     if #transfers > 0 and C.PriceHold and C.PriceHold.Begin then pcall(C.PriceHold.Begin, s) end
     s.kills = math.max(s.kills or 0, t.kills)
     if C.RecordFloors then pcall(C.RecordFloors, s) end
-    C.Print(string.format("|cffffd100Farm split|r (%s): the group looted %s, %s each (from the shared log, the same on every widget).",
+    C.Print(string.format("|cffffc94aFarm split|r (%s): the group looted %s, %s each (from the shared log, the same on every widget).",
       s.label or "farm", C.Money(total), C.Money(each)))
     if C.Admin() then
       for who, v in pairs(by) do C.Print(string.format("   %s: %s (loot minus potions used)", who, C.Money(v))) end
@@ -1022,7 +1022,7 @@ function C.TrackLevels(s)
     C.settings.lowLevelSeen = C.settings.lowLevelSeen or {}
     if not C.settings.lowLevelSeen[key] then
       C.settings.lowLevelSeen[key] = true
-      C.Print("|cffffd100Note:|r someone in this farm is under level 10, so it won't give Kina XP or standing. The gold tracking and the split still work. (Shown once per character.)")
+      C.Print("|cffffc94aNote:|r someone in this farm is under level 10, so it won't give Kina XP or standing. The gold tracking and the split still work. (Shown once per character.)")
     end
   end
 end

@@ -109,6 +109,11 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "help" or cmd == "rules" then C.Toggle("Help")
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "mentor" then if C.Mentor then C.Mentor.Name(rest) end
+  elseif cmd == "face" then
+    -- nudge every 3D portrait up or down on screen: /kina face 10 (up) ... /kina face -10 (down)
+    local n = tonumber(rest)
+    if n and n >= -60 and n <= 60 then C.settings.facePx = n; C.Print("3D portraits moved " .. n .. " (0 is the default; /reload to see it on open profiles)"); if C.Refresh then C.Refresh() end
+    else C.Print("/kina face <number>: moves every 3D portrait up (+) or down (-). 0 is the default. Now " .. tostring(C.settings.facePx or 0)) end
   elseif cmd == "vouch" then
     C.Print("commendations happen in the window that opens when a group farm ends.")
   elseif cmd == "preview" and rest == "commend" then if C.Vouch then C.Vouch.ShowPrompt(true) end
