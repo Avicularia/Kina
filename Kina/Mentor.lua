@@ -205,6 +205,7 @@ local function decide()
   local d = db()
   if d.decided or d.done then return end
   if #M.Candidates() == 0 then return end
+  if C.Tour and C.Tour.active then C.After(10, decide); return end -- after the tour
   if M.ShowPicker then pcall(M.ShowPicker) end
 end
 local function onClaim(from, rest)

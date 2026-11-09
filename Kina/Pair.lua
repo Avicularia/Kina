@@ -213,6 +213,13 @@ C.On("GROUP_ROSTER_UPDATE", function()
 end)
 
 -- the line under the record heading on the You page
+-- 1.0.0: the short form for the record row ("Kina Partner")
+function P.Short()
+  local cur = P.Partner()
+  if not cur then return GREY .. "none yet|r" end
+  local b, n = P.Bonus()
+  return string.format("%s%s|r  %s+%d%%|r", GOLD, P.PartnerName() or "?", GREEN, pct(b))
+end
 function P.Line()
   local cur = P.Partner()
   if not cur then return GREY .. "No partner yet: partner up with a Kina user in your party for +10%.|r" end

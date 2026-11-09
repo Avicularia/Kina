@@ -173,7 +173,8 @@ do
   C.GuardScript(f, "OnUpdate", "Toast:173", function(_, el) t = t + el; if t >= 30 then t = 0; if not (InCombatLockdown and InCombatLockdown()) then check() end end end)
 end
 
--- 1.2.9: the group ad. During a shared farm the farm leader's Kina posts one line to
+-- 1.2.9: the group ad. While a farm runs and you're in a party or raid (1.0.0: any farm,
+-- not only shared ones; a shared farm's line comes from its leader) Kina posts one line to
 -- party/raid chat every 15 minutes (never Say or channels; never in combat; not in the
 -- farm's first 15 minutes or while it earns nothing). Setting: Settings > "Post farm
 -- stats to group chat" (on unless turned off).
@@ -183,21 +184,35 @@ do
     if C.settings.groupAd == false or not SendChatMessage then return end
     if InCombatLockdown and InCombatLockdown() then return end
     local s = C.session
-    if not (s and s.sync and C.FarmView) then nextAt = nil; return end
-    local v, group, leader = C.FarmView()
-    if not (v and group) then return end
-    local me = UnitName and UnitName("player")
-    if not leader or (leader:match("^[^%-]+") ~= me) then return end
-    local secs = math.max(1, v.secs or 0)
-    if secs < 900 or (v.net or 0) < 1 then return end
-    local n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
-    local gph = v.net * 3600 / secs
+    if not s or s.paused then nextAt = nil; return end
+    if not (C.GroupSize and C.GroupSize() > 1) then return end
+    -- 1.0.0 (Taylor: "always while a farm is running, even if I'm the only one with the
+    -- farm going"): a shared farm posts the group's numbers (from its leader only); any
+    -- other farm posts your own while you're in a party or raid
+    local net, secs, n
+    if s.sync and C.FarmView then
+      local v, group, leader = C.FarmView()
+      if not (v and group) then return end
+      local me = UnitName and UnitName("player")
+      if not leader or (leader:match("^[^%-]+") ~= me) then return end
+      net, secs = v.net or 0, math.max(1, v.secs or 0)
+      n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
+    else
+      local sum = C.SessionSummary and C.SessionSummary(s)
+      if not sum then return end
+      net, secs, n = sum.total or 0, math.max(1, C.SessionSecs(s) or 0), 1
+    end
+    if secs < 900 or net < 1 then return end
+    local gph = net * 3600 / secs
     local function plain(c)
       c = math.floor(c); local g, sv = math.floor(c / 10000), math.floor((c % 10000) / 100)
       return (g > 0 and (g .. "g ") or "") .. sv .. "s"
     end
     local where = (GetInstanceInfo and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
     local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), (C.GameXPPerHour and C.GameXPPerHour(s)) or 0, where)
+    -- someone in the group without Kina: say where to get it
+    local others = (C.GroupSize and C.GroupSize() or 1) - 1
+    if others > n - 1 then msg = msg .. " - search Kina Farm Groups on CurseForge" end
     local chan = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
     pcall(SendChatMessage, msg, chan)
   end
@@ -206,7 +221,7 @@ do
   C.GuardScript(f, "OnUpdate", "Toast:206", function(_, el)
     t = t + el; if t < 5 then return end; t = 0
     local now = GetTime and GetTime() or 0
-    if not (C.session and C.session.sync) then nextAt = nil; return end
+    if not C.session or C.session.paused then nextAt = nil; return end
     if not nextAt then nextAt = now + 900; return end
     if now >= nextAt then nextAt = now + 900; post() end
   end)

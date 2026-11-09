@@ -118,7 +118,8 @@ local function youPage(p, them)
   local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(228)
   local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
   -- 0.9.18: Kina Partner (who, the bonus, the bond)
-  local pairT = text(rec, "GameFontHighlightSmall"); pairT:SetPoint("TOPLEFT", h4, "BOTTOMLEFT", 0, -4); pairT:SetPoint("RIGHT", rec, "RIGHT", -16, 0)
+  -- (1.0.0: the partner line is a record row now; it overlapped the rows under the heading)
+  local pairT = { SetText = function() end }
   -- (1.5.4: no "Commend someone": commending only happens in the end-of-farm window)
   local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pb) end; pb:SetSize(110, 22); pb:SetPoint("TOPRIGHT", -14, -10)
   pb:SetText("Party profiles"); pb:SetScript("OnClick", function(self) if C.Profile then C.Profile.Picker(self) end end)
@@ -269,7 +270,8 @@ local function youPage(p, them)
       { "Kina version", pr and pr.ver or (GREY .. "?|r") },
       { "Standing now", tostring(stand or "?") },
       { "Installs shared", tostring(pr and pr.recruits or 0) },
-      { "Partner bond", (C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (tostring(C.Rep.BondOf(who)) .. " farm" .. (C.Rep.BondOf(who) == 1 and "" or "s")) or (GREY .. "none yet|r") },
+      { "Partner bond", ((C.Pair and C.Pair.IsPartner(who)) and (GREEN .. "your partner, +" .. math.floor(C.Pair.Bonus(who) * 100 + 0.5) .. "%|r  ") or "")
+        .. ((C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (tostring(C.Rep.BondOf(who)) .. " farm" .. (C.Rep.BondOf(who) == 1 and "" or "s")) or (GREY .. "none yet|r")) },
     })
     -- 0.9.18: Kina Partner
     local P = C.Pair
@@ -365,6 +367,7 @@ local function youPage(p, them)
       { "Forgave / forgiven", tostring(r.forgaveN or 0) .. GREY .. "  /  |r" .. tostring(r.forgivenN or 0) },
       { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r") },
       { "Farmed with", r.partners or (GREY .. "nobody yet|r") },
+      { "Kina Partner", C.Pair and C.Pair.Short() or (GREY .. "none yet|r") },
     })
   end
 end

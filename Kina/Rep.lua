@@ -561,8 +561,14 @@ C.On("PLAYER_LOGIN", function()
     OnCancel = function(_, _, reason)
       if reason == "clicked" then C.settings.dataNoticeSeen = C.Now(); C.SetShareData(false) end
     end }
-  C.After(8, function() if not C.settings.dataNoticeSeen then StaticPopup_Show("KINA_DATA_NOTICE") end end)
+  C.After(8, function() pcall(C.ShowDataNotice) end)
 end)
+-- shown after the tour when the tour is running (Tour.lua calls it when it ends)
+function C.ShowDataNotice()
+  if C.settings.dataNoticeSeen or not (StaticPopupDialogs and StaticPopupDialogs.KINA_DATA_NOTICE) then return end
+  if C.Tour and C.Tour.active then return end
+  if C.ShowPopup then C.ShowPopup("KINA_DATA_NOTICE") else StaticPopup_Show("KINA_DATA_NOTICE") end
+end
 
 -- 0.9.18: the bond (farms together) with someone's account, partner or not
 -- (0.9.19: by Kina ID; a character name is looked up to its account)

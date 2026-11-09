@@ -74,6 +74,7 @@ local function bestDrop(s)
 end
 C.Widget = C.Widget or {}
 C.Widget.BestDrop = function(s) return (bestDrop(s)) end
+C.Widget.Strip = function() return C.Widget.strip end
 local function itemIcon(id)
   if not id then return nil end
   if C_Item and C_Item.GetItemIconByID then local ok, t = pcall(C_Item.GetItemIconByID, id); if ok and t then return t end end
@@ -167,6 +168,17 @@ local function setSub(txt)
   end
   w.rateSub:SetText(txt)
 end
+-- 0.9.23 (Taylor: "people won't know what that number is"): "/h" right after the big
+-- gold-per-hour figure
+local function setRate(txt, perHour)
+  w.rate:SetText(txt)
+  if not w.rateUnit then return end
+  if perHour then
+    local sw = (w.rate.GetUnboundedStringWidth and w.rate:GetUnboundedStringWidth()) or w.rate:GetStringWidth() or 0
+    w.rateUnit:ClearAllPoints(); w.rateUnit:SetPoint("BOTTOMLEFT", w.rate, "BOTTOMLEFT", math.min(sw, (w.rate:GetWidth() or 190)) + 3, 2)
+    w.rateUnit:Show()
+  else w.rateUnit:Hide() end
+end
 local function chip(textv, r, g, b)
   w.chip.text:SetText(textv)
   if chipIron then
@@ -198,7 +210,7 @@ local function partyStrip()
   end
   if #mates == 0 then if strip then strip:Hide() end; return end
   if not strip then
-    strip = CreateFrame("Frame", nil, w)
+    strip = CreateFrame("Frame", nil, w); C.Widget.strip = strip
     strip:SetHeight(78)
     if C.Skin and C.Skin.On() and C.Skin.Panel then C.Skin.Panel(strip, 6)
     else local bg = strip:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.6) end
@@ -297,11 +309,11 @@ function C.RefreshWidget()
           chip(n > 2 and "GROUP" or "DUO", 0.10, 0.35, 0.15)
         end
         w.clock:SetText((v.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
-        w.rate:SetText(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r")
+        setRate(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r", secs >= 30)
         setSub("per hour, group" .. (v.noSplit and " |cffffc54ano split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
         setTile(w.tNet, signed(v.net), "same for all")
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
-        setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
+        setTile(w.tLoot, C.Money(v.items or 0), "split prices") -- 1.0.0: consumables are personal, not the group's
         -- 1.4.6: the kills tile's second line is game XP per hour (falls back to kills/h)
         setXPTile(w.tKills, s, v.kills, secs)
         if s.sync then
@@ -313,7 +325,7 @@ function C.RefreshWidget()
       else
         chip("WAITING", 0.45, 0.35, 0.05)
         w.clock:SetText("|cff9d9d9d" .. clock(C.SessionSecs(s)) .. "|r")
-        w.rate:SetText("|cff9d9d9d...|r"); setSub("waiting for " .. tostring(leader) .. "'s numbers")
+        setRate("|cff9d9d9d...|r"); setSub("waiting for " .. tostring(leader) .. "'s numbers")
         for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
         w.status:SetText("")
       end
@@ -326,7 +338,7 @@ function C.RefreshWidget()
     local secs = C.SessionSecs(s)
     if s.paused then chip("PAUSED", 0.55, 0.42, 0.05) else chip("SOLO", 0.12, 0.25, 0.50) end
     w.clock:SetText((s.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
-    w.rate:SetText(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r")
+    setRate(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r", secs >= 30)
     setSub("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
     setTile(w.tNet, signed(sum.total), ((sum.used or 0) > 0) and ("used " .. C.Money(sum.used)) or "what you looted")
     setTile(w.tCoin, C.Money(sum.cash or 0), ((s.money.pickpocket or 0) > 0) and ("picks " .. C.Money(s.money.pickpocket)) or "looted coin")
@@ -348,14 +360,14 @@ function C.RefreshWidget()
     local net = g and ((type(g.net) == "number" and g.net) or g.total) or 0
     local secs = g and math.max(1, g.secs or 1) or 1
     if g then
-      w.rate:SetText("|cffbbbbbb" .. C.Money(net * 3600 / secs) .. "|r")
+      setRate("|cffbbbbbb" .. C.Money(net * 3600 / secs) .. "|r", true)
       setSub("last farm  |cff9d9d9d" .. ((last.label or "?"):sub(1, 18)) .. ", " .. (last.why or "stopped") .. "|r")
       setTile(w.tNet, signed(net), last.gview and "group" or "")
       setTile(w.tCoin, C.Money((last.gview and last.gview.coin) or (last.result and last.result.cash) or 0), "")
       setTile(w.tLoot, C.Money((last.gview and last.gview.items) or (last.result and last.result.items) or 0), "")
       setXPTile(w.tKills, last, g.kills, secs)
     else
-      w.rate:SetText("|cff9d9d9d--|r"); modeWord = nil; setSub("press Start when you begin farming")
+      setRate("|cff9d9d9d--|r"); modeWord = nil; setSub("press Start when you begin farming")
       for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
     end
     local tr = last and last.split and last.split.loot and last.split.transfers
@@ -499,9 +511,16 @@ local function build()
         vpop:SetBackdropColor(0.06, 0.05, 0.04, 0.96); vpop:SetBackdropBorderColor(0.94, 0.58, 0.03, 1)
       end
       vpop.pct = vpop:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); vpop.pct:SetPoint("BOTTOM", 0, 8)
+      -- 1.0.0 (Taylor: holding the slider made "an ungodly noise"): the sample plays once,
+      -- a moment after the slider stops moving, never while it's being dragged
+      local lastVol, token = C.Volume(), 0
       local sb = C.Skin and C.Skin.Scrollbar and C.Skin.Scrollbar(vpop, function(v)
         C.SetVolume(4 - v); vpop.pct:SetText(C.Volume() == 0 and "|cff888888mute|r" or ((C.Volume() * 25) .. "%"))
-        if C.Volume() > 0 then C.PlayCue("paid") end
+        if C.Volume() ~= lastVol then
+          lastVol = C.Volume(); token = token + 1
+          local mine = token
+          C.After(0.35, function() if mine == token and C.Volume() > 0 then C.PlayCue("paid") end end)
+        end
         C.RefreshWidget()
       end)
       if sb then sb:SetPoint("TOP", 0, -10); sb:SetHeight(108) end
@@ -522,6 +541,7 @@ local function build()
 
   -- hero: gold per hour
   w.rate = text(w, "GameFontNormalLarge", "LEFT"); w.rate:SetPoint("TOPLEFT", 10, -30); w.rate:SetWidth(180)
+  w.rateUnit = text(w, "GameFontNormal", "LEFT"); w.rateUnit:SetText("/h"); w.rateUnit:SetTextColor(0.85, 0.72, 0.45); w.rateUnit:Hide()
   if w.rate.SetFont then local f, _, fl = w.rate:GetFont(); if f then w.rate:SetFont(f, 20 * (C.TextScale and C.TextScale() or 1), fl or "OUTLINE") end end
   w.rateSub = text(w, "GameFontHighlightSmall", "LEFT"); w.rateSub:SetPoint("TOPLEFT", 10, -54); w.rateSub:SetWidth(190)
   w.clock = text(w, "GameFontNormalLarge", "RIGHT"); w.clock:SetPoint("TOPRIGHT", -10, -30); w.clock:SetWidth(100)
@@ -664,6 +684,7 @@ local function build()
     end
     -- hero row: gold per hour on the left, the clock and timer on the right
     place(w.rate, "TOPLEFT", 14, -34); fx(w.rate, 24); w.rate:SetWidth(190)
+    if w.rateUnit then fx(w.rateUnit, 14); w.rateUnit:SetTextColor(0.85, 0.72, 0.45) end
     place(w.rateSub, "TOPLEFT", 15, -62); fx(w.rateSub, 11); w.rateSub:SetWidth(200)
     place(w.clock, "TOPRIGHT", -14, -35); fx(w.clock, 19, "RIGHT"); w.clock:SetWidth(110)
     w.timer:ClearAllPoints(); w.timer:SetPoint("TOPRIGHT", w, "TOPRIGHT", -12, -58); w.timer:SetSize(86, 20)

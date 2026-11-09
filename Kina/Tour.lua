@@ -63,6 +63,30 @@ local function overlay()
   return ov
 end
 
+-- 1.0.0 (Taylor: "the widget and the entire addon's actions need to do nothing when
+-- clicked while the tour is running"): a clear shield over every Kina window during the
+-- tour eats clicks, drags and the mouse wheel. Only the tour card's buttons work.
+local SHIELDED = { "KinaWidget", "KinaFrame", "KinaMinimapButton", "KinaProfile", "KinaDetail", "KinaWelcomePick" }
+local shields = {}
+local function shield(on)
+  local list = {}
+  for _, n in ipairs(SHIELDED) do if _G[n] then list[#list + 1] = _G[n] end end
+  if C.Widget and C.Widget.Strip then local s = C.Widget.Strip(); if s then list[#list + 1] = s end end
+  for _, f in ipairs(list) do
+    local sh = shields[f]
+    if on and not sh and CreateFrame then
+      sh = CreateFrame("Frame", nil, f); sh:SetAllPoints(f)
+      sh:EnableMouse(true); if sh.EnableMouseWheel then sh:EnableMouseWheel(true) end
+      sh:SetScript("OnMouseWheel", function() end)
+      shields[f] = sh
+    end
+    if sh then
+      if on then sh:SetFrameLevel((f:GetFrameLevel() or 1) + 200); sh:Show() else sh:Hide() end
+    end
+  end
+end
+T.Shield = shield
+
 -- a frame's box on the screen, in UIParent's units
 local function rectOf(f)
   if not (f and f.GetLeft and f:IsVisible()) then return nil end
@@ -253,6 +277,8 @@ function T.Go(i)
   local target, target2
   if step.target then local ok, f, f2 = pcall(step.target); if ok then target, target2 = f, f2 end end
   overlay():Show()
+  shield(true)
+  if C.After then C.After(0.1, function() if T.active then shield(true) end end) end -- (windows a step just opened)
   layoutCard(step)
   local l, r, t, b = light(target, target2)
   local bl, br, bt, bb
@@ -295,6 +321,8 @@ function T.Start(at)
   if #T.steps == 0 then return end
   saved = { widget = C.settings and C.settings.hudShown, main = C.UI and C.UI.frame and C.UI.frame:IsShown(), tab = C.UI and C.UI.tab }
   T.active = true
+  -- the data notice waits for the tour (it covered the widget the tour was showing)
+  if StaticPopup_Hide then pcall(StaticPopup_Hide, "KINA_DATA_NOTICE") end
   local i = 1
   if type(at) == "string" then i = T.Find(at) or 1 elseif type(at) == "number" then i = at end
   T.Go(i)
@@ -304,6 +332,10 @@ function T.Stop(skipped, finished)
   if ov then ov:Hide() end
   if card then card:Hide() end
   T.active = false
+  shield(false)
+  -- 1.0.0 (Taylor: the data notice covered the widget the tour was showing): it waits
+  -- for the tour to end
+  if C.ShowDataNotice and C.After then C.After(1.5, function() pcall(C.ShowDataNotice) end) end
   if C.settings then C.settings.tourSeen = C.version or true end
   if saved then
     if C.ShowWidget and saved.widget ~= nil then pcall(C.ShowWidget, saved.widget) end

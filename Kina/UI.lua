@@ -842,12 +842,12 @@ local function farmLog(s, live)
   if grouped and (gf.synced or (s.g and (next(s.g.loot) or s.g.coin > 0))) then
     row("", "|cffffc54aGroup total|r", "everything the group looted (loot lines) + coin, what the widget shows", "", signedMoney(gf.net))
     -- each player's line has their own consumables taken out, so it's the admin view only
-    if C.Admin() or (gf.used or 0) == 0 then
-      for who, v in pairs(gf.byLooter) do row("", "   " .. who, ((gf.used or 0) > 0) and "looted, minus what they used" or "looted", "", signedMoney(v)) end
+    do
+      for who, v in pairs(gf.byLooter) do row("", "   " .. who, "looted", "", signedMoney(v)) end
     end
     row("", "   coin", "", "", signedMoney(gf.coin))
-    if (gf.used or 0) > 0 then row("", "   consumables used", C.Admin() and "potions, food, bandages... taken off (each player's share is in their line above)"
-      or "potions, food, bandages... by the whole group, shared evenly", "", signedMoney(-gf.used)) end
+    -- 1.0.0: consumables are personal (your own net, below), never part of the group total or split
+
     -- the split: half each (or a share each), from the loot lines; coin is already split by the game
     -- the leader's numbers when we have them (final at Stop, running while farming)
     local live = not gf.synced and not s.gsplit and not s.stop and C.groupLive and C.Now and (GetTime and GetTime() or 0) - C.groupLive.t < 60 and C.groupLive

@@ -918,9 +918,7 @@ function C.StopSession(at, why, silent, fromParty)
     C.Print(string.format("|cffffc54aFarm split|r (%s): the group looted %s, %s each (from the shared log, the same on every widget).",
       s.label or "farm", C.Money(total), C.Money(each)))
     if C.Admin() then
-      for who, v in pairs(by) do C.Print(string.format("   %s: %s (loot minus potions used)", who, C.Money(v))) end
-    elseif (t.used or 0) > 0 then
-      C.Print(string.format("   The group used %s in consumables, shared evenly.", C.Money(t.used)))
+      for who, v in pairs(by) do C.Print(string.format("   %s: %s looted", who, C.Money(v))) end
     end
     if #transfers == 0 then C.Print("   Everyone is even: nobody owes anything.") end
     for _, tr in ipairs(transfers) do C.Print(string.format("   |cff7CFC00%s pays %s %s|r", tr.from, tr.to, C.Money(tr.amt))) end
@@ -1394,9 +1392,10 @@ function C.GroupFarm(s)
     end
     by[who] = v; items = items + v
   end
-  -- byLooter: what each looted minus what each used (the split evens these out)
-  local used = usedBy(s, by)
-  return { coin = s.g.coin, items = items, used = used, net = s.g.coin + items - used, kills = s.kills, byLooter = by }
+  -- 1.0.0 (Taylor): consumables are each player's own stat, never part of the split
+  -- (the shared farm has worked this way since 1.2.8; now the plain group farm does too)
+  local used = usedBy(s, nil)
+  return { coin = s.g.coin, items = items, used = used, net = s.g.coin + items, kills = s.kills, byLooter = by }
 end
 
 

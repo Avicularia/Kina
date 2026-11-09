@@ -113,7 +113,7 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "share" then if C.Mentor then C.Mentor.Share(); C.Mentor.CopyBox() end
   elseif cmd == "link" then if C.Mentor then C.Mentor.CopyBox() end
-  elseif cmd == "mentor" or cmd == "welcome" then if C.Mentor then C.Mentor.ShowPicker() end
+  elseif cmd == "mentor" then if C.Mentor then C.Mentor.ShowPicker() end
   elseif cmd == "tracker" then
     -- 0.9.20: /kina tracker [on | off]
     local a = rest:lower()

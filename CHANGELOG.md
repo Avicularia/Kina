@@ -1,3 +1,13 @@
+# Kina 1.0.0
+
+- Kina is out of beta.
+- Consumables are your own stat; they're no longer part of any split.
+- The tour can't be clicked through to Kina's windows, and the data notice waits until it ends.
+- The volume slider plays its sound once, after you let go.
+- Your Kina Partner is a row in Your record (no more overlapping text).
+- "/h" after the gold per hour on the widget.
+- The farm stats line posts to party chat for any farm, not only shared ones.
+
 # Kina 0.9.23 (beta)
 
 - The widget shows your character's XP per hour, with kills underneath.
