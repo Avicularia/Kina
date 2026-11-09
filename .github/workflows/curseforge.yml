@@ -60,7 +60,7 @@ jobs:
           META=$(jq -n --rawfile notes notes.md --arg name "Kina $VER" --argjson gv "$GV" \
             '{changelog: $notes, changelogType: "markdown", displayName: $name, gameVersions: [$gv], releaseType: "release"}')
           CODE=$(curl -s -o result.json -w "%{http_code}" -H "X-Api-Token: $CF_API_KEY" \
-            -F "metadata=$META" -F "file=@Kina-$VER.zip" \
+            --form-string "metadata=$META" -F "file=@Kina-$VER.zip" \
             "https://wow.curseforge.com/api/projects/$PID/upload-file")
           echo "CurseForge answered HTTP $CODE:"; cat result.json; echo
           [ "$CODE" = "200" ] || exit 1
