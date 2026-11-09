@@ -142,7 +142,7 @@ end
 local sender = CreateFrame("Frame")
 S.sender = sender
 sender:Hide()
-sender:SetScript("OnUpdate", function(self, dt)
+C.GuardScript(sender, "OnUpdate", "Share:145", function(self, dt)
   tick = tick + dt
   if tick >= 1 then tick = 0; tokens = math.min(6, tokens + 1) end
   if #queue == 0 then self:Hide(); return end
@@ -424,6 +424,7 @@ function S.MyFlags()
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
   return ((ok and m and m.everBlack) and "b" or "") .. (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
     .. ((C.TrackOnly and C.TrackOnly()) and "t" or "") -- 0.9.20: tracker only
+    .. ((C.Unlocked and C.Unlocked() and C.PUBLIC) and "d" or "") -- 0.9.23: a team (dev) install
 end
 local standCache, standAt = nil, 0
 function S.MyXP()
@@ -495,7 +496,7 @@ function S.ProfileOf(name)
   local nt = S.Notable(name)
   return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = ch, ver = best.ver, build = best.build,
     scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil,
-    recruits = best.recruits, xp = best.xp }
+    recruits = best.recruits, xp = best.xp, dev = best.dev }
 end
 function S.CharOf(name)
   local best, want = authorFor(name)
@@ -582,7 +583,11 @@ local function onHello(from, rest, channel)
   -- 0.9.1 (security): only a Kina in my group can tell mine it's out of date, and only by
   -- a believable jump (a fake hello claiming build 999999 used to freeze everyone)
   local b = tonumber(f[17])
-  if b and inMyGroup(from) and b <= (C.BUILD or 0) + BUILD_JUMP and b > (S.newestBuild or C.BUILD or 0) then
+  -- 0.9.23 (Taylor): a dev build (team code entered, flag "d") never freezes anyone or
+  -- says "a new Kina is out": only builds people can actually download do that
+  local isDev = type(f[16]) == "string" and f[16]:find("d", 1, true) ~= nil
+  a.dev = isDev or nil
+  if b and not isDev and inMyGroup(from) and b <= (C.BUILD or 0) + BUILD_JUMP and b > (S.newestBuild or C.BUILD or 0) then
     S.newestBuild = b; S.newestVer = a.ver
   end
   -- 0.9.20: say so when a Kina user in my group is (or stops being) tracker only
@@ -1212,12 +1217,12 @@ end
 -- or GitHub), so Kina asks every Kina it can reach (group and guild) for its version,
 -- waits a few seconds, and compares the newest build it has heard of, from anyone,
 -- in the last two weeks. The CurseForge app also updates Kina on its own.
-C.UPDATE_URL = "github.com/Avicularia/Kina/releases"
+C.UPDATE_URL = "curseforge.com/wow/addons/kina-farm-groups-and-gold-splits" -- 0.9.23: the CurseForge page
 function S.NewestHeard()
   local best, from, at
   for _, a in pairs(db().authors or {}) do
     local b = tonumber(a.build)
-    if b and b > (C.BUILD or 0) and b <= (C.BUILD or 0) + BUILD_JUMP and C.Now() - (a.seen or 0) < 14 * 86400 and (not best or b > best.build) then
+    if b and not a.dev and b > (C.BUILD or 0) and b <= (C.BUILD or 0) + BUILD_JUMP and C.Now() - (a.seen or 0) < 14 * 86400 and (not best or b > best.build) then
       best = { build = b, ver = a.ver, who = a.name, seen = a.seen }
     end
   end
@@ -1338,11 +1343,11 @@ C.On("INIT", function()
   if C.OnMarket then C.OnMarket(function() S.InvalidateMarket(); S.Announce(true) end) end
   C.After(15, function() S.Announce(true) end)
   if C_Timer and C_Timer.NewTicker then
-    C_Timer.NewTicker(HELLO_EVERY, function() S.InvalidateMarket(); S.Announce(false) end)
-    C_Timer.NewTicker(120, function()
+    C_Timer.NewTicker(HELLO_EVERY, C.Safe("hello timer", function() S.InvalidateMarket(); S.Announce(false) end))
+    C_Timer.NewTicker(120, C.Safe("share timer", function()
       local now = GetTime()
       for key, b in pairs(incoming) do if now - b.time > 600 then incoming[key] = nil end end
-    end)
+    end))
   end
 end)
 

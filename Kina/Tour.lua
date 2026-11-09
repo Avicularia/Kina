@@ -54,7 +54,7 @@ local function overlay()
   ov.link = ov:CreateTexture(nil, "OVERLAY"); ov.link:SetColorTexture(1, 0.66, 0.14, 0.9)
   ov.dot = ov:CreateTexture(nil, "OVERLAY"); ov.dot:SetSize(7, 7); ov.dot:SetColorTexture(1, 0.75, 0.36, 1)
   local acc = 0
-  ov:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(ov, "OnUpdate", "Tour:57", function(_, el)
     acc = acc + el
     local a = 0.55 + 0.45 * math.abs(math.sin(acc * 2.2))
     for _, t in ipairs(ov.edge) do t:SetAlpha(a) end

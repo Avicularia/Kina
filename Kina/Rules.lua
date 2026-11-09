@@ -172,7 +172,7 @@ C.On("PLAYER_LOGIN", function()
     C.After(8, function() pcall(U.FreezeCheck); pcall(U.Check) end)
   end
   local f = CreateFrame("Frame"); local acc = 0
-  f:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(f, "OnUpdate", "Rules:175", function(_, el)
     acc = acc + el; if acc < 15 then return end; acc = 0
     if InCombatLockdown and InCombatLockdown() then return end
     pcall(U.FreezeCheck); pcall(U.Check)

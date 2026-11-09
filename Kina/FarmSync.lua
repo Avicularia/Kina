@@ -220,7 +220,7 @@ function F.Split(by) return Core.Split(by) end
 -- the clock
 local ticker = CreateFrame("Frame")
 local acc = 0
-ticker:SetScript("OnUpdate", function(_, dt)
+C.GuardScript(ticker, "OnUpdate", "FarmSync:223", function(_, dt)
   acc = acc + dt
   if acc < 1 then return end
   acc = 0

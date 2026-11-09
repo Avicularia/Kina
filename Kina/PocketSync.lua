@@ -30,7 +30,7 @@ end
 local THROTTLED = Enum and Enum.SendAddonMessageResult and Enum.SendAddonMessageResult.AddonMessageThrottle
 local tokens, tokenTimer = 5, 0
 local sender = CreateFrame("Frame")
-sender:SetScript("OnUpdate", function(_, dt)
+C.GuardScript(sender, "OnUpdate", "PocketSync:33", function(_, dt)
   tokenTimer = tokenTimer + dt
   if tokenTimer >= 1 then tokenTimer = 0; tokens = math.min(5, tokens + 1) end
   if tokens < 1 or #queue == 0 then return end
@@ -123,17 +123,17 @@ function P.RestartSyncTimers()
   if p ~= partyMins then
     partyMins = p
     if partyTicker then partyTicker:Cancel() end
-    partyTicker = C_Timer.NewTicker(p * 60, function()
+    partyTicker = C_Timer.NewTicker(p * 60, C.Safe("pocket party timer", function()
       local ch = groupChannel()
       if ch and P.Active() and P.DB().opts.shareLoot then announceTo(ch, true) end
-    end)
+    end))
   end
   if g ~= guildMins then
     guildMins = g
     if guildTicker then guildTicker:Cancel() end
-    guildTicker = C_Timer.NewTicker(g * 60, function()
+    guildTicker = C_Timer.NewTicker(g * 60, C.Safe("pocket guild timer", function()
       if IsInGuild and IsInGuild() and P.Active() and P.DB().opts.shareLoot then announceTo("GUILD", true) end
-    end)
+    end))
   end
 end
 
@@ -372,10 +372,10 @@ P.OnStart = function()
   groupSize = GetNumGroupMembers and GetNumGroupMembers() or 0
   C.After(20, function() announce(true) end)
   P.RestartSyncTimers()
-  C_Timer.NewTicker(120, function()
+  C_Timer.NewTicker(120, C.Safe("pocket timer", function()
     local now = GetTime()
     for key, d in pairs(incoming) do if now - d.time > 600 then incoming[key] = nil end end
-  end)
+  end))
 end
 
 function P.SyncNow()

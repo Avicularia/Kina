@@ -151,7 +151,7 @@ local function watchTarget()
 end
 local poll = CreateFrame("Frame")
 local acc, accPlates = 0, 0
-poll:SetScript("OnUpdate", function(_, elapsed)
+C.GuardScript(poll, "OnUpdate", "Loot:154", function(_, elapsed)
   acc = acc + elapsed
   if acc < 0.25 or not C.ready then return end
   accPlates = accPlates + acc
@@ -1574,11 +1574,18 @@ end
 -- shown as XP/h on the widget and in the Session list, and as "XP/h this week" on You.
 do
   local lastXP, lastMax, lastLvl
-  local function snapshot() lastXP, lastMax, lastLvl = UnitXP and UnitXP("player") or 0, UnitXPMax and UnitXPMax("player") or 0, UnitLevel and UnitLevel("player") or 0 end
+  -- 0.9.21: secret-safe (unit values can be secret in dungeons on Forever)
+  local function read()
+    local xp, mx, lv = C.Plain(UnitXP and UnitXP("player")), C.Plain(UnitXPMax and UnitXPMax("player")), C.Plain(UnitLevel and UnitLevel("player"))
+    if type(xp) ~= "number" or type(mx) ~= "number" or type(lv) ~= "number" then return nil end
+    return xp, mx, lv
+  end
+  local function snapshot() local xp, mx, lv = read(); if xp then lastXP, lastMax, lastLvl = xp, mx, lv end end
   C.On("PLAYER_ENTERING_WORLD", snapshot)
   C.On("PLAYER_XP_UPDATE", function(_, unit)
     if unit and unit ~= "player" then return end
-    local xp, mx, lv = UnitXP("player") or 0, UnitXPMax("player") or 0, UnitLevel("player") or 0
+    local xp, mx, lv = read()
+    if not xp then return end
     if lastXP then
       local gained = (lv > (lastLvl or lv)) and ((lastMax or 0) - (lastXP or 0) + xp) or (xp - lastXP)
       local s = C.session

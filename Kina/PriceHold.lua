@@ -196,7 +196,7 @@ end
 -- every few seconds: did my scan finish? did the leader go quiet? is it 24 hours old?
 local acc = 0
 local ticker = CreateFrame("Frame")
-ticker:SetScript("OnUpdate", function(_, el)
+C.GuardScript(ticker, "OnUpdate", "PriceHold:199", function(_, el)
   acc = acc + el; if acc < 5 then return end; acc = 0
   if not (C.db and C.db.sessions) then return end
   for i = 1, math.min(#C.db.sessions, 10) do

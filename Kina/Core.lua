@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "0.9.20"
+C.version = "0.9.23"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 175
+C.BUILD = 178
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -18,6 +18,44 @@ function C.VersionNewer(a, b)
   return false
 end -- Public Kina
 C.PUBLIC = true
+-- 0.9.22 (Taylor: in dungeons Kina could "spaz out" so your inputs barely worked): the
+-- safety net for everything that runs every frame, on a timer or in a game hook. Game
+-- events were already guarded; these weren't. An error is logged (Kina.lua > errlog),
+-- never thrown to the game, and a piece that keeps failing is switched off for the
+-- session, so an error can never repeat 60 times a second. /reload brings it back.
+local TRIP = 3
+local guardSaid = false
+local function tripped(name)
+  if guardSaid then return end
+  guardSaid = true
+  if C.Print then pcall(C.Print, "|cffff8040one part of Kina hit an error and was switched off so your game keeps running smoothly (" .. tostring(name) .. ").|r /reload brings it back. Please report it with your Kina version.") end
+end
+local function note(name, err) if C.LogError then pcall(C.LogError, name, err) end end
+-- a function that can never throw; after TRIP errors it does nothing for the session
+function C.Safe(name, fn)
+  if type(fn) ~= "function" then return fn end
+  local errs, off = 0, false
+  return function(...)
+    if off then return end
+    local ok, a, b, c = pcall(fn, ...)
+    if ok then return a, b, c end
+    errs = errs + 1; note(name, a)
+    if errs >= TRIP then off = true; tripped(name) end
+  end
+end
+-- frame:SetScript(script, fn) with the same net; a script that keeps failing is removed
+function C.GuardScript(frame, script, name, fn)
+  if not frame then return end
+  if type(fn) ~= "function" then return frame:SetScript(script, fn) end
+  local errs = 0
+  frame:SetScript(script, function(...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+      errs = errs + 1; note(name, err)
+      if errs >= TRIP then pcall(frame.SetScript, frame, script, nil); tripped(name) end
+    end
+  end)
+end
 -- Your bags: the backpack, 4 bags, and the reagent bag where the client has one
 -- (cloth, meat and other reagents go there automatically).
 function C.PlayerBags()
@@ -58,13 +96,15 @@ function C.TryUnlock(text)
   if text == "" then return nil end
   if keyOf(text) == ADMIN_KEY then
     C.settings.adminUnlocked = true
-    C.Print("|cff33ff66team code accepted:|r the Try buttons are on (You tab).")
+    C.Print("|cff33ff66team code accepted:|r the Try buttons are on (You tab), and this is a dev install: it never freezes other players' Kinas.")
+    if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
     return true
   end
   if C.settings.adminUnlocked then
     C.settings.adminUnlocked = nil
     if C.Cos and C.Cos.preview then for k in pairs(C.Cos.preview) do C.Cos.preview[k] = nil end end
     C.Print("the Try buttons are off.")
+    if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
   else C.Print("|cffff8040that code isn't right.|r") end
   return false
 end
@@ -541,7 +581,7 @@ function C.ScaleGrip(f, key)
     self.startX = GetCursorPosition()
     self.startScale = f:GetScale()
     self.width = math.max(100, f:GetWidth()) * eff -- the window's width on screen at the press
-    self:SetScript("OnUpdate", function(g)
+    C.GuardScript(self, "OnUpdate", "Core:582", function(g)
       local cx = GetCursorPosition()
       local scale = g.startScale * (1 + (cx - g.startX) / g.width)
       scale = math.max(SCALE_MIN, math.min(SCALE_MAX, scale))
@@ -574,7 +614,7 @@ end
 local jobs = {}
 local runner = CreateFrame("Frame")
 runner:Hide()
-runner:SetScript("OnUpdate", function(self)
+C.GuardScript(runner, "OnUpdate", "Core:615", function(self)
   local job = jobs[1]
   if not job then self:Hide(); return end
   local ok, done = pcall(job)
@@ -587,7 +627,9 @@ end)
 function C.Job(fn) table.insert(jobs, fn); runner:Show() end
 
 function C.After(sec, fn)
-  if C_Timer and C_Timer.After then C_Timer.After(sec, fn) else fn() end
+  -- 0.9.22: a timer can never throw into the game
+  local safe = function() local ok, err = pcall(fn); if not ok and C.LogError then pcall(C.LogError, "timer", err) end end
+  if C_Timer and C_Timer.After then C_Timer.After(sec, safe) else safe() end
 end
 
 -- 0.9.11: say so when this realm's Kina profile is new (or an old one came back)

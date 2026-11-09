@@ -412,7 +412,7 @@ local function onEvent(_, event, ...)
 end
 ev:SetScript("OnEvent", function(...) local ok, err = pcall(onEvent, ...); if not ok and C.debug then C.Print("pockets: " .. tostring(err)) end end)
 local acc = 0
-ev:SetScript("OnUpdate", function(_, el)
+C.GuardScript(ev, "OnUpdate", "Pockets:415", function(_, el)
   acc = acc + el; if acc < 0.25 then return end; acc = 0
   if P.Active() then pcall(P.RefreshBadges) end
 end)
@@ -460,7 +460,7 @@ C.On("PLAYER_LOGIN", function() P.Start() end)
 -- while standing by, keep the mirror fresh (Kaydee's records as you play)
 local mirrorTick = CreateFrame("Frame")
 local macc = 0
-mirrorTick:SetScript("OnUpdate", function(_, el)
+C.GuardScript(mirrorTick, "OnUpdate", "Pockets:463", function(_, el)
   macc = macc + el; if macc < 60 then return end; macc = 0
   if P.standby then P.MirrorKaydee(false) end
 end)

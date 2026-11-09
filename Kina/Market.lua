@@ -241,7 +241,7 @@ C.On("AUCTION_HOUSE_CLOSED", function() C.ahOpen = false; C.scanLoop = false; vi
 -- (same rule as ForeverForge) so a half-delivered scan is never read as the market.
 local waiter = CreateFrame("Frame")
 waiter:Hide()
-waiter:SetScript("OnUpdate", function(self)
+C.GuardScript(waiter, "OnUpdate", "Market:244", function(self)
   local now = GetTime and GetTime() or 0
   local n = (AH and AH.GetNumReplicateItems and AH.GetNumReplicateItems()) or 0
   -- still growing = still arriving: keep waiting (up to 3 minutes of no change)

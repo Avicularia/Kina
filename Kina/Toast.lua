@@ -23,7 +23,7 @@ local function build()
   f.line2 = f:CreateFontString(nil, "OVERLAY"); f.line2:SetFont(font, 12, ""); f.line2:SetPoint("TOP", f.line1, "BOTTOM", 0, -4)
   f:Hide()
   local t = 0
-  f:SetScript("OnUpdate", function(self, el)
+  C.GuardScript(f, "OnUpdate", "Toast:26", function(self, el)
     t = t + el
     if t > 6 then self:SetAlpha(math.max(0, 1 - (t - 6))) end
     if t > 7 then self:Hide() end
@@ -170,7 +170,7 @@ do
   end
   local t = 0
   local f = CreateFrame("Frame")
-  f:SetScript("OnUpdate", function(_, el) t = t + el; if t >= 30 then t = 0; if not (InCombatLockdown and InCombatLockdown()) then check() end end end)
+  C.GuardScript(f, "OnUpdate", "Toast:173", function(_, el) t = t + el; if t >= 30 then t = 0; if not (InCombatLockdown and InCombatLockdown()) then check() end end end)
 end
 
 -- 1.2.9: the group ad. During a shared farm the farm leader's Kina posts one line to
@@ -203,7 +203,7 @@ do
   end
   local f = CreateFrame("Frame")
   local t = 0
-  f:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(f, "OnUpdate", "Toast:206", function(_, el)
     t = t + el; if t < 5 then return end; t = 0
     local now = GetTime and GetTime() or 0
     if not (C.session and C.session.sync) then nextAt = nil; return end

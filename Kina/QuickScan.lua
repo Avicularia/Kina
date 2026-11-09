@@ -72,7 +72,7 @@ C.On("AUCTION_HOUSE_CLOSED", function() if Q.active then finish("auction house c
 
 -- no answer for 4 s: Forever wants a click for the next page (or the search ended)
 local watch = CreateFrame("Frame")
-watch:SetScript("OnUpdate", function()
+C.GuardScript(watch, "OnUpdate", "QuickScan:75", function()
   if not Q.active or Q.needClick then return end
   local t = now()
   if t - (Q.t0 or t) > 180 then finish("stopped after 3 minutes"); return end

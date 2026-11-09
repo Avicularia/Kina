@@ -1,3 +1,16 @@
+# Kina 0.9.23 (beta)
+
+- The widget shows your character's XP per hour, with kills underneath.
+- XP tracking is safe in dungeons.
+- The nameplate glow fades out softly instead of ending in a flat line.
+- Dungeon safety: no part of Kina can flood errors or slow your game; a failing piece switches itself off.
+- Party icons show who has Kina; click someone without it to share Kina in party chat.
+- A copy box for Kina's link (/kina link).
+- Kina's links now point to its CurseForge page.
+- Test builds never freeze other players or announce an update they can't get.
+- The Kina Founder laurel for the Kina team.
+- New players pick who showed them Kina, with animated rings; that player earns the mentor star.
+
 # Kina 0.9.20 (beta)
 
 - Tracker only (Settings or /kina tracker): track your farms with no splits, debts or Kina XP; your group is told.

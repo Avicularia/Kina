@@ -286,8 +286,8 @@ local function install()
       -- 0.9.9: a refresh (the game redraws bag items' tooltips several times a second)
       -- clears and refills the tooltip in one go. Kina's tooltip and the hidden game one
       -- stay as they are through it; only if the refill wasn't an item does it let go.
-      tip:HookScript("OnTooltipCleared", function(self) shown[self] = nil end)
-      tip:HookScript("OnHide", function(self) shown[self] = nil; release(self) end)
+      tip:HookScript("OnTooltipCleared", C.Safe("tooltip clear", function(self) shown[self] = nil end))
+      tip:HookScript("OnHide", C.Safe("tooltip hide", function(self) shown[self] = nil; release(self) end))
       -- 0.9.17 (Taylor: loot-roll tooltips showed both at once): some tooltips (a loot
       -- roll, the AH) are refilled every frame, and their data can land a frame after the
       -- clear. Kina only lets go when the tooltip is no longer showing an item at all, and
@@ -296,14 +296,14 @@ local function install()
         local ok, _, link = pcall(self.GetItem, self)
         return ok and link ~= nil
       end
-      tip:HookScript("OnUpdate", function(self)
+      tip:HookScript("OnUpdate", C.Safe("tooltip hold", function(self)
         if not active[self] then return end
         if not C.settings.tipOnly or (shown[self] == nil and not stillItem(self)) then release(self); return end
         if self:GetAlpha() > 0 then self:SetAlpha(0) end
-      end)
+      end))
       if hooksecurefunc then
         local guard
-        local function hold(self) if active[self] and not guard and self:GetAlpha() > 0 then guard = true; self:SetAlpha(0); guard = nil end end
+        local hold = C.Safe("tooltip show", function(self) if active[self] and not guard and self:GetAlpha() > 0 then guard = true; self:SetAlpha(0); guard = nil end end)
         hooksecurefunc(tip, "Show", hold)
         hooksecurefunc(tip, "SetAlpha", hold)
       end
@@ -311,13 +311,13 @@ local function install()
   end
   local TDP = TooltipDataProcessor
   if TDP and TDP.AddLinePostCall and Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.SellPrice then
-    TDP.AddLinePostCall(Enum.TooltipDataLineType.SellPrice, function(tip) local _, d = pcall(function() return tip.GetPrimaryTooltipData and tip:GetPrimaryTooltipData() end); handle(tip, d) end)
+    TDP.AddLinePostCall(Enum.TooltipDataLineType.SellPrice, C.Safe("tooltip price", function(tip) local _, d = pcall(function() return tip.GetPrimaryTooltipData and tip:GetPrimaryTooltipData() end); handle(tip, d) end))
   end
   if TDP and TDP.AddTooltipPostCall and Enum and Enum.TooltipDataType then
-    TDP.AddTooltipPostCall(Enum.TooltipDataType.Item, handle)
+    TDP.AddTooltipPostCall(Enum.TooltipDataType.Item, C.Safe("tooltip item", handle))
   else
     for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
-      if tip and tip.HookScript then tip:HookScript("OnTooltipSetItem", function(self) handle(self) end) end
+      if tip and tip.HookScript then tip:HookScript("OnTooltipSetItem", C.Safe("tooltip item", function(self) handle(self) end)) end
     end
   end
 end

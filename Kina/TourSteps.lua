@@ -58,7 +58,7 @@ local STEPS = {
     body = G .. "NET|r  everything the group made.\n"
       .. G .. "COIN|r  gold looted (the game already splits coin).\n"
       .. G .. "LOOT|r  items, each at its best price: auction house, vendor or disenchant.\n"
-      .. G .. "KILLS|r  every mob the group killed.\n\n"
+      .. G .. "XP / HOUR|r  your character's experience per hour, with the kills underneath (kills at max level).\n\n"
       .. "Everyone in the farm sees the same numbers, from the same log.",
     target = widget("tNet", "tKills") },
 

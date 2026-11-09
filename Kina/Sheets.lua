@@ -232,6 +232,7 @@ local function youPage(p, them)
     if type(stand) == "number" and C.Rep then sname, sat, snext = C.Rep.StandingOf(stand) end
     local klv = pr and pr.kinaLv
     if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1, pr and pr.recruits); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
+      if C.Cos.SetFounder then C.Cos.SetFounder(cos, pr and pr.dev) end
       cos.xpF:Hide(); cos.stF:Hide() end
     name:SetText(who)
     local cls = ch and ch.class and (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ch.class] or ch.class)
@@ -245,7 +246,8 @@ local function youPage(p, them)
       local old = pr and pr.ver and ((pr.build or 0) < newest)
       C.Rules.Cover(p, old and true or false, "THEIR KINA IS OUT OF DATE\n\n|cffffffffThey earn no XP or standing until they update.|r")
     end
-    lvl:SetText((klv == -1) and (ORANGE .. "Kina log damaged|r") or (GOLD .. "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1) .. "|r"))
+    lvl:SetText(((klv == -1) and (ORANGE .. "Kina log damaged|r") or (GOLD .. "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1) .. "|r"))
+      .. ((pr and pr.dev) and ("\n" .. C.Cos.FOUNDER) or ""))
     -- 0.9.17 (Taylor): their XP toward the next level, when their Kina shares it
     local txp, lv1 = pr and tonumber(pr.xp), (klv and klv > 0) and klv or 1
     local lo, hi = C.Rep.XPFor and C.Rep.XPFor(lv1), C.Rep.XPFor and C.Rep.XPFor(lv1 + 1)
@@ -308,7 +310,8 @@ local function youPage(p, them)
     name:SetText(me.name or "You")
     line:SetText(string.format("Level %s %s", tostring(me.level or "?"), me.className or "?"))
     local m = C.Rep and C.Rep.Mine() or { level = 1, xp = 0, ok = true }
-    lvl:SetText(m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
+    lvl:SetText((m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
+      .. (C.Cos.IsFounder(nil) and ("\n" .. C.Cos.FOUNDER) or ""))
     if C.Cos then
       makeCos()
       -- 0.9.20: the Try previews only when unlocked (admin password in Settings)
@@ -321,6 +324,7 @@ local function youPage(p, them)
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       C.Cos.UpdatePortrait(cos, pv.ring or m.standing, pv.level or m.level, recruits, starter)
       cos.plate:Show(); cos.num:Show()
+      if C.Cos.SetFounder then C.Cos.SetFounder(cos, C.Cos.IsFounder(nil)) end
       local stName = pv.ring or m.standing or "Unproven"
       local vn, _, vbad = 0, nil, 0
       if C.Vouch then vn, _, vbad = C.Vouch.Counts() end
@@ -372,7 +376,7 @@ builders.them = function(p) return youPage(p, true) end
 builders.debts = function(p)
   -- 1.2.3: keep the page live (due dates, payments and answers arriving while it's open)
   local tick = 0
-  p:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(p, "OnUpdate", "Sheets:375", function(_, el)
     tick = tick + el; if tick < 2 then return end; tick = 0
     if InCombatLockdown and InCombatLockdown() then return end
     if p.refresh then pcall(p.refresh) end

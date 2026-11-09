@@ -77,7 +77,42 @@ function M.Eligible()
 end
 
 ------------------------------------------------------------------ sharing the link
-local SHARE_TEXT = "Kina: a free farming partner add-on for WoW Forever. Shared loot log, fair splits, one-click debts. Get it: %s"
+-- 0.9.23: a party message that works without copying anything (chat links can't be
+-- clicked or copied without add-ons): what to search for, then the link
+local SHARE_TEXT = "Kina: free farm tracker and loot splitter for WoW Forever. Search \"Kina Farm Groups\" in the CurseForge app: %s"
+function M.Link() return C.UPDATE_URL or "curseforge.com/wow/addons/kina-farm-groups-and-gold-splits" end
+
+-- 0.9.23 (Taylor, like RestedXP's video link): a box with the link selected, Ctrl+C to copy
+function M.CopyBox(title)
+  local link = M.Link()
+  if not StaticPopupDialogs then return end
+  if not StaticPopupDialogs.KINA_COPY then
+    local function eb(self) return self.editBox or self.EditBox or (self.GetEditBox and self:GetEditBox()) end
+    StaticPopupDialogs.KINA_COPY = {
+      text = "%s", button1 = OKAY or "Okay", hasEditBox = 1, editBoxWidth = 300,
+      timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+      OnShow = function(self, data)
+        local e = eb(self); if not e then return end
+        e:SetText(M.Link()); e:HighlightText(); if e.SetFocus then e:SetFocus() end
+      end,
+      EditBoxOnTextChanged = function(e) if e:GetText() ~= M.Link() then e:SetText(M.Link()); e:HighlightText() end end,
+      EditBoxOnEnterPressed = function(e) local p = e:GetParent(); if p then p:Hide() end end,
+      EditBoxOnEscapePressed = function(e) local p = e:GetParent(); if p then p:Hide() end end,
+    }
+  end
+  C.ShowPopup("KINA_COPY", title or "Press Ctrl+C to copy Kina's link")
+end
+-- clicking someone without Kina (the party strip): share in party chat, then the copy box
+local sharedThisSession = {}
+function M.ShareTo(name)
+  local f = first(name)
+  if f and not sharedThisSession[f] then
+    if M.Share() then sharedThisSession[f] = true end
+  elseif f then
+    C.Print(string.format("you already shared Kina with %s this session: here's the link to copy.", f))
+  end
+  M.CopyBox("Shared in party chat. Press Ctrl+C to copy the link")
+end
 local lastShare = 0
 function M.Share()
   local inRaid = IsInRaid and IsInRaid()
@@ -86,7 +121,7 @@ function M.Share()
   local now = GetTime and GetTime() or 0
   if now - lastShare < 60 then C.Print("you just shared Kina: give it a minute."); return false end
   lastShare = now
-  if SendChatMessage then pcall(SendChatMessage, string.format(SHARE_TEXT, C.UPDATE_URL or "github.com/Avicularia/Kina/releases"), inRaid and "RAID" or "PARTY") end
+  if SendChatMessage then pcall(SendChatMessage, string.format(SHARE_TEXT, M.Link()), inRaid and "RAID" or "PARTY") end
   -- remember who was there (first share to each player wins; kept 30 days)
   local d = db(); d.shared = d.shared or {}
   local n = 0
@@ -126,25 +161,56 @@ end
 -- the new player's side: collect the "I shared with you" claims for a little while after
 -- first contact, then the earliest sharer still in the party gets it
 local window, claims
+-- 0.9.23 (Taylor, mock approved): the new player picks who showed them Kina, from the
+-- Kina users in their party and those they met in the last 7 days. Whoever shared the
+-- link in party chat is highlighted (a hint: the new player decides).
+local RECENT = 7 * 86400
+function M.Candidates()
+  local out, seen = {}, {}
+  local S = C.Share
+  local my = S and S.UID and S.UID()
+  for uid, a in pairs(S and S.DB and S.DB().authors or {}) do
+    local nm = first((a.char and a.char.from) or a.name)
+    if nm and uid ~= my and not seen[nm] and not C.IsMyChar(nm) and a.seen and C.Now() - a.seen < RECENT then
+      seen[nm] = true
+      out[#out + 1] = { name = nm, uid = uid, seen = a.seen, here = C.InGroupName and C.InGroupName(nm) or false, shared = claims and claims[nm] }
+    end
+  end
+  table.sort(out, function(x, y)
+    if (x.shared ~= nil) ~= (y.shared ~= nil) then return x.shared ~= nil end
+    if x.shared and y.shared and x.shared ~= y.shared then return x.shared < y.shared end
+    if x.here ~= y.here then return x.here end
+    return (x.seen or 0) > (y.seen or 0)
+  end)
+  while #out > 4 do table.remove(out) end
+  return out
+end
+function M.Pick(name)
+  local d = db()
+  if d.done then return false end
+  d.decided = C.Now()
+  local f = first(name)
+  if f and not C.IsMyChar(f) then
+    d.target = f
+    C.Print(string.format("|cffffc54a%s showed you Kina:|r they earn a mentor star once you finish your first farm of 15 minutes or more.", f))
+    M.Try()
+  else
+    d.target = nil
+    C.Print("got it: you found Kina yourself. Welcome!")
+  end
+  if M.picker then M.picker:Hide() end
+  return true
+end
 local function decide()
   local d = db()
-  if d.decided then return end
-  d.decided = C.Now()
-  local best, bt
-  for who, t in pairs(claims or {}) do
-    if C.InGroupName and C.InGroupName(who) and not C.IsMyChar(who) and (not bt or t < bt) then best, bt = who, t end
-  end
-  if best then
-    d.target = best
-    C.Print(string.format("%s shared Kina with you: they get the credit after your first farm of 15 minutes or more.", best))
-  end
-  claims = nil
-  M.Try()
+  if d.decided or d.done then return end
+  if #M.Candidates() == 0 then return end
+  if M.ShowPicker then pcall(M.ShowPicker) end
 end
 local function onClaim(from, rest)
   local uid, t, recruit = rest:match("^(%x+)|(%d+)|([^|]+)$")
   local d = db()
-  if not uid or d.decided or not d.eligible or first(recruit) ~= me() then return end
+  if not uid or d.done or not d.eligible or first(recruit) ~= me() then return end
   t = tonumber(t)
   if not t or t > C.Now() + 60 then return end
   claims = claims or {}
@@ -225,7 +291,7 @@ end)
 -- keep asking now and then until the mentor's Kina answers
 if CreateFrame then
   local t, acc = CreateFrame("Frame"), 0
-  t:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(t, "OnUpdate", "Mentor:228", function(_, el)
     acc = acc + el; if acc < RETRY then return end; acc = 0
     if M.Eligible() and db().qualified then pcall(M.Try) end
   end)
@@ -236,4 +302,70 @@ C.On("GROUP_ROSTER_UPDATE", function() if M.Eligible() and db().qualified then C
 function M.NewFlag()
   local d = db()
   return (d.eligible == true and not d.decided) and "n" or ""
+end
+
+------------------------------------------------------------------ the picker window
+function M.ShowPicker()
+  local d = db()
+  if not d.eligible or d.done then C.Print("this is for brand-new Kina installs."); return end
+  local list = M.Candidates()
+  if not CreateFrame then return end
+  local f = M.picker
+  if not f then
+    f = CreateFrame("Frame", "KinaWelcomePick", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    M.picker = f
+    f:SetSize(440, 340); f:SetPoint("CENTER", 0, 80); f:SetFrameStrata("DIALOG"); f:EnableMouse(true)
+    f:SetMovable(true); f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    if C.Skin and C.Skin.On and C.Skin.On() and C.Skin.Panel then C.Skin.Panel(f, 8)
+    else local bg = f:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.06, 0.05, 0.95) end
+    local np = f:CreateTexture(nil, "ARTWORK"); np:SetSize(210, 60); np:SetPoint("TOP", 0, -10)
+    np:SetTexture(C.Cos.Tex("kina_nameplate")); np:SetTexCoord(0, 1, 0, 295 / 512)
+    local t1 = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); t1:SetPoint("TOP", np, "BOTTOM", 0, -4)
+    if C.Cos.Font then C.Cos.Font(t1, 18, "OUTLINE") end; t1:SetTextColor(1, 0.77, 0.29); t1:SetText("Welcome to Kina!")
+    local t2 = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); t2:SetPoint("TOP", t1, "BOTTOM", 0, -6); t2:SetText("Who showed you Kina?")
+    local t3 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); t3:SetPoint("TOP", t2, "BOTTOM", 0, -6); t3:SetWidth(380)
+    t3:SetText("Pick the player who told you about it. Once you finish your first 15-minute farm, they earn a mentor star on their portrait.")
+    f.cells = {}
+    for i = 1, 4 do
+      local c = CreateFrame("Button", nil, f); c:SetSize(100, 110)
+      c.box = CreateFrame("Frame", nil, c); c.box:SetSize(56, 56); c.box:SetPoint("TOP", 0, -10)
+      c.portrait = c.box:CreateTexture(nil, "ARTWORK")
+      c.cos = C.Cos.Portrait(c.box, c.portrait, { model = true }) -- animated rings, live 3D model when in sight
+      c.glow = c:CreateTexture(nil, "BACKGROUND"); c.glow:SetSize(130, 130); c.glow:SetPoint("CENTER", c.box, "CENTER")
+      c.glow:SetTexture(C.Cos.Tex("fx_round")); c.glow:SetBlendMode("ADD"); c.glow:SetVertexColor(0.3, 1, 0.5); c.glow:SetAlpha(0.45)
+      c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); c.name:SetPoint("TOP", c.box, "BOTTOM", 0, -12); c.name:SetWidth(100)
+      c.sub = c:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); c.sub:SetPoint("TOP", c.name, "BOTTOM", 0, -2); c.sub:SetWidth(110)
+      local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.67, 0.17, 0.08)
+      c:SetScript("OnClick", function(self) local who = f.who and f.who[self]; if who then M.Pick(who) end end)
+      f.cells[i] = c
+    end
+    f.who = setmetatable({}, { __mode = "k" })
+    local nb = CreateFrame("Button", nil, f, "UIPanelButtonTemplate"); if C.Skin and C.Skin.Button then C.Skin.Button(nb) end
+    nb:SetSize(200, 24); nb:SetPoint("BOTTOM", 0, 14); nb:SetText("Nobody, I found it myself")
+    nb:SetScript("OnClick", function() M.Pick(nil) end)
+    local x = CreateFrame("Button", nil, f, "UIPanelCloseButton"); x:SetPoint("TOPRIGHT", 2, 2)
+    f.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable"); f.empty:SetPoint("CENTER", 0, -30)
+    f.empty:SetText("Group up with the player who showed you Kina, and they'll show up here.")
+  end
+  local n = #list
+  for i, c in ipairs(f.cells) do
+    local e = list[i]
+    if e then
+      c:ClearAllPoints(); c:SetPoint("TOP", f, "TOPLEFT", 220 + (i - (n + 1) / 2) * 104, -168)
+      f.who[c] = e.name
+      if C.Profile and C.Profile.SetPortrait then pcall(C.Profile.SetPortrait, c.portrait, e.name) end
+      local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(e.name)
+      local sname = pr and type(pr.stand) == "number" and C.Rep and C.Rep.StandingOf(pr.stand) or "Unproven"
+      C.Cos.UpdatePortrait(c.cos, sname, (pr and pr.kinaLv and pr.kinaLv > 0) and pr.kinaLv or 1, pr and pr.recruits)
+      if C.Cos.SetFounder then C.Cos.SetFounder(c.cos, pr and pr.dev) end
+      c.name:SetText((e.shared and "|cff6ef08c" or "|cffffffff") .. e.name .. "|r")
+      local ago = math.floor((C.Now() - (e.seen or C.Now())) / 86400)
+      c.sub:SetText((e.shared and "|cff6edc8c" or "") .. (e.here and "In your party" or (ago < 1 and "Met today" or string.format("Met %d day%s ago", ago, ago == 1 and "" or "s")))
+        .. (e.shared and " · shared Kina with you|r" or ""))
+      if e.shared and i == 1 then c.glow:Show() else c.glow:Hide() end
+      c:Show()
+    else c:Hide(); f.who[c] = nil end
+  end
+  f.empty:SetShown(n == 0)
+  f:Show()
 end

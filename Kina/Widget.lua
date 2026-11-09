@@ -90,6 +90,31 @@ local function setTile(t, value, sub)
   t.value:SetText(value or "--")
   t.sub:SetText(sub or "")
 end
+-- 0.9.21 (Taylor: "I need in-game exp/hr on the widget"): the fourth tile is character
+-- XP per hour (the game's experience, not Kina XP), with the kills underneath. At max
+-- level there's no XP to earn, so it goes back to kills.
+local function atMax()
+  local ok, lv = pcall(UnitLevel, "player")
+  local okM, mx = pcall(function() return GetMaxPlayerLevel and GetMaxPlayerLevel() end)
+  if not ok or not okM or type(lv) ~= "number" or type(mx) ~= "number" then return false end
+  return lv >= mx
+end
+local function shortXP(n)
+  n = math.floor(n or 0)
+  if n >= 10000 then return string.format("%.1fk", n / 1000) end
+  return BreakUpLargeNumbers and BreakUpLargeNumbers(n) or tostring(n)
+end
+local function setXPTile(t, s, kills, secs)
+  kills = kills or 0
+  if atMax() then
+    t.label:SetText("KILLS")
+    setTile(t, tostring(kills), (secs or 0) >= 60 and string.format("%d / hour", math.floor(kills * 3600 / secs)) or "")
+    return
+  end
+  t.label:SetText("XP / HOUR")
+  local xph = (s and (secs or 0) >= 60) and math.floor((s.gameXP or 0) * 3600 / secs) or nil
+  setTile(t, xph and shortXP(xph) or "--", kills .. (kills == 1 and " kill" or " kills"))
+end
 
 local function refreshPay()
   local due = C.PayDue and C.PayDue()
@@ -158,6 +183,7 @@ end
 -- ring (their Kina level on the plate, a mentor star when they have one); click one for
 -- their Kina profile. Hidden when you're alone.
 local strip
+local NOKINA = setmetatable({}, { __mode = "k" }) -- 0.9.23: cells showing someone without Kina
 local function first(n) return n and (tostring(n):match("^([^%-]+)") or tostring(n)) or "" end
 local function partyStrip()
   if not (C.Cos and C.Cos.Portrait) then return end
@@ -186,10 +212,23 @@ local function partyStrip()
       c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.name:SetPoint("BOTTOM", 0, 0); c.name:SetWidth(70)
       if c.name.SetWordWrap then c.name:SetWordWrap(false) end
       local hl = c:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.67, 0.17, 0.08)
-      c:SetScript("OnClick", function(self) if self.who and C.Profile then C.Profile.Show(self.who) end end)
+      -- 0.9.23: a Kina user opens their profile; someone without Kina gets Kina shared in party chat
+      c:SetScript("OnClick", function(self)
+        if not self.who then return end
+        if NOKINA[self] then if C.Mentor and C.Mentor.ShareTo then C.Mentor.ShareTo(self.who) end
+        elseif C.Profile then C.Profile.Show(self.who) end
+      end)
       c:SetScript("OnEnter", function(self)
         if not (GameTooltip and self.who) then return end
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM"); GameTooltip:AddLine(self.who); GameTooltip:AddLine("Click for their Kina profile", 1, 1, 1); GameTooltip:Show()
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM"); GameTooltip:AddLine(self.who)
+        if NOKINA[self] then
+          GameTooltip:AddLine("Doesn't have Kina yet.", 0.62, 0.62, 0.62)
+          GameTooltip:AddLine("Click to share Kina in party chat.", 0.25, 0.86, 0.43)
+        else
+          if C.Cos and C.Cos.IsFounder and C.Cos.IsFounder(self.who) then GameTooltip:AddLine("Kina Founder", 0.47, 0.71, 1) end
+          GameTooltip:AddLine("Click for their Kina profile", 1, 1, 1)
+        end
+        GameTooltip:Show()
       end)
       c:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
       strip.cells[i] = c
@@ -212,7 +251,10 @@ local function partyStrip()
       local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
       local klv = pr and pr.kinaLv
       C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
+      if C.Cos.SetFounder then C.Cos.SetFounder(c.cos, pr and pr.dev) end
       if klv and klv > 0 then c.cos.plate:Show(); c.cos.num:Show() else c.cos.plate:Hide(); c.cos.num:Hide() end
+      NOKINA[c] = (pr == nil) or nil
+      if C.Cos.SetPlain then C.Cos.SetPlain(c.cos, pr == nil) end
       c.name:SetText((pr and "|cffffffff" or "|cff9d9d9d") .. m.name .. "|r")
       c:Show()
     else c:Hide(); c.who = nil end
@@ -261,8 +303,7 @@ function C.RefreshWidget()
         setTile(w.tCoin, C.Money(v.coin or 0), "game split")
         setTile(w.tLoot, C.Money(v.items or 0), ((v.used or 0) > 0) and ("used " .. C.Money(v.used)) or "split prices")
         -- 1.4.6: the kills tile's second line is game XP per hour (falls back to kills/h)
-        local xph = C.GameXPPerHour and C.GameXPPerHour(s)
-        setTile(w.tKills, tostring(v.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", math.floor((v.kills or 0) * 3600 / secs)) or ""))
+        setXPTile(w.tKills, s, v.kills, secs)
         if s.sync then
           local bw = select(4, bestDrop(s))
           w.status:SetText(bw and ("|cff9d9d9dbest drop: " .. (bw == "the group" and "the group's" or (bw .. "'s")) .. "|r") or "|cff9d9d9dshared with the group|r")
@@ -293,8 +334,7 @@ function C.RefreshWidget()
     if (s.skins or 0) > 0 then extra[#extra + 1] = s.skins .. " skins" end
     if (s.nodes or 0) > 0 then extra[#extra + 1] = s.nodes .. " nodes" end
     setTile(w.tLoot, C.Money(sum.items or 0), table.concat(extra, ", "))
-    local xph = C.GameXPPerHour and C.GameXPPerHour(s)
-    setTile(w.tKills, tostring(sum.kills or 0), xph and C.FmtXPH(xph) or (secs >= 60 and string.format("%d / hour", math.floor((sum.kills or 0) * 3600 / secs)) or ""))
+    setXPTile(w.tKills, s, sum.kills, secs)
     if w.idle then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end
     w.status:SetText(s.limit and ("|cffbbbbbbtimer ends in " .. clock(s.limit - secs) .. "|r") or "")
     w.go:SetText("|cffff8080Stop|r"); w.pause:SetText(s.paused and "Resume" or "Pause")
@@ -313,7 +353,7 @@ function C.RefreshWidget()
       setTile(w.tNet, signed(net), last.gview and "group" or "")
       setTile(w.tCoin, C.Money((last.gview and last.gview.coin) or (last.result and last.result.cash) or 0), "")
       setTile(w.tLoot, C.Money((last.gview and last.gview.items) or (last.result and last.result.items) or 0), "")
-      setTile(w.tKills, tostring(g.kills or 0), "")
+      setXPTile(w.tKills, last, g.kills, secs)
     else
       w.rate:SetText("|cff9d9d9d--|r"); modeWord = nil; setSub("press Start when you begin farming")
       for _, t in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do setTile(t, "--", "") end
@@ -466,7 +506,7 @@ local function build()
       end)
       if sb then sb:SetPoint("TOP", 0, -10); sb:SetHeight(108) end
       vpop.sb = sb
-      vpop:SetScript("OnUpdate", function(self)
+      C.GuardScript(vpop, "OnUpdate", "Widget:492", function(self)
         -- close when the mouse leaves both the slider and the speaker for a moment
         if self:IsMouseOver(8, -8, -8, 8) or (anchor and anchor:IsMouseOver()) then self.away = 0
         else self.away = (self.away or 0) + 1; if self.away > 90 then self:Hide() end end
@@ -500,7 +540,7 @@ local function build()
   w.tNet = makeTile(w, "NET", x0, -72, tw)
   w.tCoin = makeTile(w, "COIN", x0 + (tw + gap), -72, tw)
   w.tLoot = makeTile(w, "LOOT", x0 + (tw + gap) * 2, -72, tw)
-  w.tKills = makeTile(w, "KILLS", x0 + (tw + gap) * 3, -72, tw)
+  w.tKills = makeTile(w, "XP / HOUR", x0 + (tw + gap) * 3, -72, tw)
 
   -- best drop + status
   w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116 - DY)
@@ -703,7 +743,7 @@ local function build()
   end
 
   local acc, tick = 0, 0
-  w:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(w, "OnUpdate", "Widget:729", function(_, el)
     -- big new best drop: the line glows for a moment
     if w.flash and w.flash > 0 then
       w.flash = w.flash - el
@@ -742,7 +782,7 @@ end
 -- The idle/timer stop still works with the widget hidden.
 local ticker = CreateFrame("Frame")
 local tacc = 0
-ticker:SetScript("OnUpdate", function(_, el)
+C.GuardScript(ticker, "OnUpdate", "Widget:768", function(_, el)
   tacc = tacc + el
   if tacc < 5 or not C.ready then return end
   tacc = 0

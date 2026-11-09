@@ -2305,7 +2305,7 @@ local function buildScanBar(f)
   bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   local acc = 0
-  bar:SetScript("OnUpdate", function(self, el)
+  C.GuardScript(bar, "OnUpdate", "UI:2308", function(self, el)
     acc = acc + el; if acc < 0.05 then return end; acc = 0
     local sc = C.scan or { phase = "idle" }
     local now = GetTime and GetTime() or 0
@@ -2816,9 +2816,9 @@ local function buildSettings(f)
   function C.RefreshSettings() for _, fn in ipairs(controls) do pcall(fn) end end
   -- shift-click an item while the Item box has focus puts its link there
   if hooksecurefunc and ChatEdit_InsertLink then
-    hooksecurefunc("ChatEdit_InsertLink", function(link)
+    hooksecurefunc("ChatEdit_InsertLink", C.Safe("chat link", function(link)
       if ui.stockItemBox and ui.stockItemBox:HasFocus() and link then ui.stockItemBox:SetText(link) end
-    end)
+    end))
   end
 end
 
@@ -2850,7 +2850,7 @@ local function build()
     local cx, cy = GetCursorPosition()
     self.cx, self.cy, self.eff = cx, cy, eff
     f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
-    self:SetScript("OnUpdate", function(g)
+    C.GuardScript(self, "OnUpdate", "UI:2853", function(g)
       local x, y = GetCursorPosition()
       local maxW = math.max(MINW, (UIParent:GetRight() or screenW) - g.l - 4)
       local maxH = math.max(MINH, g.t - 4)

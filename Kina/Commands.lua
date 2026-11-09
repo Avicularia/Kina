@@ -65,6 +65,7 @@ local help = {
   "/kina minprofit [amount | auto] - the least a trade must make to be worth your time (auto = 2 min of your gold/hour)",
   "/kina roi [percent] - hide rows under this ROI on every tab (same as the Min ROI box)",
   "/kina share [on | off | guild | now | verbose | forget] - pool AH, loot and vendor data with other Kina users in your group",
+  "/kina link - Kina's download link, ready to copy",
   "/kina tracker [on | off] - tracker only: track your farms, no splits, debts or Kina XP",
   "/kina partner [name | end | ask off] - your Kina Partner: +10% XP and standing together, growing with your bond",
   "/kina reset - put every Kina window back in its default place",
@@ -110,7 +111,9 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "tour" or cmd == "welcome" then if C.Tour then C.Tour.Start(rest ~= "" and rest or nil) end
   elseif cmd == "help" or cmd == "rules" then C.Toggle("Help")
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
-  elseif cmd == "share" then if C.Mentor then C.Mentor.Share() end
+  elseif cmd == "share" then if C.Mentor then C.Mentor.Share(); C.Mentor.CopyBox() end
+  elseif cmd == "link" then if C.Mentor then C.Mentor.CopyBox() end
+  elseif cmd == "mentor" or cmd == "welcome" then if C.Mentor then C.Mentor.ShowPicker() end
   elseif cmd == "tracker" then
     -- 0.9.20: /kina tracker [on | off]
     local a = rest:lower()

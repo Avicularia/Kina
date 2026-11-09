@@ -92,7 +92,7 @@ local mailOpen, pending = false, nil
 local watcher = CreateFrame("Frame")
 watcher:Hide()
 local acc = 0
-watcher:SetScript("OnUpdate", function(_, el)
+C.GuardScript(watcher, "OnUpdate", "Ledger:95", function(_, el)
   acc = acc + el; if acc < 0.3 then return end; acc = 0
   if not mailOpen or not GetSendMailItem then return end
   local to = SendMailNameEditBox and SendMailNameEditBox:GetText()
@@ -259,7 +259,7 @@ end
 local ahOpen, pending, lastKey, lastKeyAt = false, {}, nil, nil
 local function hook(name, fn)
   if hooksecurefunc and C_AuctionHouse and type(C_AuctionHouse[name]) == "function" then
-    pcall(hooksecurefunc, C_AuctionHouse, name, fn)
+    pcall(hooksecurefunc, C_AuctionHouse, name, C.Safe("auction hook", fn))
   end
 end
 local function now() return GetTime and GetTime() or 0 end

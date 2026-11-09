@@ -143,7 +143,7 @@ function K.Portrait(box, portrait, opts)
   o.badgeGlow:SetTexture(P .. "fx_spark"); o.badgeGlow:SetBlendMode("ADD"); o.badgeGlow:SetVertexColor(0.35, 1, 0.35); o.badgeGlow:Hide()
   local t = 0
   local pulser = CreateFrame("Frame", nil, box)
-  pulser:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(pulser, "OnUpdate", "Cosmetics:146", function(_, el)
     if not box:IsVisible() then return end
     if el > 0.2 then el = 0.2 end
     t = t + el
@@ -361,6 +361,76 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   elseif star then o.badge:SetTexture(star); if wide then o.badge:SetSize(W * 1.25, W * 0.62) else o.badge:SetSize(W * 0.6, W * 0.6) end; o.badge:Show()
   else o.badge:Hide() end
 end
+-- 0.9.23 (Taylor, mock approved): someone WITHOUT Kina wears no ring and no level plate,
+-- just a plain dimmed rim and the Kina "+" coin (click to share Kina with them)
+function K.SetPlain(o, on)
+  if not o then return end
+  local W = o.W or 80
+  if on then
+    if not o.rim then
+      o.rim = o.top:CreateTexture(nil, "OVERLAY", nil, 2); o.rim:SetPoint("CENTER", o.portrait, "CENTER"); o.rim:SetSize(W * 1.30, W * 1.30)
+      o.rim:SetTexture(P .. "rim_plain")
+      o.plus = o.top:CreateTexture(nil, "OVERLAY", nil, 5); o.plus:SetSize(W * 0.46, W * 0.46)
+      o.plus:SetPoint("CENTER", o.portrait, "CENTER", W * 0.38, -W * 0.36); o.plus:SetTexture(P .. "kina_plus")
+    end
+    o.ring:Hide(); o.plate:Hide(); o.num:Hide(); o.badge:Hide(); o.badgeGlow:Hide()
+    if o.halo then o.halo:Hide() end; if o.halo2 then o.halo2:Hide() end; if o.rays then o.rays:Hide() end
+    o.rim:Show(); o.plus:Show()
+    if o.portrait then
+      if o.portrait.SetDesaturation then pcall(o.portrait.SetDesaturation, o.portrait, 0.35) end
+      o.portrait:SetVertexColor(0.72, 0.72, 0.72)
+    end
+    o.plain = true
+  else
+    if o.rim then o.rim:Hide(); o.plus:Hide() end
+    o.ring:Show()
+    o.plain = nil
+  end
+end
+-- 0.9.23 (Taylor, mock approved: "a fancy sapphire shade"): the Kina Founder laurel, for
+-- team installs only. Sapphire and gold leaves with ruby gems frame whatever ring the
+-- player has earned (it adds to their progress, never replaces it); now and then the
+-- leaves shimmer.
+local founderFX = setmetatable({}, { __mode = "k" })
+local founderTicker
+local function founderTick(_, el)
+  for o, st in pairs(founderFX) do
+    if o.laurel and o.laurel:IsShown() then
+      st.t = st.t + el
+      if st.t >= st.next then
+        local f = (st.t - st.next) / 0.9
+        if f >= 1 then st.t = 0; st.next = 6 + math.random() * 3; o.laurelGlint:SetAlpha(0)
+        else o.laurelGlint:SetAlpha(math.sin(f * math.pi) * 0.38) end
+      end
+    end
+  end
+end
+function K.SetFounder(o, on)
+  if not o then return end
+  local W = o.W or 80
+  if on and not o.plain then
+    if not o.laurel then
+      o.laurel = o.top:CreateTexture(nil, "OVERLAY", nil, 1)
+      o.laurel:SetPoint("CENTER", o.portrait, "CENTER", 0, -W * 0.06); o.laurel:SetSize(W * 2.2, W * 2.2)
+      o.laurel:SetTexture(P .. "founder_laurel")
+      o.laurelGlint = o.top:CreateTexture(nil, "OVERLAY", nil, 3)
+      o.laurelGlint:SetAllPoints(o.laurel); o.laurelGlint:SetTexture(P .. "founder_glint"); o.laurelGlint:SetBlendMode("ADD"); o.laurelGlint:SetAlpha(0)
+      founderFX[o] = { t = 0, next = 2 + math.random() * 4 }
+      if not founderTicker and CreateFrame then
+        founderTicker = CreateFrame("Frame")
+        C.GuardScript(founderTicker, "OnUpdate", "founder shimmer", founderTick)
+      end
+    end
+    o.laurel:Show(); o.laurelGlint:Show()
+  elseif o.laurel then o.laurel:Hide(); o.laurelGlint:Hide() end
+end
+-- who is a founder: your own team install, or a Kina user whose hello says so
+function K.IsFounder(name)
+  if not name or (C.IsMyChar and C.IsMyChar(name)) then return C.Unlocked and C.Unlocked() and C.PUBLIC or false end
+  local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(name)
+  return pr and pr.dev or false
+end
+K.FOUNDER = "|cff78b4ffKina Founder|r"
 -- a forged frame over a status bar
 -- (1.4.2: hugs the bar: the art's own bounds, only 7 px wider and 4 px taller each side)
 local CROP = { xp_bar = { 14 / 64, 49 / 64 }, standing_bar = { 8 / 64, 55 / 64 } }
@@ -486,7 +556,7 @@ function K.UpdateGlows(standing)
 end
 local pf = CreateFrame("Frame")
 local acc = 0
-pf:SetScript("OnUpdate", function(_, el)
+C.GuardScript(pf, "OnUpdate", "Cosmetics:489", function(_, el)
   acc = acc + el
   if acc > 60 then acc = 0; pcall(K.UpdateGlows) end -- standing can change
   if pulse then
@@ -501,8 +571,10 @@ end)
 -- plate every few seconds, and gold sparks drifting up off it. Runs only while shown.
 function K.PlaqueFX(plate, w, h, count)
   local halo = plate:CreateTexture(nil, "BACKGROUND", nil, -3)
-  halo:SetTexture(P .. "fx_halo"); halo:SetBlendMode("ADD"); halo:SetVertexColor(1, 0.59, 0)
-  halo:SetPoint("CENTER", plate, "CENTER", 0, 0); halo:SetSize(w * 1.22, h * 1.75)
+  -- 0.9.21 (Taylor: "a visible flat line at the top where the glow stops"): fx_halo2 is
+  -- the same glow with 25% more room round it, fading to nothing before every edge
+  halo:SetTexture(P .. "fx_halo2"); halo:SetBlendMode("ADD"); halo:SetVertexColor(1, 0.59, 0)
+  halo:SetPoint("CENTER", plate, "CENTER", 0, 0); halo:SetSize(w * 1.22 * 1.25, h * 1.75 * 1.25)
   local clip = CreateFrame("Frame", nil, plate); clip:SetPoint("CENTER", plate, "CENTER", 0, 0); clip:SetSize(w * 0.74, h * 0.62)
   if clip.SetClipsChildren then clip:SetClipsChildren(true) end
   clip:SetFrameLevel(plate:GetFrameLevel() + 2)
@@ -518,7 +590,7 @@ function K.PlaqueFX(plate, w, h, count)
   end
   local t, nextSweep, sweepT = 0, 2, nil
   local flashT -- 0.9.3: a quick flare (a new tab opened)
-  fx:SetScript("OnUpdate", function(_, el)
+  C.GuardScript(fx, "OnUpdate", "Cosmetics:523", function(_, el)
     if el > 0.2 then el = 0.2 end
     t = t + el
     local boost = 0

@@ -231,8 +231,8 @@ function S.Button(b, border)
   pcall(b.HookScript, b, "OnEnable", state)
   pcall(b.HookScript, b, "OnDisable", state)
   if hooksecurefunc then
-    pcall(hooksecurefunc, b, "LockHighlight", function() b.kinaSel = true; state() end)
-    pcall(hooksecurefunc, b, "UnlockHighlight", function() b.kinaSel = nil; state() end)
+    pcall(hooksecurefunc, b, "LockHighlight", C.Safe("tab highlight", function() b.kinaSel = true; state() end))
+    pcall(hooksecurefunc, b, "UnlockHighlight", C.Safe("tab highlight", function() b.kinaSel = nil; state() end))
   end
   b:HookScript("OnShow", state)
   state()
