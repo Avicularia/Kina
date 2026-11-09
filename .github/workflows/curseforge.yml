@@ -59,7 +59,9 @@ jobs:
           [ -n "$PID" ] || { echo "Set the CF_PROJECT_ID variable first"; exit 1; }
           META=$(jq -n --rawfile notes notes.md --arg name "Kina $VER" --argjson gv "$GV" \
             '{changelog: $notes, changelogType: "markdown", displayName: $name, gameVersions: [$gv], releaseType: "release"}')
-          curl -sf -H "X-Api-Token: $CF_API_KEY" \
+          CODE=$(curl -s -o result.json -w "%{http_code}" -H "X-Api-Token: $CF_API_KEY" \
             -F "metadata=$META" -F "file=@Kina-$VER.zip" \
-            "https://wow.curseforge.com/api/projects/$PID/upload-file" | tee result.json
-          jq -e '.id' result.json > /dev/null && echo "Uploaded Kina $VER to CurseForge (file $(jq -r .id result.json)); it shows once CurseForge's review approves it."
+            "https://wow.curseforge.com/api/projects/$PID/upload-file")
+          echo "CurseForge answered HTTP $CODE:"; cat result.json; echo
+          [ "$CODE" = "200" ] || exit 1
+          echo "Uploaded Kina $VER to CurseForge (file $(jq -r .id result.json)); it shows once CurseForge's review approves it."
