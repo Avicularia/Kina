@@ -1,5 +1,5 @@
-# Kina: upload to CurseForge when a version tag is pushed (v0.9.23, v1.0.0 ...).
-# "Ship CF": Claude pushes the build and its tag; this uploads Kina/ as Kina-<version>.zip.
+# Kina: upload to CurseForge whenever a push to main changes Kina's version (Kina.toc).
+# "Ship CF": Claude pushes the new build; this uploads Kina/ as Kina-<version>.zip.
 # Needs, in this repo's Settings > Secrets and variables > Actions:
 #   secret   CF_API_KEY       a CurseForge API token (CurseForge > account settings > API Tokens)
 #   variable CF_PROJECT_ID    the project's ID (the "About Project" box on the CurseForge page)
@@ -7,7 +7,8 @@
 name: Upload to CurseForge
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["Kina/Kina.toc"]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -19,12 +20,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
       - name: Version and zip
         run: |
           VER=$(grep -m1 '^## Version:' Kina/Kina.toc | sed 's/## Version: *//; s/\r//')
-          TAG="${GITHUB_REF_NAME#v}"
-          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "$TAG" != "$VER" ]; then
-            echo "Tag v$TAG doesn't match Kina.toc version $VER"; exit 1
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            OLD=$(git show HEAD~1:Kina/Kina.toc 2>/dev/null | grep -m1 '^## Version:' | sed 's/## Version: *//; s/\r//')
+            if [ "$OLD" = "$VER" ]; then echo "Version unchanged ($VER): nothing to upload"; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; fi
+            echo "Version $OLD -> $VER"
           fi
           zip -qr "Kina-$VER.zip" Kina
           # this version's notes: the top section of CHANGELOG.md
@@ -32,6 +36,7 @@ jobs:
           echo "VER=$VER" >> "$GITHUB_ENV"
           cat notes.md
       - name: Find the game version
+        if: ${{ env.SKIP != '1' }}
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WANT: ${{ vars.CF_GAME_VERSION || '1.60.1' }}
@@ -46,7 +51,7 @@ jobs:
           echo "Game version '$WANT' is id $GV"
           echo "GV=$GV" >> "$GITHUB_ENV"
       - name: Upload
-        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        if: ${{ env.SKIP != '1' && (github.event_name == 'push' || !inputs.dry_run) }}
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           PID: ${{ vars.CF_PROJECT_ID }}
