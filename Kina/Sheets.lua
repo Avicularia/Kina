@@ -311,7 +311,8 @@ local function youPage(p, them)
     lvl:SetText(m.ok and (GOLD .. "Kina " .. C.Rep.Roman(m.level) .. "|r") or (ORANGE .. "Kina log damaged|r"))
     if C.Cos then
       makeCos()
-      if cos.try then cos.try:Show(); cos.bars:Show() end
+      -- 0.9.20: the Try previews only when unlocked (admin password in Settings)
+      if cos.try then if C.Unlocked() then cos.try:Show(); cos.bars:Show() else cos.try:Hide(); cos.bars:Hide() end end
       local pv = C.Cos.preview
       local rec0 = C.YouRecord and C.YouRecord() or {}
       local starter = (rec0.farms or 0) == 0 or ((rec0.farms or 0) == 1 and ((rec0.oweNow or 0) >= 1 or (rec0.owedNow or 0) >= 1))

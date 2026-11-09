@@ -423,6 +423,7 @@ end
 function S.MyFlags()
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
   return ((ok and m and m.everBlack) and "b" or "") .. (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
+    .. ((C.TrackOnly and C.TrackOnly()) and "t" or "") -- 0.9.20: tracker only
 end
 local standCache, standAt = nil, 0
 function S.MyXP()
@@ -451,6 +452,35 @@ local function authorFor(name)
   return best, want
 end
 S.AuthorFor = authorFor
+-- 0.9.19 (Taylor): Kina users are accounts. The Kina ID (uid) a character belongs to, from
+-- every character that Kina has said hello from; and that account's characters.
+function S.UIDOf(name)
+  local d = db()
+  local want = tostring(name or ""):lower():match("^[^%-%s]+")
+  if not want then return nil end
+  if C.IsMyChar and C.IsMyChar(want) then return d.uid end
+  local best, bu
+  for u, a in pairs(d.authors or {}) do
+    local hit = (a.name and tostring(a.name):lower():match("^[^%-%s]+") == want)
+      or (a.char and a.char.from and tostring(a.char.from):lower():match("^[^%-%s]+") == want)
+      or (type(a.chars) == "table" and a.chars[want] ~= nil)
+    if hit and (not best or (a.seen or 0) > (best.seen or 0)) then best, bu = a, u end
+  end
+  return bu
+end
+-- the character that account is playing now (the last one heard from), as sent
+function S.NameOf(uid)
+  local a = uid and db().authors and db().authors[uid]
+  if not a then return nil end
+  return (a.char and a.char.from) or a.name
+end
+function S.CharsOf(uid)
+  local a = uid and db().authors and db().authors[uid]
+  local out = {}
+  for k in pairs(type(a and a.chars) == "table" and a.chars or {}) do out[#out + 1] = k:sub(1, 1):upper() .. k:sub(2) end
+  table.sort(out)
+  return out
+end
 function S.StandingOf(name)
   local a = authorFor(name)
   return a and a.stand or nil
@@ -555,7 +585,21 @@ local function onHello(from, rest, channel)
   if b and inMyGroup(from) and b <= (C.BUILD or 0) + BUILD_JUMP and b > (S.newestBuild or C.BUILD or 0) then
     S.newestBuild = b; S.newestVer = a.ver
   end
+  -- 0.9.20: say so when a Kina user in my group is (or stops being) tracker only
+  local wasT = type(a.flags) == "string" and a.flags:find("t", 1, true) ~= nil
   a.flags = f[16] or a.flags
+  local isT = type(a.flags) == "string" and a.flags:find("t", 1, true) ~= nil
+  if inMyGroup(from) then
+    local nm = C.Books and C.Books.Name and C.Books.Name(from) or from
+    S.trackSaid = S.trackSaid or {}
+    if isT and not S.trackSaid[uid] then
+      S.trackSaid[uid] = true
+      C.Print(string.format("|cffffc54a%s's Kina is set to tracker only:|r they're not part of your farm splits or debts, and anything they loot stays theirs.", tostring(nm)))
+    elseif not isT and wasT then
+      S.trackSaid[uid] = nil
+      C.Print(string.format("|cff33ff66%s's Kina is back in group farms|r (splits and debts).", tostring(nm)))
+    end
+  end
   -- 0.9.10: how many installs they've shared (mentor star)
   if f[18] then a.recruits = n36(f[18], 9999) or a.recruits end
   local xs = f[19] and f[19]:match("^(%w-)x$")
@@ -958,7 +1002,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if not S.warnedOld then S.warnedOld = true; C.Print(tostring(from) .. " runs an older Kina: group farms need Kina 0.15 or newer on both sides.") end
       elseif kind == "Z" then
         local uid, cmd, label, campKey = rest:match("^(%x+)|(%a+)|?([^|]*)|?(.*)$")
-        if uid and uid ~= db().uid and C.InGroupName and C.InGroupName(from) then
+        if uid and uid ~= db().uid and ((C.TrackOnly and C.TrackOnly()) or (C.IsTrackerAuthor and C.IsTrackerAuthor(db().authors[uid]))) then
+          -- 0.9.20: tracker only (mine or theirs): group farm commands don't apply
+        elseif uid and uid ~= db().uid and C.InGroupName and C.InGroupName(from) then
           if cmd == "start" and not C.session then C.StartSession(label ~= "" and label or nil, true, campKey ~= "" and campKey or nil)
           elseif cmd == "stop" and C.session then C.StopSession(nil, "group stopped", false, true)
           elseif cmd == "pause" then C.PauseSession(true, true)
@@ -983,10 +1029,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
         end
       elseif kind == "K" then
         local uid, guid = rest:match("^(%x+)|(.+)$")
-        if uid and uid ~= db().uid and C.session and C.countKill and C.InGroupName and C.InGroupName(from) then C.countKill(guid, true) end
+        if uid and uid ~= db().uid and C.session and C.countKill and C.InGroupName and C.InGroupName(from)
+          and not (C.TrackOnly and C.TrackOnly()) and not (C.IsTrackerAuthor and C.IsTrackerAuthor(db().authors[uid])) then C.countKill(guid, true) end
       elseif kind == "U" then
         local uid, id, n = rest:match("^(%x+)|(%w+)|(%w+)$")
-        if uid and uid ~= db().uid and C.OnFarmUse and C.InGroupName and C.InGroupName(from) then C.OnFarmUse(from, n36(id), n36(n) or 1) end
+        if uid and uid ~= db().uid and C.OnFarmUse and C.InGroupName and C.InGroupName(from)
+          and not (C.TrackOnly and C.TrackOnly()) and not (C.IsTrackerAuthor and C.IsTrackerAuthor(db().authors[uid])) then C.OnFarmUse(from, n36(id), n36(n) or 1) end
       elseif kind == "Y" then
         local uid, list = rest:match("^(%x+)|(.*)$")
         if uid and uid ~= db().uid and C.OnGroupSplit and C.InGroupName and C.InGroupName(from) then
@@ -1108,6 +1156,7 @@ end
 function S.SendFarmCmd(cmd, label, campKey)
   local ch = groupChannel()
   if not ch or not db().opts.enabled or not (C.GroupSize and C.GroupSize() > 1) then return end
+  if C.TrackOnly and C.TrackOnly() then return end -- 0.9.20: a tracker's farm is its own
   enqueue(table.concat({ "Z", db().uid, cmd, ((label or ""):gsub("|", "")), campKey or "" }, "|"), ch, nil, true)
 end
 -- The group's farm numbers from the leader's Kina, so every widget shows the same.

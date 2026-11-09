@@ -37,14 +37,42 @@ function C.InGroupName(name)
   return C.GroupMemberName(name) ~= nil
 end
 
+-- 0.9.20 (Taylor): "Tracker only": Kina tracks your farms (gold per hour, loot) but you
+-- take no part in group farms, splits or debts, and earn no Kina XP or standing. Every
+-- Kina in the group is told (hello flag "t") and leaves you out of its farms and splits.
+-- Debts you already have stay until they're settled.
+function C.TrackOnly() return C.settings and C.settings.trackOnly == true or false end
+local function isTracker(a) return a and type(a.flags) == "string" and a.flags:find("t", 1, true) ~= nil end
+C.IsTrackerAuthor = isTracker
+function C.SetTrackOnly(v)
+  v = v and true or false
+  if v == C.TrackOnly() then return true end
+  if v and C.session and C.session.sync then
+    C.Print("|cffff8040stop your group farm first:|r tracker only can't change in the middle of a shared farm.")
+    return false
+  end
+  C.settings.trackOnly = v or nil
+  C.Log("track", v and "on" or "off")
+  if v then
+    C.Print("|cffffc54aTracker only:|r Kina tracks your farms, but you're not part of group farms, splits or debts, and earn no Kina XP or standing. Your group's Kinas have been told. Debts you already have still need settling.")
+  else
+    C.Print("|cff33ff66Tracker only is off:|r you're back in group farms, splits and debts, and earning Kina XP and standing.")
+  end
+  if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
+  if C.Refresh then pcall(C.Refresh) end
+  return true
+end
+
 -- Who shares a group farm: you, plus group members who run Kina (seen in the last 30
 -- minutes). Strangers in a dungeon group are never part of the farm or its split.
+-- (0.9.20: nobody, while you're tracker only; never a Kina user who is tracker only)
 function C.FarmMates()
   local set, n = {}, 1
   set[firstName(UnitName and UnitName("player") or "")] = true
   local S = C.Share
+  if C.TrackOnly() then return set, n end
   for _, a in pairs(S and S.DB and S.DB().authors or {}) do
-    if a.name and a.seen and C.Now() - a.seen < 1800 and C.InGroupName(a.name) then
+    if a.name and a.seen and C.Now() - a.seen < 1800 and C.InGroupName(a.name) and not isTracker(a) then
       local k = firstName(a.name)
       if k ~= "" and not set[k] then set[k] = true; n = n + 1 end
     end
@@ -200,10 +228,15 @@ C.Settle = settle
 -- s.gsplit = { by = { name = copper }, from = leader }. Prints it and keeps s.split.
 function C.ShowGroupSplit(s)
   if not (s and s.gsplit and s.gsplit.by) or s.gsplitShown then return end
+  if C.TrackOnly() then return end -- 0.9.20: tracker only: no splits
   local by = {}
-  for who, v in pairs(s.gsplit.by) do by[who] = v end
+  local S = C.Share
+  for who, v in pairs(s.gsplit.by) do
+    -- 0.9.20: a tracker-only Kina user is never part of the split
+    if not (S and S.AuthorFor and isTracker((S.AuthorFor(who)))) then by[who] = v end
+  end
   local everyone = {}
-  for _, m in ipairs(s.party or {}) do everyone[#everyone + 1] = m end
+  for _, m in ipairs(s.party or {}) do if not (S and S.AuthorFor and isTracker((S.AuthorFor(m.name)))) then everyone[#everyone + 1] = m end end
   everyone[#everyone + 1] = { name = UnitName and UnitName("player") or "you" } -- you too, even with nothing looted
   for _, m in ipairs(everyone) do
     local have = false
@@ -226,6 +259,7 @@ function C.ShowGroupSplit(s)
 end
 -- the leader's split arrived (from Share.lua)
 function C.OnGroupSplit(by, from)
+  if C.TrackOnly() then return end -- 0.9.20
   -- 0.9.1 (security): only the group's farm leader sends the split
   local leader = C.FarmLeader and C.FarmLeader()
   if not (leader and tostring(from):lower():match("^[^%-]+") == tostring(leader):lower():match("^[^%-]+")) then return end

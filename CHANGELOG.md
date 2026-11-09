@@ -1,3 +1,12 @@
+# Kina 0.9.20 (beta)
+
+- Tracker only (Settings or /kina tracker): track your farms with no splits, debts or Kina XP; your group is told.
+- Partners are account to account: any of your characters with any of theirs.
+- The bond grows on whichever characters you play together.
+- Kina remembers which characters belong to each Kina user.
+- Fix: a farm stays with the character that started it; logging in on an alt no longer picks it up.
+- The Try preview buttons are off by default.
+
 # Kina 0.9.18 (beta)
 
 - Kina Partners: +10% XP and standing on farms and payments together.

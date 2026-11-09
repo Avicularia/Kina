@@ -2514,6 +2514,12 @@ local function buildSettings(f)
   header("Kina level")
   for i = 1, 4 do note(function() return (C.RepDetail and C.RepDetail() or {})[i] or "" end) end
   y = y + 4
+  -- 0.9.20 (Taylor): just the farm tracker
+  header("Groups")
+  toggle("Tracker only (no splits, debts or Kina XP)", function() return C.TrackOnly() end, function(v) C.SetTrackOnly(v) end,
+    "Kina keeps tracking your farms (gold per hour, loot, kills), but you're not part of group farms, loot splits or debts, and you earn no Kina XP or standing. Every Kina in your group is told, and anything you loot stays yours. Debts you already have still need settling.")
+  note(function() return C.TrackOnly() and "|cffffc54aon: just the tracker, no splits or debts|r" or "off: group farms split fairly and earn Kina XP" end)
+  y = y + 4
   header("Data sharing")
   toggle("Share drop data and auction prices", function() return C.ShareData() end, function(v) C.SetShareData(v) end,
     "Kina collects which mobs drop what and the auction prices you see, and shares them with other Kina users. You don't see this data yet: it builds the farm and price features of a future Kina. Your Kina level only grows while this is on. Nothing about you, your chat or other players is collected.")
@@ -2526,6 +2532,10 @@ local function buildSettings(f)
   y = y + 4
   header("Check Kina")
   action("Run self-test", function() if C.SelfTest then C.SelfTest.Run() end end)
+  -- 0.9.20 (Taylor): the admin password unlocks the Try buttons (type anything else to lock)
+  local adminBox = box("Team code", function() return "" end, function(t) C.TryUnlock(t) end, 90,
+    "For the Kina team: the code unlocks the Try preview buttons. Anything else locks them again.")
+  if adminBox and adminBox.SetPassword then pcall(adminBox.SetPassword, adminBox, true) end
   note(function() return "checks Kina works on this client (results in chat)" end)
   -- 0.9.2 (Taylor): add-ons can't reach the internet, so Kina asks the other Kina users
   -- it can reach (group, guild) which version they run, and links where to download

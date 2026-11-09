@@ -35,6 +35,7 @@ end
 local declined = {}
 local function onInvite(sid, leader, label, camp)
   if declined[sid] then return end
+  if C.TrackOnly and C.TrackOnly() then return end -- 0.9.20: tracker only: no group farms
   if C.session and C.session.sync and C.session.sync.sid == sid then return end
   if not unitOf(leader) then return end -- only from someone in your group
   local auto = C.settings.farmAutoJoin and C.settings.farmAutoJoin[leader]

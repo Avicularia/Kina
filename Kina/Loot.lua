@@ -930,7 +930,7 @@ function C.StopSession(at, why, silent, fromParty)
   local okv, gv = pcall(function() return C.FarmView and C.FarmView() end)
   if okv and gv then s.gview = { secs = gv.secs, net = gv.net, coin = gv.coin, items = gv.items, used = gv.used, kills = gv.kills } end
   -- the leader freezes what each player looted (its prices) and sends it, so every Kina splits the same
-  if s.g and C.FarmLeader and C.GroupSize and C.GroupSize() > 1 then
+  if s.g and C.FarmLeader and C.GroupSize and C.GroupSize() > 1 and not (C.TrackOnly and C.TrackOnly()) then
     local leader, lead = C.FarmLeader()
     if lead then
       local gf = C.GroupFarm(s)
@@ -1107,7 +1107,23 @@ C.On("PLAYER_LOGOUT", function()
 end)
 C.On("INIT", function()
   local s = C.db.activeSession
-  if type(s) ~= "table" or not s.start then C.db.activeSession = nil; return end
+  if type(s) ~= "table" or not s.start then C.db.activeSession = nil; s = nil end
+  -- 0.9.20 (found on Taylor's own save): a farm belongs to the character that farmed it.
+  -- Logging in on another character used to pick up that character's farm (a shared farm
+  -- then kept reporting to "itself" as leader, over and over). It waits for its own
+  -- character now, and that character's waiting farm comes back when you log in on it.
+  C.db.parked = type(C.db.parked) == "table" and C.db.parked or {}
+  if s and s.char and C.charKey and s.char ~= C.charKey then
+    C.db.parked[s.char] = s
+    C.db.activeSession = nil
+    C.Print(string.format("your farm \"%s\" on %s waits for %s: it carries on when you log in there.", tostring(s.label), tostring(s.char:match("^[^%-]+")), tostring(s.char:match("^[^%-]+"))))
+    s = nil
+  end
+  if not s and C.charKey and type(C.db.parked[C.charKey]) == "table" then
+    s = C.db.parked[C.charKey]; C.db.parked[C.charKey] = nil
+    C.db.activeSession = s
+  end
+  if not s then return end
   C.session = s
   s.items = s.items or {}; s.money = s.money or {}; s.byNpc = s.byNpc or {}; s.kills = s.kills or 0
   -- 0.9.14 (Taylor): a solo farm never ends by itself. The time you were logged off

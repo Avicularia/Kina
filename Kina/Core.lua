@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "0.9.18"
+C.version = "0.9.20"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 173
+C.BUILD = 175
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -43,6 +43,31 @@ function C.MerchantIsOpen() if MerchantFrame and MerchantFrame.IsShown then retu
 -- Admin view (the private build only): who used which consumables. Public builds show
 -- the group total only, so nobody gets blamed for a potion.
 function C.Admin() return not C.PUBLIC end
+-- 0.9.20 (Taylor): the "Try" previews (cosmetics, bar frames) are off in the release and
+-- unlocked by the admin password in Settings. Only a hash of it is kept here (a light
+-- lock for preview buttons, not security: nothing it unlocks changes real data).
+local ADMIN_KEY = 4138906054
+local function keyOf(s)
+  local x = 5381
+  for i = 1, #s do x = (x * 33 + s:lower():byte(i)) % 4294967296 end
+  return x
+end
+function C.Unlocked() return not C.PUBLIC or (C.settings and C.settings.adminUnlocked == true) or false end
+function C.TryUnlock(text)
+  text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if text == "" then return nil end
+  if keyOf(text) == ADMIN_KEY then
+    C.settings.adminUnlocked = true
+    C.Print("|cff33ff66team code accepted:|r the Try buttons are on (You tab).")
+    return true
+  end
+  if C.settings.adminUnlocked then
+    C.settings.adminUnlocked = nil
+    if C.Cos and C.Cos.preview then for k in pairs(C.Cos.preview) do C.Cos.preview[k] = nil end end
+    C.Print("the Try buttons are off.")
+  else C.Print("|cffff8040that code isn't right.|r") end
+  return false
+end
 -- 0.9.8: Kina's confirm popups (Forgive, Pay, Dispute...) are the game's popups, which sit
 -- on a lower layer than the Kina window: they opened hidden behind it. Kina steps back
 -- first (clicking Kina again brings it forward).
@@ -199,7 +224,7 @@ end
 -- so moving to a new realm starts a new Kina level, standing, record and debts there;
 -- going back to the old realm brings its profile back. What belongs to the profile:
 local PROFILE_KEYS = { "log", "sessions", "activeSession", "settles", "forgive", "payout", "vouch",
-  "mentor", "mark", "farmIn", "seenMail", "share", "pair" }
+  "mentor", "mark", "farmIn", "seenMail", "share", "pair", "parked" }
 C.PROFILE_KEYS = PROFILE_KEYS
 function C.RealmProfile(db, cur)
   cur = cur or (GetRealmName and GetRealmName()) or "?"

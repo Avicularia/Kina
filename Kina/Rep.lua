@@ -104,11 +104,13 @@ end
 --    positive (not below 0), +50/week while negative (+25 Blacklisted), never above -20
 --  * while this Kina is out of date ("frozen" lines) nothing is gained or lost
 R.BLACKLIST, R.BREAK_REP = -1000, -99
-local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT", "tourDone", "partner", "bonds" }
+local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT", "tourDone", "partner", "bonds", "partnerName", "pchars", "track" }
 -- 0.9.18 (Taylor): Partners. +10% XP and standing on farms and payments together, and
 -- the bond grows +1% for every 5 qualifying farms together, up to +20% (Pair.lua)
 R.PAIR_BASE, R.PAIR_STEP, R.PAIR_EVERY, R.PAIR_MAX = 0.10, 0.01, 5, 0.20
--- bonds are kept as "Name=12;Other=3" (a string, so the rolled-up state's hash covers it)
+-- 0.9.19: partners are ACCOUNTS (their Kina ID), never characters. Bonds are kept per
+-- Kina ID as "uid=12;uid=3", and the partner's characters as ";uid/name;" (strings, so
+-- the rolled-up state's hash covers them)
 local function bondGet(s, name)
   if type(s) ~= "string" or not name then return 0 end
   for n, v in s:gmatch("([^;=]+)=(%d+)") do if n == name then return tonumber(v) or 0 end end
@@ -122,6 +124,17 @@ local function bondSet(s, name, v)
   end
   if not done then out[#out + 1] = name .. "=" .. tostring(v) end
   return table.concat(out, ";")
+end
+local function charKey(name) return (type(name) == "string" and name:match("^%s*([^%s%-]+)") or ""):lower() end
+function R.AddChar(s, uid, name)
+  s = type(s) == "string" and s ~= "" and s or ";"
+  local k = charKey(name)
+  if k == "" or s:find(";" .. uid .. "/" .. k .. ";", 1, true) then return s end
+  return s .. uid .. "/" .. k .. ";"
+end
+function R.HasChar(s, uid, name)
+  local k = charKey(name)
+  return type(s) == "string" and k ~= "" and s:find(";" .. uid .. "/" .. k .. ";", 1, true) ~= nil
 end
 function R.PairBonus(bond) return math.min(R.PAIR_MAX, R.PAIR_BASE + R.PAIR_STEP * math.floor((bond or 0) / R.PAIR_EVERY)) end
 R.TOUR_XP, R.TOUR_REP = 50, 20 -- 0.9.2 (Taylor): finishing the welcome tour, once
@@ -153,7 +166,7 @@ function R.Replay(lines, st, gains)
     end
   end
   local function gainRep(x, t)
-    if st.frozen or x <= 0 then return 0 end
+    if st.frozen or st.track or x <= 0 then return 0 end
     local g = math.floor(x * R.Mult(st) + 0.5)
     st.rep = st.rep + g; after(t); return g
   end
@@ -163,7 +176,7 @@ function R.Replay(lines, st, gains)
     st.rep = st.rep - x; after(t); fell(before, t); return -x
   end
   local function gainXP(x)
-    if st.frozen or not st.share or x <= 0 then return 0 end
+    if st.frozen or st.track or not st.share or x <= 0 then return 0 end
     local g = math.floor(x * R.Mult(st) + 0.5)
     st.xp = st.xp + g; return g
   end
@@ -175,10 +188,23 @@ function R.Replay(lines, st, gains)
     end
     if not st.lastT or t > st.lastT then st.lastT = t end
     if kind == "share" then st.share = (f[3] ~= "off")
+    elseif kind == "track" then
+      -- 0.9.20: tracker only: no Kina XP or standing gained (losses still count)
+      st.track = (f[3] == "on") or nil
     elseif kind == "partner" then
-      local who = f[4] ~= "" and f[4] or nil
-      if f[3] == "on" and who then st.partner = who
-      elseif f[3] == "off" and who and st.partner == who then st.partner = nil end
+      -- partner|on|uid|Name, partner|off|uid (0.9.18's name-only lines don't count)
+      local uid = f[4] and #f[4] == 12 and f[4]:match("^%x+$")
+      if f[3] == "on" and uid then
+        st.partner = uid
+        if f[5] and f[5] ~= "" then st.partnerName = f[5]; st.pchars = R.AddChar(st.pchars, uid, f[5]) end
+      elseif f[3] == "off" and uid and st.partner == uid then st.partner, st.partnerName = nil, nil end
+    elseif kind == "pairchar" then
+      -- another character of a partner's account: pairchar|uid|Name
+      local uid = f[3] and #f[3] == 12 and f[3]:match("^%x+$")
+      if uid and f[4] and f[4] ~= "" then
+        st.pchars = R.AddChar(st.pchars, uid, f[4])
+        if st.partner == uid then st.partnerName = f[4] end
+      end
     elseif kind == "frozen" then st.frozen = (f[3] == "on") or nil
     elseif kind == "jail" then
       -- the one-time pardon: back to 1, x3 until the best ever
@@ -227,9 +253,8 @@ function R.Replay(lines, st, gains)
       -- (only lines from before standing was logged; 0.9.1: a logged 0 stays 0, so many
       -- 1-copper part payments can't each earn a full payment's standing)
       if (not f[12] or f[12] == "") and rp <= 0 and paidOff < 1 and cameIn >= 1 then rp = R.PayRep(cameIn) end
-      -- 0.9.18: a payment between partners
-      local pw = (who:match("^%s*([^%s%-]+)") or ""):lower()
-      if st.partner and pw ~= "" and pw == st.partner:lower() then
+      -- 0.9.18: a payment between partners (0.9.19: any character on their account)
+      if st.partner and R.HasChar(st.pchars, st.partner, who) then
         local pb = R.PairBonus(bondGet(st.bonds, st.partner))
         want = math.floor(want * (1 + pb) + 0.5); rp = math.floor(rp * (1 + pb) + 0.5)
       end
@@ -436,7 +461,7 @@ function R.MineNow()
     best = st.maxEver or math.max(0, rp), lowest = st.lowEver or math.min(0, rp), negDays = neg / DAY, posDays = pos / DAY,
     black = ok and st.black or (rp <= R.BLACKLIST) or nil, everBlack = st.everBlack or (not ok and mark and mark.black) or nil, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
     lastFarmT = st.lastFarmT, fell = st.fell or 0, frozen = st.frozen, bad48 = n48, bad7 = n7,
-    partner = st.partner, bondFarms = st.partner and bondGet(st.bonds, st.partner) or 0,
+    partner = st.partner, partnerName = st.partnerName, pchars = st.pchars, bondFarms = st.partner and bondGet(st.bonds, st.partner) or 0,
     pairBonus = st.partner and R.PairBonus(bondGet(st.bonds, st.partner)) or 0, bonds = st.bonds }
 end
 
@@ -539,10 +564,11 @@ C.On("PLAYER_LOGIN", function()
   C.After(8, function() if not C.settings.dataNoticeSeen then StaticPopup_Show("KINA_DATA_NOTICE") end end)
 end)
 
--- 0.9.18: the bond (farms together) with someone, partner or not
-function R.BondOf(name)
+-- 0.9.18: the bond (farms together) with someone's account, partner or not
+-- (0.9.19: by Kina ID; a character name is looked up to its account)
+function R.BondOf(nameOrUid)
   local m = R.Mine and R.Mine()
-  local n = type(name) == "string" and name:match("^%s*([^%s%-]+)")
-  if not (m and n) then return 0 end
-  return bondGet(m.bonds, n:sub(1, 1):upper() .. n:sub(2):lower())
+  if not m or type(nameOrUid) ~= "string" then return 0 end
+  local uid = nameOrUid:match("^%x+$") and #nameOrUid == 12 and nameOrUid or (C.Share and C.Share.UIDOf and C.Share.UIDOf(nameOrUid))
+  return uid and bondGet(m.bonds, uid) or 0
 end
