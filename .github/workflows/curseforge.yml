@@ -1,0 +1,60 @@
+# Kina: upload to CurseForge when a version tag is pushed (v0.9.23, v1.0.0 ...).
+# "Ship CF": Claude pushes the build and its tag; this uploads Kina/ as Kina-<version>.zip.
+# Needs, in this repo's Settings > Secrets and variables > Actions:
+#   secret   CF_API_KEY       a CurseForge API token (CurseForge > account settings > API Tokens)
+#   variable CF_PROJECT_ID    the project's ID (the "About Project" box on the CurseForge page)
+#   variable CF_GAME_VERSION  optional: the game version name to tag, default 1.60.1 (WoW Forever)
+name: Upload to CurseForge
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List CurseForge's game versions and build the zip, but don't upload"
+        type: boolean
+        default: true
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version and zip
+        run: |
+          VER=$(grep -m1 '^## Version:' Kina/Kina.toc | sed 's/## Version: *//; s/\r//')
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "$TAG" != "$VER" ]; then
+            echo "Tag v$TAG doesn't match Kina.toc version $VER"; exit 1
+          fi
+          zip -qr "Kina-$VER.zip" Kina
+          # this version's notes: the top section of CHANGELOG.md
+          awk 'NR==1{print; next} /^# Kina /{exit} {print}' CHANGELOG.md > notes.md
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          cat notes.md
+      - name: Find the game version
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WANT: ${{ vars.CF_GAME_VERSION || '1.60.1' }}
+        run: |
+          curl -sf -H "X-Api-Token: $CF_API_KEY" https://wow.curseforge.com/api/game/versions > versions.json
+          GV=$(jq -r --arg w "$WANT" '[.[] | select(.name == $w)] | .[0].id // empty' versions.json)
+          if [ -z "$GV" ]; then
+            echo "No CurseForge game version named '$WANT'. Versions that look like it:"
+            jq -r '.[] | "\(.id)  \(.name)  (type \(.gameVersionTypeID))"' versions.json | grep -i "^.*  1\.\|forever" | head -40
+            exit 1
+          fi
+          echo "Game version '$WANT' is id $GV"
+          echo "GV=$GV" >> "$GITHUB_ENV"
+      - name: Upload
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          PID: ${{ vars.CF_PROJECT_ID }}
+        run: |
+          [ -n "$PID" ] || { echo "Set the CF_PROJECT_ID variable first"; exit 1; }
+          META=$(jq -n --rawfile notes notes.md --arg name "Kina $VER" --argjson gv "$GV" \
+            '{changelog: $notes, changelogType: "markdown", displayName: $name, gameVersions: [$gv], releaseType: "release"}')
+          curl -sf -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata=$META" -F "file=@Kina-$VER.zip" \
+            "https://wow.curseforge.com/api/projects/$PID/upload-file" | tee result.json
+          jq -e '.id' result.json > /dev/null && echo "Uploaded Kina $VER to CurseForge (file $(jq -r .id result.json)); it shows once CurseForge's review approves it."
