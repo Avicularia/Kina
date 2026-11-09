@@ -65,6 +65,7 @@ local help = {
   "/kina minprofit [amount | auto] - the least a trade must make to be worth your time (auto = 2 min of your gold/hour)",
   "/kina roi [percent] - hide rows under this ROI on every tab (same as the Min ROI box)",
   "/kina share [on | off | guild | now | verbose | forget] - pool AH, loot and vendor data with other Kina users in your group",
+  "/kina partner [name | end | ask off] - your Kina Partner: +10% XP and standing together, growing with your bond",
   "/kina reset - put every Kina window back in its default place",
   "/kina forgive [name] - forgive what someone owes you (the oldest debt first)",
   "/kina pp - pickpocketing (badges, pocket data, sharing): /kina pp help for more",
@@ -108,7 +109,17 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "tour" or cmd == "welcome" then if C.Tour then C.Tour.Start(rest ~= "" and rest or nil) end
   elseif cmd == "help" or cmd == "rules" then C.Toggle("Help")
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
-  elseif cmd == "mentor" then if C.Mentor then C.Mentor.Name(rest) end
+  elseif cmd == "share" then if C.Mentor then C.Mentor.Share() end
+  elseif cmd == "partner" then
+    -- 0.9.18: /kina partner [name | end | ask on | ask off]
+    local P = C.Pair
+    if not P then return end
+    local a = rest:lower()
+    if a == "end" or a == "off" then P.End()
+    elseif a == "ask off" then C.settings.noPairAsk = true; C.Print("Kina won't ask about partnering up when a Kina user joins your party.")
+    elseif a == "ask on" then C.settings.noPairAsk = nil; C.Print("Kina will ask about partnering up when a Kina user joins your party.")
+    elseif rest ~= "" then P.Ask(rest)
+    else C.Print(P.Line()) end
   elseif cmd == "face" then
     -- nudge every 3D portrait up or down on screen: /kina face 10 (up) ... /kina face -10 (down)
     local n = tonumber(rest)

@@ -127,7 +127,20 @@ local function logEnd(s)
   local f = { C.Now(), "farmend", s.label, sync and sync.sid or "", sync and sync.head or 0, sync and sync.hash or "",
     s.stop and s.start and (s.stop - s.start - (s.pausedSecs or 0)) or 0, r.total or 0, r.kills or s.kills or 0, #(s.party or {}),
     s.minLvl or 0, s.maxLvl or 0, math.floor(net), math.max(s.groupN or 1, #(s.party or {}) + 1) }
-  C.Log(unpack(f, 2, 14))
+  -- 0.9.18: "p" when your Kina Partner was in this farm at the end (the partner bonus)
+  local partner = C.Pair and C.Pair.Partner and C.Pair.Partner()
+  local withPartner = false
+  if partner then
+    for _, m in ipairs(s.party or {}) do
+      if C.FirstName and C.FirstName(m.name) == partner:lower() then withPartner = true end
+    end
+  end
+  if withPartner then f[15] = "p" end
+  C.Log(unpack(f, 2, withPartner and 15 or 14))
+  if withPartner and sync then
+    local b = C.Pair.Bonus()
+    C.Print(string.format("|cff33ff66Partner bonus:|r +%d%% XP and standing for farming with %s.", math.floor(b * 100 + 0.5), partner))
+  end
   s.logged = true
   -- 0.9.10: a new player's first qualifying farm gives their mentor the install credit
   if C.Mentor and C.Mentor.OnFarmEnd then

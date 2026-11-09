@@ -241,7 +241,9 @@ local function hello(channel, target, force)
     b36(share and C.market.scanTime or 0), b36(share and S.StampLoot() or 0), b36(share and vendorTime() or 0), b36(share and offerTime() or 0),
     (cls:gsub("%A", "")), b36((UnitLevel and UnitLevel("player")) or 0), table.concat(profs, ","), b36(S.CommStamp()),
     rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or ""), S.MyFlags and S.MyFlags() or "", tostring(C.BUILD or 0),
-    b36(C.Mentor and C.Mentor.Count() or 0) }, "|")
+    b36(C.Mentor and C.Mentor.Count() or 0),
+    -- 0.9.17 (Taylor): your XP, so your profile on their screen shows progress, not just the level
+    b36(S.MyXP and S.MyXP() or 0) .. "x" }, "|") -- ("x" ends it: a hello cut short at the length cap can't send a wrong number)
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -420,9 +422,14 @@ end
 -- 1.5.4: flags others see on my profile: b = was Blacklisted once (the scar)
 function S.MyFlags()
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
-  return (ok and m and m.everBlack) and "b" or ""
+  return ((ok and m and m.everBlack) and "b" or "") .. (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
 end
 local standCache, standAt = nil, 0
+function S.MyXP()
+  if not (C.Rep and C.Rep.Mine and C.ShareData and C.ShareData()) then return 0 end
+  local ok, m = pcall(C.Rep.Mine)
+  return ok and m and m.ok ~= false and math.floor(m.xp or 0) or 0
+end
 function S.MyStanding()
   if GetTime and GetTime() - standAt < 60 and standCache then return standCache end
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
@@ -458,7 +465,7 @@ function S.ProfileOf(name)
   local nt = S.Notable(name)
   return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = ch, ver = best.ver, build = best.build,
     scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil,
-    recruits = best.recruits }
+    recruits = best.recruits, xp = best.xp }
 end
 function S.CharOf(name)
   local best, want = authorFor(name)
@@ -551,6 +558,8 @@ local function onHello(from, rest, channel)
   a.flags = f[16] or a.flags
   -- 0.9.10: how many installs they've shared (mentor star)
   if f[18] then a.recruits = n36(f[18], 9999) or a.recruits end
+  local xs = f[19] and f[19]:match("^(%w-)x$")
+  if xs then a.xp = n36(xs, 99999999) or a.xp end
   if S.onHello then pcall(S.onHello, from, uid, a, channel) end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) and (tonumber(f[17]) or 0) <= (C.BUILD or 0) + BUILD_JUMP then

@@ -240,7 +240,7 @@ local function kinaTip()
 end
 local function release(tip)
   if active[tip] then
-    active[tip] = nil
+    active[tip] = nil -- (before SetAlpha: the hold hook below must not catch this one)
     if kt then kt:Hide() end
     tip:SetAlpha(1)
   end
@@ -288,11 +288,25 @@ local function install()
       -- stay as they are through it; only if the refill wasn't an item does it let go.
       tip:HookScript("OnTooltipCleared", function(self) shown[self] = nil end)
       tip:HookScript("OnHide", function(self) shown[self] = nil; release(self) end)
+      -- 0.9.17 (Taylor: loot-roll tooltips showed both at once): some tooltips (a loot
+      -- roll, the AH) are refilled every frame, and their data can land a frame after the
+      -- clear. Kina only lets go when the tooltip is no longer showing an item at all, and
+      -- holds the game's tooltip invisible against anything that shows it again.
+      local function stillItem(self)
+        local ok, _, link = pcall(self.GetItem, self)
+        return ok and link ~= nil
+      end
       tip:HookScript("OnUpdate", function(self)
         if not active[self] then return end
-        if shown[self] == nil or not C.settings.tipOnly then release(self); return end
+        if not C.settings.tipOnly or (shown[self] == nil and not stillItem(self)) then release(self); return end
         if self:GetAlpha() > 0 then self:SetAlpha(0) end
       end)
+      if hooksecurefunc then
+        local guard
+        local function hold(self) if active[self] and not guard and self:GetAlpha() > 0 then guard = true; self:SetAlpha(0); guard = nil end end
+        hooksecurefunc(tip, "Show", hold)
+        hooksecurefunc(tip, "SetAlpha", hold)
+      end
     end
   end
   local TDP = TooltipDataProcessor

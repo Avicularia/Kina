@@ -1,18 +1,18 @@
 local _, C = ...
--- Kina: installs shared (the mentor star), 0.9.10.
--- Someone who shows Kina to a new player gets the credit once that player's Kina is
--- really installed and in use (Taylor: "only shares count when an install is actually
--- done"). The rules:
---   - Only a brand-new Kina can give credit: one with no farms or tour behind it.
---   - The new player names who told them about Kina (asked after the welcome tour, or
---     /kina mentor Name). If they don't, the first person they farm with gets it: the
---     farm's leader, or their first partner when they led it themselves.
---   - It only counts after the new player's first qualifying farm (15+ minutes, the
---     same rule as Kina level).
---   - Never your own characters, and each new player counts once (by Kina and by name).
---   - The new player's Kina sends the credit; the mentor's Kina keeps the count and
---     answers, so the credit lands only when both Kinas have really talked.
--- Messages (Share.lua, prefix KinaShare): N|uid|mentor|name (credit), A|uid|recruitUid (thanks).
+-- Kina: installs shared (the mentor star). 0.9.10; reworked 0.9.17 (Taylor: "asking
+-- someone to type in someone's convoluted name isn't the play").
+-- How it works now:
+--   - A Kina user shares Kina in party chat (/kina share, or "Share Kina" on the You
+--     page): Kina posts the download link to party chat and remembers who was there.
+--   - When a brand-new Kina makes first contact with other Kinas in a party, every Kina
+--     in that party that shared the link with that player (and is still in the party)
+--     says when it shared. The new player's Kina picks whoever shared FIRST.
+--   - That first sharer's account gets the install once the new player has done a farm
+--     of 15 minutes or more (the same rule as Kina level), and both Kinas have talked.
+--   - Only a brand-new Kina can give credit; never your own characters; each new player
+--     counts once (by Kina and by name). No sharer in the party at first contact: nobody.
+-- Messages (Share.lua): J|uid|sharedAt|recruit (I shared with you), N|uid|mentor|name
+-- (the credit), A|uid|recruitUid (thanks). A new Kina's hello carries flag "n".
 local M = {}
 C.Mentor = M
 local GOLD, GREEN = "|cffffc54a", "|cff33ff66"
@@ -76,27 +76,87 @@ function M.Eligible()
   return d.eligible == true and not d.done
 end
 
--- the person who told you about Kina
-function M.Name(who)
-  local d = db()
-  local n = first(who)
-  if not d.eligible then C.Print("only a new Kina can name who told them about it."); return false end
-  if d.done then C.Print("you already gave " .. tostring(d.target) .. " the credit."); return false end
-  if not n then C.Print("who told you about Kina? " .. GOLD .. "/kina mentor Name|r"); return false end
-  if n == me() or C.IsMyChar(n) then C.Print("that's one of your own characters."); return false end
-  d.named = n
-  if not d.qualified then
-    C.Print(string.format("thanks! %s gets the credit after your first farm of 15 minutes or more.", n))
+------------------------------------------------------------------ sharing the link
+local SHARE_TEXT = "Kina: a free farming partner add-on for WoW Forever. Shared loot log, fair splits, one-click debts. Get it: %s"
+local lastShare = 0
+function M.Share()
+  local inRaid = IsInRaid and IsInRaid()
+  local inParty = (IsInGroup and IsInGroup()) or (GetNumGroupMembers and GetNumGroupMembers() > 0)
+  if not inParty then C.Print("join a party first: Kina shares its link in party chat."); return false end
+  local now = GetTime and GetTime() or 0
+  if now - lastShare < 60 then C.Print("you just shared Kina: give it a minute."); return false end
+  lastShare = now
+  if SendChatMessage then pcall(SendChatMessage, string.format(SHARE_TEXT, C.UPDATE_URL or "github.com/Avicularia/Kina/releases"), inRaid and "RAID" or "PARTY") end
+  -- remember who was there (first share to each player wins; kept 30 days)
+  local d = db(); d.shared = d.shared or {}
+  local n = 0
+  local names = {}
+  local raid = IsInRaid and IsInRaid()
+  for i = 1, raid and 40 or 4 do
+    local u = (raid and "raid" or "party") .. i
+    if UnitExists and UnitExists(u) then names[#names + 1] = UnitName(u) end
   end
-  d.target = n
-  M.Try()
+  for _, name in ipairs(names) do
+    local f = first(name)
+    if f and f ~= me() and not C.IsMyChar(f) then
+      if not d.shared[f] then d.shared[f] = C.Now() end
+      n = n + 1
+    end
+  end
+  for f, t in pairs(d.shared) do if C.Now() - t > 30 * 86400 then d.shared[f] = nil end end
+  C.Print(string.format("shared Kina's link in %s chat. If someone installs it and their Kina first meets yours in a party, the install is yours.", inRaid and "raid" or "party"))
   return true
 end
 
-local function lastFarmPartners(s)
-  local out = {}
-  for _, p in ipairs(s.party or {}) do local n = first(p.name); if n and n ~= me() then out[#out + 1] = n end end
-  return out
+-- a brand-new Kina said hello in my group: if I shared the link with them, say when
+local claimed = {}
+local function onNewKina(from)
+  local d = db()
+  local f = first(from)
+  local t = f and d.shared and d.shared[f]
+  if not t or claimed[f] then return end
+  local ch = C.Share.GroupChannel()
+  if ch and C.Share.InMyGroup(from) then
+    claimed[f] = true
+    C.Share.Send(table.concat({ "J", C.Share.UID(), tostring(t), f }, "|"), ch)
+  end
+end
+
+------------------------------------------------------------------ first contact
+-- the new player's side: collect the "I shared with you" claims for a little while after
+-- first contact, then the earliest sharer still in the party gets it
+local window, claims
+local function decide()
+  local d = db()
+  if d.decided then return end
+  d.decided = C.Now()
+  local best, bt
+  for who, t in pairs(claims or {}) do
+    if C.InGroupName and C.InGroupName(who) and not C.IsMyChar(who) and (not bt or t < bt) then best, bt = who, t end
+  end
+  if best then
+    d.target = best
+    C.Print(string.format("%s shared Kina with you: they get the credit after your first farm of 15 minutes or more.", best))
+  end
+  claims = nil
+  M.Try()
+end
+local function onClaim(from, rest)
+  local uid, t, recruit = rest:match("^(%x+)|(%d+)|([^|]+)$")
+  local d = db()
+  if not uid or d.decided or not d.eligible or first(recruit) ~= me() then return end
+  t = tonumber(t)
+  if not t or t > C.Now() + 60 then return end
+  claims = claims or {}
+  local f = first(from)
+  if f and (not claims[f] or t < claims[f]) then claims[f] = t end
+end
+local function firstContact()
+  local d = db()
+  if not d.eligible or d.decided or window then return end
+  window = true
+  claims = claims or {}
+  if C.After then C.After(20, function() window = nil; pcall(decide) end) else decide() end
 end
 
 -- a farm ended: was it the first one that counts?
@@ -108,13 +168,6 @@ function M.OnFarmEnd(s, f)
   if mates < 1 or secs < ((R and R.FARM_MIN_SECS) or 900) then return end
   if R and R.Unqualified and R.Unqualified(f) then return end
   d.qualified = C.Now()
-  if not d.named then
-    -- nobody named: the leader of this farm, or my first partner if I led it
-    local leader = first(s.sync and s.sync.leader)
-    local mates2 = lastFarmPartners(s)
-    local t = (leader and leader ~= me()) and leader or mates2[1]
-    if t and not C.IsMyChar(t) then d.target = t end
-  end
   M.Try()
 end
 
@@ -157,9 +210,14 @@ C.On("INIT", function()
   if C.Share then
     C.Share.kinds.N = onCredit
     C.Share.kinds.A = onThanks
+    C.Share.kinds.J = onClaim
     local prev = C.Share.onHello
     C.Share.onHello = function(from, uid, a, channel)
       if prev then prev(from, uid, a, channel) end
+      if C.Share.InMyGroup(from) then
+        if a and a.flags and a.flags:find("n", 1, true) then pcall(onNewKina, from) end
+        if M.Eligible() and not db().decided then firstContact() end
+      end
       if M.Eligible() and db().qualified then M.Try(from) end
     end
   end
@@ -174,26 +232,8 @@ if CreateFrame then
 end
 C.On("GROUP_ROSTER_UPDATE", function() if M.Eligible() and db().qualified then C.After(5, function() pcall(M.Try) end) end end)
 
--- asked once, after the welcome tour (new players only)
-if StaticPopupDialogs then
-  StaticPopupDialogs.KINA_MENTOR = {
-    text = "Who told you about Kina?\n\n|cff9d9d9dTheir character name. They get the credit after your first farm of 15 minutes or more. Leave it empty and the first person you farm with gets it.|r",
-    button1 = ACCEPT or "OK", button2 = "Skip",
-    hasEditBox = true, maxLetters = 24, timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    OnAccept = function(self)
-      local eb = self.editBox or self.EditBox
-      local n = eb and eb:GetText() or ""
-      if n:match("%S") then M.Name(n) end
-    end,
-    EditBoxOnEnterPressed = function(self)
-      local p = self:GetParent(); local b = p.button1 or (p.GetButton1 and p:GetButton1()); if b then b:Click() end
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-  }
-end
-function M.Ask()
+-- a new Kina's hello says so (flag "n"), until its first contact has been decided
+function M.NewFlag()
   local d = db()
-  if not M.Eligible() or d.named or d.asked then return end
-  d.asked = C.Now()
-  if C.ShowPopup then C.ShowPopup("KINA_MENTOR") end
+  return (d.eligible == true and not d.decided) and "n" or ""
 end

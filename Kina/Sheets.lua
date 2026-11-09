@@ -117,9 +117,28 @@ local function youPage(p, them)
 
   local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(228)
   local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
+  -- 0.9.18: Kina Partner (who, the bonus, the bond)
+  local pairT = text(rec, "GameFontHighlightSmall"); pairT:SetPoint("TOPLEFT", h4, "BOTTOMLEFT", 0, -4); pairT:SetPoint("RIGHT", rec, "RIGHT", -16, 0)
   -- (1.5.4: no "Commend someone": commending only happens in the end-of-farm window)
   local pb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pb) end; pb:SetSize(110, 22); pb:SetPoint("TOPRIGHT", -14, -10)
   pb:SetText("Party profiles"); pb:SetScript("OnClick", function(self) if C.Profile then C.Profile.Picker(self) end end)
+  if not them then
+    -- 0.9.17 (Taylor): share Kina's link in party chat; the first sharer gets the install
+    local sb = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(sb) end
+    sb:SetSize(100, 22); sb:SetPoint("RIGHT", pb, "LEFT", -6, 0); sb:SetText("Share Kina")
+    sb:SetScript("OnClick", function() if C.Mentor then C.Mentor.Share() end end)
+    sb:SetScript("OnEnter", function(self)
+      if not GameTooltip then return end
+      GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Share Kina")
+      GameTooltip:AddLine("Posts Kina's download link in party chat. If someone installs it and their Kina first meets yours in a party, the install counts for you (once they've farmed 15 minutes).", 1, 1, 1, true)
+      GameTooltip:Show()
+    end)
+    sb:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  end
+  -- 0.9.18: partner up / end it, on someone else's profile
+  local pairB = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pairB) end
+  pairB:SetSize(110, 22); pairB:SetPoint("TOPRIGHT", -14, -10); pairB:Hide()
+  pairB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   local recL, recR = {}, {}
   local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -50); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
   local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -50); colB:SetPoint("BOTTOMRIGHT", -16, 10)
@@ -227,7 +246,12 @@ local function youPage(p, them)
       C.Rules.Cover(p, old and true or false, "THEIR KINA IS OUT OF DATE\n\n|cffffffffThey earn no XP or standing until they update.|r")
     end
     lvl:SetText((klv == -1) and (ORANGE .. "Kina log damaged|r") or (GOLD .. "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1) .. "|r"))
-    xpBar:Set(1, "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1))
+    -- 0.9.17 (Taylor): their XP toward the next level, when their Kina shares it
+    local txp, lv1 = pr and tonumber(pr.xp), (klv and klv > 0) and klv or 1
+    local lo, hi = C.Rep.XPFor and C.Rep.XPFor(lv1), C.Rep.XPFor and C.Rep.XPFor(lv1 + 1)
+    if txp and lo and hi and hi > lo and klv and klv > 0 then
+      xpBar:Set(math.max(0, math.min(1, (txp - lo) / (hi - lo))), string.format("%d / %d XP", txp, hi))
+    else xpBar:Set(1, "Kina " .. C.Rep.Roman(lv1)) end
     xpNote:SetText(GREY .. "Their XP and standing are what their Kina reports (unverified).|r")
     if snext then stBar:Set(math.max(0, math.min(1, ((stand or 0) - sat) / math.max(1, snext - sat))), string.format("%s  %d / %d", sname, stand or 0, snext))
     else stBar:Set((stand or 0) < 0 and 0 or 1, string.format("%s  %d", sname, stand or 0)) end
@@ -243,7 +267,28 @@ local function youPage(p, them)
       { "Kina version", pr and pr.ver or (GREY .. "?|r") },
       { "Standing now", tostring(stand or "?") },
       { "Installs shared", tostring(pr and pr.recruits or 0) },
+      { "Partner bond", (C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (tostring(C.Rep.BondOf(who)) .. " farm" .. (C.Rep.BondOf(who) == 1 and "" or "s")) or (GREY .. "none yet|r") },
     })
+    -- 0.9.18: Kina Partner
+    local P = C.Pair
+    if P then
+      local isP = P.IsPartner(who)
+      local b = P.Bonus(who)
+      pairT:SetText(isP and string.format("%sYour Kina Partner|r  |cff33ff66+%d%% XP and standing together|r", GOLD, math.floor(b * 100 + 0.5))
+        or (GREY .. "Not your partner.|r"))
+      local canAsk = C.InGroupName and C.InGroupName(who) and pr and pr.ver
+      if isP or canAsk then
+        pairB:SetText(isP and "End partnership" or "Partner up"); pairB:Show()
+        pairB:SetScript("OnClick", function() if isP then P.End(who) else P.Ask(who) end; if p.refresh then p.refresh() end end)
+        pairB:SetScript("OnEnter", function(self)
+          if not GameTooltip then return end
+          GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(isP and "End partnership" or "Partner up")
+          GameTooltip:AddLine(isP and "Ends your Kina partnership. Your bond is kept if you partner up again."
+            or "Asks them to be your Kina Partner: +10% Kina XP and standing on farms and payments together, growing +1% every 5 farms together (up to +20%).", 1, 1, 1, true)
+          GameTooltip:Show()
+        end)
+      else pairB:Hide() end
+    end
     do
       wh:Show(); wh:SetScript("OnClick", function() if ChatFrame_SendTell then pcall(ChatFrame_SendTell, who) end end)
     end
@@ -252,7 +297,8 @@ local function youPage(p, them)
   p.refresh = function()
     -- 0.9.4: two separate pages: You (always me) and Profile (someone else, own tab)
     if them then local who = C.UI and C.UI.profileWho; if who then return refreshThem(who) end; return end
-    back:Hide(); pb:Show(); share:Show(); h4:SetText("Your record")
+    back:Hide(); pb:Show(); share:Show(); h4:SetText("Your record"); pairB:Hide()
+    pairT:SetText(C.Pair and C.Pair.Line() or "")
     wh:Hide()
     local me = C.YouProfile and C.YouProfile() or { name = UnitName("player"), level = UnitLevel("player"), class = "?", profs = {} }
     if C.Profile and C.Profile.ClearCrest then C.Profile.ClearCrest(portrait) end

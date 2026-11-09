@@ -93,8 +93,14 @@ local TOPICS = {
     .. "is kept and comes back when you play there.\n"
     .. H("Installs shared") .. "When a new player installs Kina because of you, it counts on your profile and earns you a "
     .. G .. "mentor star|r (1, 5, 10, 20 and 50 installs). It counts once their Kina has done its first farm of "
-    .. G .. "15 minutes|r or more and told yours. The new player names you after the welcome tour (or " .. G .. "/kina mentor Name|r); "
-    .. "if they don't, the first person they farm with gets it. Your own characters never count, and each new player counts once.\n\n"
+    .. G .. "15 minutes|r or more. To share Kina, press " .. G .. "Share Kina|r on the You tab (or " .. G .. "/kina share|r): the download "
+    .. "link goes to party chat. When a new player's Kina first meets other Kinas in a party, whoever shared the link with them "
+    .. "first, and is still in the party, gets the install. Your own characters never count, and each new player counts once.\n"
+    .. H("Partners") .. "Pick one Kina user as your Partner (it takes both of you: one asks, the other accepts). Partners earn "
+    .. G .. "+10% Kina XP and standing|r on farms together (your partner in the farm when it ends) and on payments between you. "
+    .. "The bond grows: " .. G .. "+1% more for every 5 farms|r together, up to " .. G .. "+20%|r at 50. Your bond with each person is "
+    .. "kept, so going back to an old partner picks up where you left off. Kina asks when a Kina user joins your party and you have "
+    .. "no partner; end it from their profile or " .. G .. "/kina partner end|r.\n\n"
     .. GR .. "Other players' standing is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "
     .. "wiped or swapped, and their profile says so.|r" },
 
@@ -119,7 +125,8 @@ local TOPICS = {
     .. G .. "/kina widget|r  show or hide the widget\n"
     .. G .. "/kina profile Name|r  someone's Kina profile\n"
     .. G .. "/kina pardon|r  the one-time pardon, if you put it off\n"
-    .. G .. "/kina mentor Name|r  new players: who told you about Kina\n"
+    .. G .. "/kina share|r  post Kina's download link in party chat\n"
+    .. G .. "/kina partner|r  your Kina Partner (name to ask, end to stop)\n"
     .. G .. "/kina start|r, " .. G .. "/kina stop|r  start or stop a farm\n"
     .. G .. "/kina scan|r  scan the auction house" },
 }

@@ -1,3 +1,17 @@
+# Kina 0.9.18 (beta)
+
+- Kina Partners: +10% XP and standing on farms and payments together.
+- Partner bonus grows +1% every 5 farms together, up to +20%.
+- The partner popup is back: partnering takes both players.
+- End a partnership from their profile or /kina partner end.
+
+# Kina 0.9.17 (beta)
+
+- Share Kina: posts the download link in party chat; the first sharer gets the install.
+- Other players' profiles show their XP progress.
+- Dishonoured portraits keep the moving 3D model, greyed out.
+- Fix: "Only Kina" tooltips no longer show double on loot rolls.
+
 # Kina 0.9.16 (beta)
 
 - The widget wears the new nameplate too.

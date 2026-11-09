@@ -335,20 +335,21 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   local nc = NUMCOL[standing or "Unproven"] or NUMCOL.Unproven
   o.num:SetTextColor(nc[1], nc[2], nc[3])
   if o.num.SetShadowOffset then o.num:SetShadowOffset(1, -2); o.num:SetShadowColor(0, 0, 0, 1) end
-  -- the 3D model can't be greyed everywhere: where it can't, a dishonoured portrait
-  -- goes back to the (grey) picture
+  -- 0.9.17 (Taylor): a dishonoured portrait keeps its moving 3D model, greyed out.
+  -- Where the game can't desaturate a model, a grey wash over it drains the colour
+  -- (the model still moves underneath). 0.9.13-0.9.16 swapped in the still 2D picture.
   o.noModel = nil
   if o.model then
     local canGrey = type(o.model.SetDesaturation) == "function"
     if canGrey then pcall(o.model.SetDesaturation, o.model, sh and 1 or 0) end
-    if sh and not canGrey then
-      o.noModel = true
-      if o.model:IsShown() then
-        local u = modelUnit[o.model]
-        K.HideModel(o.portrait)
-        if u and SetPortraitTexture then pcall(SetPortraitTexture, o.portrait, u) end
-      end
+    if not o.wash then
+      o.wash = o.top:CreateTexture(nil, "OVERLAY", nil, 0)
+      o.wash:SetPoint("CENTER", o.portrait, "CENTER"); o.wash:SetSize(W * 0.86, W * 0.86)
+      o.wash:SetTexture(P .. "fx_disc"); o.wash:SetBlendMode("BLEND")
     end
+    if sh and not canGrey then
+      o.wash:SetVertexColor(0.30, 0.30, 0.31); o.wash:SetAlpha(0.62); o.wash:Show()
+    else o.wash:Hide() end
   end
   local star, wide = K.StarFor(recruits)
   -- 1.5.3 (Taylor: the mentor star was tiny): sized from the portrait, and bigger

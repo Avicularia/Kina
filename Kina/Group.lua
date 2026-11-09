@@ -340,9 +340,10 @@ function C.OnKinaMate(name, char, tries)
     greeted[name] = true
     C.Print(string.format("%s runs Kina: syncing scans, loot and community drop data (progress on the scan bar).", name))
   end
-  -- 0.9.14 (Taylor): no more "Use them as your farming partner?" popup. It only fed the
-  -- private build's farm planner (public Kina never showed it), and the split works
-  -- through the farm invite either way. The chat line above is all that's left.
+  -- 0.9.14 removed the old "Use them as your farming partner?" popup (it only fed the
+  -- private planner). 0.9.18 (Taylor) brings it back revamped as Kina Partners: a real
+  -- bonus, mutual, and a bond that grows (Pair.lua)
+  if C.Pair and C.Pair.OnKinaMate then pcall(C.Pair.OnKinaMate, name) end
 end
 C.On("GROUP_ROSTER_UPDATE", function()
   -- ask again next time someone rejoins
