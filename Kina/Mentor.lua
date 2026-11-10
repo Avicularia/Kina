@@ -47,7 +47,9 @@ end
 local function onCredit(from, rest, channel)
   local uid, target, name = rest:match("^(%x+)|([^|]*)|([^|]*)$")
   if not uid or uid == (C.Share and C.Share.UID()) then return end
-  if first(target) ~= me() then return end -- someone else's credit (sent to the whole group)
+  -- someone else's credit (sent to the whole group). 1.0.1: any of my characters counts,
+  -- not just the one I'm playing right now
+  if first(target) ~= me() and not C.IsMyChar(target) then return end
   -- 0.9.13 (exploit test): the recruit is whoever SENT the credit, never a name inside it
   -- (one other account could otherwise send 50 made-up recruits)
   name = first(from)
@@ -192,6 +194,8 @@ function M.Pick(name)
   local f = first(name)
   if f and not C.IsMyChar(f) then
     d.target = f
+    -- 1.0.1: remember their account too, so the credit finds them on any character
+    d.targetUid = C.Share and C.Share.UIDOf and C.Share.UIDOf(f) or nil
     C.Print(string.format("|cffffc54a%s showed you Kina:|r they earn a mentor star once you finish your first farm of 15 minutes or more.", f))
     M.Try()
   else
@@ -201,11 +205,16 @@ function M.Pick(name)
   if M.picker then M.picker:Hide() end
   return true
 end
+local shownOnce = false
 local function decide()
   local d = db()
   if d.decided or d.done then return end
+  -- 1.0.1 (Taylor: "clicked X... it's stuck in a loop every few minutes"): closing the
+  -- window is an answer too; it opens on its own once, then only by /kina mentor
+  if d.pickDismissed or shownOnce then return end
   if #M.Candidates() == 0 then return end
   if C.Tour and C.Tour.active then C.After(10, decide); return end -- after the tour
+  shownOnce = true
   if M.ShowPicker then pcall(M.ShowPicker) end
 end
 local function onClaim(from, rest)
@@ -239,7 +248,7 @@ function M.OnFarmEnd(s, f)
 end
 
 local lastTry = {}
-function M.Try(heardFrom)
+function M.Try(heardFrom, heardUid)
   local d = db()
   if not d.eligible or d.done or not d.qualified or not d.target then return false end
   local S = C.Share
@@ -249,8 +258,14 @@ function M.Try(heardFrom)
   local msg = table.concat({ "N", S.UID(), d.target, me() or "?" }, "|")
   local ch = S.GroupChannel()
   local sent = false
-  if ch and C.InGroupName and C.InGroupName(d.target) then sent = S.Send(msg, ch) end
-  if not sent and heardFrom and first(heardFrom) == d.target then sent = S.Send(msg, "WHISPER", heardFrom) end
+  local here = C.InGroupName and C.InGroupName(d.target)
+  -- 1.0.1: or any character on the mentor's account in my group
+  if not here and d.targetUid and S.CharsOf then
+    for _, n in ipairs(S.CharsOf(d.targetUid)) do if C.InGroupName and C.InGroupName(n) then here = true end end
+  end
+  if ch and here then sent = S.Send(msg, ch) end
+  local heardMatch = heardFrom and (first(heardFrom) == d.target or (d.targetUid and heardUid == d.targetUid))
+  if not sent and heardMatch then sent = S.Send(msg, "WHISPER", heardFrom) end
   if sent then lastTry[d.target] = now end
   return sent
 end
@@ -258,9 +273,10 @@ end
 local function onThanks(from, rest)
   local uid, recruit = rest:match("^(%x+)|(%x+)$")
   local d = db()
-  if not uid or recruit ~= C.Share.UID() or d.done or first(from) ~= d.target then return end
+  if not uid or recruit ~= C.Share.UID() or d.done then return end
+  if first(from) ~= d.target and not (d.targetUid and uid == d.targetUid) then return end
   d.done = C.Now()
-  C.Print(string.format("%s%s got the credit for showing you Kina.|r Welcome!", GREEN, d.target))
+  C.Print(string.format("%s%s got the credit for showing you Kina.|r Welcome!", GREEN, first(from) or d.target))
 end
 
 ------------------------------------------------------------------ wiring
@@ -285,7 +301,7 @@ C.On("INIT", function()
         if a and a.flags and a.flags:find("n", 1, true) then pcall(onNewKina, from) end
         if M.Eligible() and not db().decided then firstContact() end
       end
-      if M.Eligible() and db().qualified then M.Try(from) end
+      if M.Eligible() and db().qualified then M.Try(from, uid) end
     end
   end
 end)
@@ -345,6 +361,10 @@ function M.ShowPicker()
     nb:SetSize(200, 24); nb:SetPoint("BOTTOM", 0, 14); nb:SetText("Nobody, I found it myself")
     nb:SetScript("OnClick", function() M.Pick(nil) end)
     local x = CreateFrame("Button", nil, f, "UIPanelCloseButton"); x:SetPoint("TOPRIGHT", 2, 2)
+    x:HookScript("OnClick", function()
+      db().pickDismissed = C.Now()
+      C.Print("closed: you can still pick who showed you Kina with |cffffc54a/kina mentor|r.")
+    end)
     f.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable"); f.empty:SetPoint("CENTER", 0, -30)
     f.empty:SetText("Group up with the player who showed you Kina, and they'll show up here.")
   end

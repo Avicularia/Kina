@@ -130,7 +130,7 @@ local DB = { t = T, f = {
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N, profileRealm = S, realms = map(T),
   pair = { t = T, f = { snooze = NUMMAP } },
-  mentor = { t = T, f = { eligible = B, born = N, named = S, target = S, qualified = N, done = N, asked = N, recruits = map({ t = T, f = { name = S, t = N } }) } },
+  mentor = { t = T, f = { eligible = B, born = N, named = S, target = S, targetUid = S, pickDismissed = N, qualified = N, done = N, asked = N, recruits = map({ t = T, f = { name = S, t = N } }) } },
   vouch = { t = T, f = { given = list({ t = T, f = { who = S, kind = N, t = N, ref = S } }), got = list({ t = T, f = { who = S, kind = N, t = N, ref = S, rep = N } }), closed = NUMMAP } },
   selftest = T, repairs = list(T), forgive = { t = T, f = { pending = list({ t = T, f = { who = S, amt = N, ref = S, t = N, kind = S }, req = { "who", "ref" } }) } },
   tradeStats = { t = T, f = { complete = N, missed = N, cancelled = N, lastMissed = N, msgs = list(S) } },

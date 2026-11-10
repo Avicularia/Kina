@@ -1,3 +1,8 @@
+# Kina 1.0.1
+
+- Fix: closing "Who showed you Kina?" no longer brings it back every few minutes (/kina mentor reopens it).
+- Fix: the mentor star reaches the mentor on any of their characters, not only the one they were picked on.
+
 # Kina 1.0.0
 
 - Kina is out of beta.
