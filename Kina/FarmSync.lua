@@ -33,11 +33,34 @@ local function leaderGone(name)
 end
 
 local declined = {}
+-- 1.0.2 (Taylor: "what happens when I join a group that already has a Kina farm going and
+-- I start another one? The widgets should be synced to let me know they are in a farm"):
+-- the leader's Kina repeats its invite once a minute for the whole farm, so someone who
+-- joins the group later hears about it. Kina remembers the group's running farm: the
+-- widget says whose farm is running, and Start joins it (it never starts a second one).
+local known
+function F.Running()
+  local k = known
+  if not k or C.Now() - k.t > 150 then return nil end
+  if not unitOf(k.leader) then return nil end
+  if C.TrackOnly and C.TrackOnly() then return nil end
+  local s = C.session
+  if s and s.sync and s.sync.sid == k.sid then return nil end
+  return k
+end
+function F.JoinRunning()
+  local k = F.Running()
+  if not k then return false end
+  F.Accept(k.sid, k.leader, k.label or "", k.camp or "")
+  return true
+end
 local function onInvite(sid, leader, label, camp)
-  if declined[sid] then return end
   if C.TrackOnly and C.TrackOnly() then return end -- 0.9.20: tracker only: no group farms
   if C.session and C.session.sync and C.session.sync.sid == sid then return end
   if not unitOf(leader) then return end -- only from someone in your group
+  known = { sid = sid, leader = leader, label = label, camp = camp, t = C.Now() }
+  if C.RefreshWidget and not C.session then pcall(C.RefreshWidget) end
+  if declined[sid] then return end
   local auto = C.settings.farmAutoJoin and C.settings.farmAutoJoin[leader]
   if auto then F.Accept(sid, leader, label, camp); return end
   -- your group's start command already started this farm for you (the leader's Kina

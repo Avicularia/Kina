@@ -3,10 +3,10 @@
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
 C.name = "Kina"
-C.version = "1.0.1"
+C.version = "1.0.2"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 180
+C.BUILD = 181
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -243,6 +243,7 @@ local defaults = {
   items = {},       -- [itemID] = { q, il, rl, cls, sub, eq, vend, name, bind }  (static item facts)
   vendor = {},      -- [itemID] = { p = copper each, t = time, c = client price then }
   noDE = {},        -- [itemID] = time learned (game refused to disenchant)
+  noVend = {},      -- [itemID] = 1: the game says no merchant buys it (1.0.2)
   loot = {},        -- [npcID] = { nm, lvl, type, kills, looted, coin, pp, ppCoin, items = {[id]=n}, skins, skinItems = {} }
   nodes = {},       -- [objectID] = { nm, n, items = {[id]=n} }
   sessions = {},    -- recent finished sessions (max 50)

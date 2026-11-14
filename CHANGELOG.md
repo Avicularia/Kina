@@ -1,3 +1,18 @@
+# Kina 1.0.2
+
+- Kina only ever exchanges its data with players who are online in your group or whose Kina just spoke to yours. No more "No player named..." lines.
+- Group chat stats line: posts every 15 minutes on the dot, shows the same gold per hour as your widget, adds character XP per hour, kills and farm time. The CurseForge tail is gone.
+- Fair rewards: paying and being paid earn the same Kina XP and standing, and owing several people no longer earns several times more.
+- Ledger: farm details open with "Why you owe" and your biggest drops, plus the farm's top drops and who looted them.
+- Item tooltips: a big VENDOR, AUCTION HOUSE or DISENCHANT call above the tooltip.
+- At a merchant, bag items that shouldn't be vendored are greyed out (the game's own bags).
+- New setting: "This character disenchants". Off means Kina never suggests disenchanting there.
+- Widget: Net Looted and Net Gained (with quest reward gold), plus FPS and latency.
+- Joining a group that already has a Kina farm running: your widget says so and Start becomes Join.
+- Fix: items no merchant buys no longer show a vendor price; trade goods no longer show a disenchant value.
+- Fix: paying or asking by mail no longer fails with "enter a character's full name".
+- Fix: the Kina theme plays at the end of a farm again (on unless you turn it off).
+
 # Kina 1.0.1
 
 - Fix: closing "Who showed you Kina?" no longer brings it back every few minutes (/kina mentor reopens it).

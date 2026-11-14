@@ -51,6 +51,7 @@ C.DE_OBS_MIN = 100
 function C.DEOutcomes(id, tableOnly)
   local r = C.Item(id)
   if not (r and r.il and r.q) then return nil end
+  if r.cls and r.cls ~= 2 and r.cls ~= 4 then return nil end -- 1.0.2: weapons and armor only
   local obs = C.db.deObs and C.db.deObs[C.DETierKey(r)]
   if not tableOnly and C.settings.deMine and obs and obs.n >= C.DE_OBS_MIN then
     local mats = {}
@@ -135,10 +136,18 @@ function C.DisenchantSkill()
   end
   return best
 end
-function C.CanDisenchantAny() return C.DisenchantSkill() ~= nil end
+-- 1.0.2 (Taylor): disenchanting can be switched off per character (no enchanter, no
+-- disenchant alt): Kina then never counts or suggests disenchanting on that character.
+function C.DEOn() return not (C.settings and type(C.settings.deOff) == "table" and C.charKey and C.settings.deOff[C.charKey]) end
+function C.SetDEOn(on)
+  if not (C.settings and C.charKey) then return end
+  if type(C.settings.deOff) ~= "table" then C.settings.deOff = {} end
+  C.settings.deOff[C.charKey] = (not on) and true or nil
+end
+function C.CanDisenchantAny() return C.DEOn() and C.DisenchantSkill() ~= nil end
 -- Can this item be disenchanted by someone available, at their skill?
 function C.CanDEFor(id)
-  if C.CanDE(id) ~= true then return false end
+  if C.CanDE(id) ~= true or not C.DEOn() then return false end
   local skill = C.DisenchantSkill()
   local r = C.Item(id)
   return skill ~= nil and r and r.il and skill >= C.DESkillNeeded(r.il) or false
@@ -181,7 +190,7 @@ function C.BestRoute(id, qty)
   if r and (r.bind == 1 or r.bind == 4) then
     local v = C.VendorPrice(id) or 0
     -- soulbound: only YOU can disenchant it
-    local mine = C.EnchantingSkill()
+    local mine = C.DEOn() and C.EnchantingSkill()
     local de = mine and r.il and mine >= C.DESkillNeeded(r.il) and C.CanDE(id) == true and C.DEValue(id)
     if de and de.ev > v then return "DISENCHANT", de.ev, { de = de, vendor = v, bound = true } end
     return (v > 0) and "VENDOR" or "KEEP", v, { vendor = v, bound = true }
@@ -195,7 +204,7 @@ function C.BestRoute(id, qty)
   if de and de.ev > best * 1.1 and de.ev - best >= margin then best, route = de.ev, "DISENCHANT" end
   if best <= 0 then route = "KEEP" end
   return route, best, { ah = ah, ahPrice = price, ahCut = cut, ahRisk = risk, vendor = vendor, de = de, canDE = canDE,
-    deAll = (C.CanDE(id) == true) and C.DEValue(id) or nil }
+    deAll = (C.DEOn() and C.CanDE(id) == true) and C.DEValue(id) or nil }
 end
 
 ------------------------------------------------------------------ deals

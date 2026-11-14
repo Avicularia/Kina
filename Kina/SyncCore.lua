@@ -473,8 +473,10 @@ function Core:Tick()
       s.deferred = nil
       for _, d in ipairs(list) do self:file(d[1], d[2], d[3], d[4], d[5]) end
     end
-    -- invites can be lost: repeat them for the first 3 minutes
-    if now - (s.startAt or now) < 180 and now - (s.lastInvite or 0) >= 30 then
+    -- invites can be lost: repeat them every 30 s for the first 3 minutes; 1.0.2: then
+    -- once a minute for the whole farm, so a Kina user who joins the group later hears
+    -- that a farm is running
+    if not s.closed and now - (s.lastInvite or 0) >= ((now - (s.startAt or now) < 180) and 30 or 60) then
       s.lastInvite = now
       self:send(table.concat({ "I", s.sid, self:name(), s.label or "", s.camp or "" }, "|"))
     end

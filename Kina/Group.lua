@@ -37,6 +37,37 @@ function C.InGroupName(name)
   return C.GroupMemberName(name) ~= nil
 end
 
+-- 1.0.2 (Taylor: "Kina should NEVER send messages to anyone"): Kina never sends chat
+-- whispers. Its add-on data (invisible, never chat) used to be addressed to a farm
+-- member by name even after they had left or logged off, and the game answered "No
+-- player named ..." in chat. Data is now only ever addressed to someone who is in your
+-- group and connected right now, or whose Kina spoke to yours in the last two minutes.
+C.heardAt = {}
+function C.Heard(name)
+  if type(name) ~= "string" or name == "" then return end
+  local t = GetTime and GetTime() or 0
+  C.heardAt[name] = t; C.heardAt[firstName(name)] = t
+end
+function C.CanWhisper(name)
+  if type(name) ~= "string" or name == "" then return false end
+  local want = firstName(name)
+  if want == "" then return false end
+  if UnitName and want == firstName(UnitName("player") or "") then return true end
+  if IsInGroup and IsInGroup() then
+    local raid = IsInRaid and IsInRaid()
+    local n = GetNumGroupMembers and GetNumGroupMembers() or 0
+    for i = 1, raid and n or (n - 1) do
+      local unit = raid and ("raid" .. i) or ("party" .. i)
+      if UnitExists and UnitExists(unit) then
+        local nm = UnitName(unit)
+        if nm and firstName(nm) == want then return not (UnitIsConnected and UnitIsConnected(unit) == false) end
+      end
+    end
+  end
+  local t = C.heardAt[name] or C.heardAt[want]
+  return t ~= nil and ((GetTime and GetTime() or 0) - t) < 120
+end
+
 -- 0.9.20 (Taylor): "Tracker only": Kina tracks your farms (gold per hour, loot) but you
 -- take no part in group farms, splits or debts, and earn no Kina XP or standing. Every
 -- Kina in the group is told (hello flag "t") and leaves you out of its farms and splits.

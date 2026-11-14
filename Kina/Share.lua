@@ -160,6 +160,8 @@ C.GuardScript(sender, "OnUpdate", "Share:145", function(self, dt)
   if k == "E" and what then S.dumping[what] = nil end
   S.sent = (S.sent or 0) + 1
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+  -- 1.0.2: never address data to someone who isn't reachable right now (see C.CanWhisper)
+  if it.channel == "WHISPER" and not (C.CanWhisper and C.CanWhisper(it.target)) then S.dropped = (S.dropped or 0) + 1; return end
   C.lastSend = { k = it.msg:sub(1, 1) .. (it.msg:match("^S|[^|]*|[^|]*|(%u)") or ""), t = GetTime and GetTime() or 0 }
   local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, it.msg, it.channel, it.target)
   if ok and THROTTLED and result == THROTTLED then table.insert(queue, 1, it); tokens = 0 end
@@ -955,6 +957,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if prefix ~= PREFIX or type(text) ~= "string" or isMe(from) then return end
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
+    if C.Heard then C.Heard(from) end
     if channel == "GUILD" and not db().opts.guild then return end
     local kind, rest = text:match("^(%u)|(.*)$")
     if not kind then return end

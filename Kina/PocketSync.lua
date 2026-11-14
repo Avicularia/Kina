@@ -37,6 +37,7 @@ C.GuardScript(sender, "OnUpdate", "PocketSync:33", function(_, dt)
   local it = queue[1]
   if not it.urgent and InCombatLockdown and InCombatLockdown() then return end -- big dumps wait for peace
   table.remove(queue, 1); tokens = tokens - 1
+  if it.channel == "WHISPER" and not (C.CanWhisper and C.CanWhisper(it.target)) then return end -- 1.0.2
   local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, it.msg, it.channel, it.target)
   if ok and THROTTLED and result == THROTTLED then table.insert(queue, 1, it); tokens = 0 end
 end)
@@ -342,6 +343,7 @@ f:SetScript("OnEvent", function(_, event, ...)
     local prefix, text, channel, from = ...
     prefix, text, from = Safe(prefix), Safe(text), Safe(from)
     if prefix ~= PREFIX or not text or not from or isMe(from) then return end
+    if C.Heard then C.Heard(from) end
     local kind, rest = text:match("^(%u)|(.*)$")
     if not kind then return end
     local o = P.DB().opts

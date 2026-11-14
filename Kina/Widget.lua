@@ -105,6 +105,14 @@ local function shortXP(n)
   if n >= 10000 then return string.format("%.1fk", n / 1000) end
   return BreakUpLargeNumbers and BreakUpLargeNumbers(n) or tostring(n)
 end
+-- 1.0.2 (Taylor: "Net Looted and Net Gained which includes quest rewards"): the second
+-- tile is everything the farm brought in: what was looted plus quest reward gold.
+local function questGold(s) return (s and s.money and s.money.quest) or 0 end
+local function setGained(t, s, net)
+  local q = questGold(s)
+  local v = (net or 0) + q
+  setTile(t, (v < 0 and "-" or "") .. C.Money(math.abs(v)), q > 0 and ("quests " .. C.Money(q)) or "with quests")
+end
 local function setXPTile(t, s, kills, secs)
   kills = kills or 0
   if atMax() then
@@ -278,6 +286,19 @@ function C.RefreshWidget()
   if not (w and w:IsShown()) then return end
   pcall(refreshPay)
   pcall(partyStrip)
+  if w.perf then
+    local ok, txt = pcall(function()
+      local fps = GetFramerate and C.Plain(GetFramerate())
+      local _, _, home, world = (GetNetStats or function() end)()
+      home, world = C.Plain(home), C.Plain(world)
+      local ms = (type(world) == "number" and world > 0 and world) or (type(home) == "number" and home) or nil
+      local out = {}
+      if type(fps) == "number" then out[#out + 1] = math.floor(fps + 0.5) .. " fps" end
+      if ms then out[#out + 1] = math.floor(ms) .. " ms" end
+      return table.concat(out, "  ")
+    end)
+    w.perf:SetText(ok and ("|cff8a8a8a" .. txt .. "|r") or "")
+  end
   -- 1.1.0: the Scan AH button and what it's doing
   if w.scan then
     if C.ahOpen and not w.pay:IsShown() then
@@ -312,8 +333,8 @@ function C.RefreshWidget()
         setRate(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r", secs >= 30)
         setSub("per hour, group" .. (v.noSplit and " |cffffc54ano split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
         setTile(w.tNet, signed(v.net), "same for all")
-        setTile(w.tCoin, C.Money(v.coin or 0), "game split")
-        setTile(w.tLoot, C.Money(v.items or 0), "split prices") -- 1.0.0: consumables are personal, not the group's
+        setGained(w.tCoin, s, v.net)
+        setTile(w.tLoot, C.Money(v.items or 0), "coin " .. C.Money(v.coin or 0)) -- 1.0.0: consumables are personal, not the group's
         -- 1.4.6: the kills tile's second line is game XP per hour (falls back to kills/h)
         setXPTile(w.tKills, s, v.kills, secs)
         if s.sync then
@@ -341,11 +362,8 @@ function C.RefreshWidget()
     setRate(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r", secs >= 30)
     setSub("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
     setTile(w.tNet, signed(sum.total), ((sum.used or 0) > 0) and ("used " .. C.Money(sum.used)) or "what you looted")
-    setTile(w.tCoin, C.Money(sum.cash or 0), ((s.money.pickpocket or 0) > 0) and ("picks " .. C.Money(s.money.pickpocket)) or "looted coin")
-    local extra = {}
-    if (s.skins or 0) > 0 then extra[#extra + 1] = s.skins .. " skins" end
-    if (s.nodes or 0) > 0 then extra[#extra + 1] = s.nodes .. " nodes" end
-    setTile(w.tLoot, C.Money(sum.items or 0), table.concat(extra, ", "))
+    setGained(w.tCoin, s, sum.total)
+    setTile(w.tLoot, C.Money(sum.items or 0), "coin " .. C.Money(sum.cash or 0))
     setXPTile(w.tKills, s, sum.kills, secs)
     if w.idle then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end
     w.status:SetText(s.limit and ("|cffbbbbbbtimer ends in " .. clock(s.limit - secs) .. "|r") or "")
@@ -354,6 +372,9 @@ function C.RefreshWidget()
   else
     chip("READY", 0.20, 0.20, 0.25)
     w.pause:SetText("Pause")
+    -- 1.0.2: your group already has a shared farm running: Start joins it
+    local run = C.FarmSync and C.FarmSync.Running and C.FarmSync.Running()
+    w.go:SetText(run and "|cff7CFC00Join|r" or "Start")
     local last = C.db.sessions[1]
     w.clock:SetText("|cff9d9d9d" .. clock(last and ((last.gview and last.gview.secs) or (last.result and last.result.secs)) or 0) .. "|r")
     local g = last and (last.gview or last.result)
@@ -363,7 +384,7 @@ function C.RefreshWidget()
       setRate("|cffbbbbbb" .. C.Money(net * 3600 / secs) .. "|r", true)
       setSub("last farm  |cff9d9d9d" .. ((last.label or "?"):sub(1, 18)) .. ", " .. (last.why or "stopped") .. "|r")
       setTile(w.tNet, signed(net), last.gview and "group" or "")
-      setTile(w.tCoin, C.Money((last.gview and last.gview.coin) or (last.result and last.result.cash) or 0), "")
+      setGained(w.tCoin, last, net)
       setTile(w.tLoot, C.Money((last.gview and last.gview.items) or (last.result and last.result.items) or 0), "")
       setXPTile(w.tKills, last, g.kills, secs)
     else
@@ -401,7 +422,8 @@ function C.RefreshWidget()
       else w.status:SetText("|cff7CFC00" .. tr[1].from .. " pays " .. tr[1].to .. " " .. C.Money(tr[1].amt) .. "|r") end
     elseif last and last.g and not last.settled and last.gview then w.status:SetText("|cffffc54asplit: waiting for the leader's numbers|r")
     else w.status:SetText("") end
-    w.go:SetText("|cff7CFC00Start|r")
+    w.go:SetText(run and "|cff7CFC00Join|r" or "|cff7CFC00Start|r")
+    if run then setSub("|cff7CFC00" .. ((C.Books and C.Books.Name and C.Books.Name(run.leader)) or tostring(run.leader)) .. "'s group farm is running: press Join|r") end
     showBest(nil)
     if w.idle then local okI, eI = pcall(w.idle.fill, last); if not okI then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end end
   end
@@ -557,8 +579,8 @@ local function build()
 
   -- stat tiles
   local tw, gap, x0 = ironLook and 74 or 68, 4, 8
-  w.tNet = makeTile(w, "NET", x0, -72, tw)
-  w.tCoin = makeTile(w, "COIN", x0 + (tw + gap), -72, tw)
+  w.tNet = makeTile(w, "NET LOOTED", x0, -72, tw)
+  w.tCoin = makeTile(w, "NET GAINED", x0 + (tw + gap), -72, tw)
   w.tLoot = makeTile(w, "LOOT", x0 + (tw + gap) * 2, -72, tw)
   w.tKills = makeTile(w, "XP / HOUR", x0 + (tw + gap) * 3, -72, tw)
 
@@ -566,7 +588,10 @@ local function build()
   w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116 - DY)
   w.best = text(w, "GameFontHighlightSmall", "LEFT"); w.best:SetPoint("LEFT", w.bestIcon, "RIGHT", 5, 0); w.best:SetWidth(W - 40)
   w.status = text(w, "GameFontHighlightSmall", "LEFT"); w.status:SetPoint("TOPLEFT", 10, -135 - DY); w.status:SetWidth(W - 20)
-  for _, fs in ipairs({ w.rate, w.rateSub, w.clock, w.best, w.status }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
+  -- 1.0.2 (Taylor: "a latency reading on the widget, small, along with fps")
+  w.status:SetWidth(W - 20 - 84)
+  w.perf = text(w, "GameFontDisableSmall", "RIGHT"); w.perf:SetPoint("TOPRIGHT", w, "TOPRIGHT", -10, -135 - DY); w.perf:SetWidth(84)
+  for _, fs in ipairs({ w.rate, w.rateSub, w.clock, w.best, w.status, w.perf }) do if fs.SetWordWrap then fs:SetWordWrap(false) end end
 
   -- buttons
   w.go = CreateFrame("Button", nil, w, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(w.go) end

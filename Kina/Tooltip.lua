@@ -162,7 +162,7 @@ local function addLines(tip, id)
   end
 
   -- Disenchant (gear only; the breakdown can be switched off in Settings)
-  if C.IsGear(r) and C.settings.tipDE ~= false then addDE(tip, id, r) end
+  if C.IsGear(r) and C.settings.tipDE ~= false and (not C.DEOn or C.DEOn()) then addDE(tip, id, r) end
 
   -- the recommendation (1.5.4: the same call as the disenchant edge rule when it can be
   -- disenchanted: DE has to beat the best sale by 10-20%)
@@ -204,6 +204,32 @@ local function idOf(tip, data)
   end
   return id
 end
+-- 1.0.2 (Taylor: "I need either Vendor, AH, Disenchant in giant bold letters on the
+-- tooltip so that I can easily see what to do"): what to do with one of this item, and
+-- what that pays. The same call the "Best:" line and the merchant view use.
+function C.ItemCall(id)
+  if type(id) ~= "number" then return nil end
+  if C.IsBound and C.Item then
+    local r = C.Item(id)
+    if not r then return nil end
+  end
+  local d = C.DECall and C.DECall(id)
+  if d then
+    if d.call == "disenchant" then return "DISENCHANT", d.best end
+    if d.call == "auction" and d.ah > 0 then return "AUCTION", d.best end
+    if d.vend > 0 then return "VENDOR", d.vend end
+    return nil
+  end
+  local route, best = C.BestRoute(id, 1)
+  if not route or route == "KEEP" then return nil end
+  if route == "VENDOR" then
+    local v = C.VendorPrice(id)
+    if not (v and v > 0) then return nil end
+    best = v
+  end
+  return route, best
+end
+local showCall, hideCall
 local function handle(tip, data)
   if not C.ready or C.settings.tooltip == false then return end
   if not tip or (tip.IsForbidden and tip:IsForbidden()) then return end
@@ -221,6 +247,7 @@ local function handle(tip, data)
     local okc = pcall(C.TipOnlyKina, tip, tip:GetName(), tip:NumLines(), id)
     if not okc then C._TipRelease(tip) end
   end
+  if tip == GameTooltip then pcall(showCall, tip, id) end
 end
 -- 1.5.4 (Taylor): "the only thing I need to see is the part you added": with Settings >
 -- "Only Kina in item tooltips" on, the lines other add-ons put under Kina's block are
@@ -246,6 +273,46 @@ local function release(tip)
   end
 end
 C._TipRelease = release
+-- the big call: Kina's own small frame sitting on top of the tooltip (nothing of the
+-- game's tooltip is changed). It follows the tooltip and goes away with it.
+local banner
+local CALL = { VENDOR = { "VENDOR", 1.00, 0.82, 0.20 }, AUCTION = { "AUCTION HOUSE", 0.74, 0.58, 1.00 }, DISENCHANT = { "DISENCHANT", 0.49, 0.99, 0.00 } }
+hideCall = function() if banner then banner:Hide(); banner.tip = nil end end
+C._TipCallHide = hideCall
+function C.TipCallShown() return banner and banner:IsShown() and banner.word or nil end
+showCall = function(tip, id)
+  if C.settings.tipCall == false then return hideCall() end
+  local route, best = C.ItemCall(id)
+  local c = route and CALL[route]
+  if not c then return hideCall() end
+  if not banner then
+    banner = CreateFrame("Frame", "KinaTipCall", UIParent)
+    banner:SetFrameStrata("TOOLTIP"); banner:SetSize(180, 32)
+    if banner.SetClampedToScreen then banner:SetClampedToScreen(true) end
+    local bg = banner:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.03, 0.03, 0.04, 0.94)
+    banner.bar = banner:CreateTexture(nil, "BORDER"); banner.bar:SetPoint("BOTTOMLEFT"); banner.bar:SetPoint("BOTTOMRIGHT"); banner.bar:SetHeight(3)
+    banner.text = banner:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); banner.text:SetPoint("LEFT", 10, 1)
+    local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    if banner.text.SetFont then pcall(banner.text.SetFont, banner.text, font, 22, "THICKOUTLINE") end
+    banner.val = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); banner.val:SetPoint("LEFT", banner.text, "RIGHT", 10, 0)
+    C.GuardScript(banner, "OnUpdate", "tooltip call", function(self)
+      local t = self.tip
+      if not t or not t:IsShown() or shown[t] == nil then self:Hide(); self.tip = nil; return end
+      local host = (active[t] and kt and kt:IsShown()) and kt or t
+      if host ~= self.host then self.host = host; self:ClearAllPoints(); self:SetPoint("BOTTOMLEFT", host, "TOPLEFT", 0, -2) end
+    end)
+  end
+  banner.word = c[1]
+  banner.text:SetText(c[1]); banner.text:SetTextColor(c[2], c[3], c[4])
+  banner.bar:SetColorTexture(c[2], c[3], c[4], 0.9)
+  banner.val:SetText(best and best > 0 and C.Money(math.floor(best)) or "")
+  local tw = (banner.text.GetStringWidth and banner.text:GetStringWidth() or 120) + (banner.val.GetStringWidth and banner.val:GetStringWidth() or 40)
+  banner:SetWidth(math.max(120, tw + 32))
+  local host = (active[tip] and kt and kt:IsShown()) and kt or tip
+  banner.tip, banner.host = tip, host
+  banner:ClearAllPoints(); banner:SetPoint("BOTTOMLEFT", host, "TOPLEFT", 0, -2)
+  banner:Show()
+end
 function C.TipOnlyKina(tip, name, keep, id)
   if tip ~= GameTooltip or not tip:IsShown() or shown[tip] ~= id then return release(tip) end
   local rows = {}
@@ -277,6 +344,7 @@ function C.TipOnlyKina(tip, name, keep, id)
 end
 
 C._TooltipAdd = addLines -- for tests
+C._TipCallShow = function(tip, id) return showCall(tip, id) end
 local hooked = false
 local function install()
   if hooked then return end
@@ -286,8 +354,8 @@ local function install()
       -- 0.9.9: a refresh (the game redraws bag items' tooltips several times a second)
       -- clears and refills the tooltip in one go. Kina's tooltip and the hidden game one
       -- stay as they are through it; only if the refill wasn't an item does it let go.
-      tip:HookScript("OnTooltipCleared", C.Safe("tooltip clear", function(self) shown[self] = nil end))
-      tip:HookScript("OnHide", C.Safe("tooltip hide", function(self) shown[self] = nil; release(self) end))
+      tip:HookScript("OnTooltipCleared", C.Safe("tooltip clear", function(self) shown[self] = nil; if banner and banner.tip == self then hideCall() end end))
+      tip:HookScript("OnHide", C.Safe("tooltip hide", function(self) shown[self] = nil; release(self); if banner and banner.tip == self then hideCall() end end))
       -- 0.9.17 (Taylor: loot-roll tooltips showed both at once): some tooltips (a loot
       -- roll, the AH) are refilled every frame, and their data can land a frame after the
       -- clear. Kina only lets go when the tooltip is no longer showing an item at all, and

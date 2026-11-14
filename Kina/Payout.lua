@@ -605,6 +605,31 @@ function C.OnDebtClock(from, secs, ref)
 end
 -- how much of the payment XP a payment earns by how soon it came after the farm:
 -- full within 5 minutes, falling evenly to half at 1 hour, half after that
+-- 1.0.2 (Taylor: "EXP and rep still isn't normalized between the creditor and the debtor
+-- ... when you owe money to people you get significantly more rep than they do because
+-- you are having to pay multiple people"): one rule for both sides of a payment.
+--   * paying and being paid earn the SAME Kina XP and the same standing for that debt;
+--   * a farm's award is shared over the debts you have in it: with debts to (or from)
+--     three people, each payment is a third. Settling everything in a farm earns one full
+--     award, however many payments it took and whichever side of them you were on.
+-- (Awards are logged when a payment is confirmed, so older payments keep what they got.)
+function C.DebtLinks(s, who)
+  local me = first(who or (UnitName and UnitName("player")) or "")
+  local mine = first((UnitName and UnitName("player")) or "")
+  local n = 0
+  for _, t in ipairs(s and s.split and s.split.transfers or {}) do
+    if (tonumber(t.amt) or 0) > 0 then
+      local f = (t.from == "you") and mine or first(t.from)
+      local to = (t.to == "you") and mine or first(t.to)
+      if f == me or to == me then n = n + 1 end
+    end
+  end
+  return math.max(1, n)
+end
+function C.DebtXP(s, total, part, stop, late, who, at)
+  local base = (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * (part or 1) * C.PaySpeed(stop, at) * (late and C.LATE_PAY or 1)
+  return base / C.DebtLinks(s, who)
+end
 function C.PaySpeed(stop, at)
   local t = (at or C.Now()) - (stop or at or 0)
   if t <= 300 then return 1 end
@@ -738,21 +763,22 @@ function C._matchConf(r, theirGave, label)
     -- that, rounded down (paying 1c of a 23s debt earns 0)
     local payXP, recvXP, payRep = 0, 0, 0
     local function onTime(cv) return cv.stop and (r.t or C.Now()) <= cv.stop + C.DEBT_HOURS * 3600 end
+    local function farmOf(cv)
+      for _, s in ipairs(C.db.sessions or {}) do if cv.start and s.start == cv.start then return s end end
+    end
+    -- 1.0.2: the same XP and standing for both sides, shared over my debts in that farm
     for _, cv in ipairs(r.covers or {}) do
       local tot = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
-      -- 1.5.3 (Taylor): paying and being paid earn the SAME standing
-      if tot >= 1 and C.Rep and C.Rep.PayRep then
-        payRep = payRep + (C.Rep.PayRep(tot) * (cv.amt or 0) / tot + (onTime(cv) and not cv.late and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)) * (cv.late and C.LATE_PAY or 1)
-      end
-    end
-    for _, cv in ipairs(r.covers or {}) do
-      local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
-      if total >= 1 then
-        local part = (cv.amt or 0) / total
-        -- 1.2.6: paid soon after the farm earns more (full in 5 min, half after an hour)
+      if tot >= 1 then
+        local farm = farmOf(cv)
+        local k = C.DebtLinks(farm)
+        local part = (cv.amt or 0) / tot
         local lf = cv.late and C.LATE_PAY or 1
-        if cv.dir == "owe" then payXP = payXP + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop) * lf
-        else recvXP = recvXP + (C.Rep and C.Rep.RECV_XP or 10) * part * lf end
+        if C.Rep and C.Rep.PayRep then
+          payRep = payRep + (C.Rep.PayRep(tot) * part + (onTime(cv) and not cv.late and (cv.amt or 0) >= tot - 1 and C.Rep.EARLY_REP or 0)) * lf / k
+        end
+        local xp = C.DebtXP(farm, tot, part, cv.stop, cv.late, nil, r.t)
+        if cv.dir == "owe" then payXP = payXP + xp else recvXP = recvXP + xp end
       end
     end
     if nx then payRep = 0 end
@@ -763,12 +789,11 @@ function C._matchConf(r, theirGave, label)
       for _, cv in ipairs(r.covers or {}) do
         local total = math.max(tonumber(cv.total) or cv.amt or 0, cv.amt or 0)
         if total >= 1 then
+          local farm = farmOf(cv)
           local part = (cv.amt or 0) / total
           local lf = cv.late and C.LATE_PAY or 1
-          if cv.dir == "owed" then
-            theirs = theirs + (C.Rep and C.Rep.PayXP and C.Rep.PayXP(total) or 0) * part * C.PaySpeed(cv.stop) * lf
-          else theirs = theirs + (C.Rep and C.Rep.RECV_XP or 10) * part * lf end
-          theirRep = theirRep + (C.Rep.PayRep(total) * part + (onTime(cv) and not cv.late and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)) * lf
+          theirs = theirs + C.DebtXP(farm, total, part, cv.stop, cv.late, r.who, r.t)
+          theirRep = theirRep + (C.Rep.PayRep(total) * part + (onTime(cv) and not cv.late and (cv.amt or 0) >= total - 1 and C.Rep.EARLY_REP or 0)) * lf / C.DebtLinks(farm, r.who)
         end
       end
       if nx then payXP, recvXP, theirs, theirRep = 0, 0, 0, 0 end
@@ -808,9 +833,20 @@ function C.ResendMailConfirms(who)
   end
 end
 local function plainMoney(c) return (C.Money(c):gsub("|T.-|t", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+-- 1.0.2 (Taylor: mail "sometimes says enter a character's full name"): the mailbox wants
+-- a plain "Name" for someone on your own realm and "Name-Realm" (no spaces) for another
+-- realm. Kina's saved names can be a display name with a surname or carry your own
+-- realm, and the mailbox refused those.
 local function mailName(who)
-  return (C.GroupMemberName and C.GroupMemberName(who)) or who
+  local full = (C.GroupMemberName and C.GroupMemberName(who)) or tostring(who or "")
+  local name, realm = full:match("^%s*([^%s%-]+)[^%-]*%-?(.*)$")
+  if not name or name == "" then return nil end
+  realm = (realm or ""):gsub("%s", "")
+  local mine = ((GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""):gsub("%s", "")
+  if realm == "" or realm:lower() == mine:lower() then return name end
+  return name .. "-" .. realm
 end
+C._MailName = mailName
 
 local queue, sending = {}, nil
 local function sendNext()
@@ -818,6 +854,10 @@ local function sendNext()
   if not sending then if C.RefreshSettle then C.RefreshSettle() end; return end
   local d = sending
   local to = mailName(d.who)
+  if not to then
+    C.Print("|cffff8040can't mail " .. tostring(d.who) .. "|r: Kina doesn't have a usable character name for them.")
+    sending = nil; return sendNext()
+  end
   if d.dir == "owe" then
     if math.floor(d.amt) > (GetMoney and GetMoney() or 0) then
       C.Print("not enough gold to pay " .. d.who .. ".")

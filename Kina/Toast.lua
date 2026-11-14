@@ -175,55 +175,82 @@ end
 
 -- 1.2.9: the group ad. While a farm runs and you're in a party or raid (1.0.0: any farm,
 -- not only shared ones; a shared farm's line comes from its leader) Kina posts one line to
--- party/raid chat every 15 minutes (never Say or channels; never in combat; not in the
--- farm's first 15 minutes or while it earns nothing). Setting: Settings > "Post farm
--- stats to group chat" (on unless turned off).
+-- party/raid chat every 15 minutes (never Say, channels or whispers). Setting: Settings >
+-- "Post farm stats to group chat" (on unless turned off).
+-- 1.0.2 (Taylor: "it's erratic and seldom", "false gold per hour numbers"):
+--   * the 15 minutes are counted on the clock and kept with the farm, so a pause, a
+--     reload or a fight when the line was due no longer skips a whole round (a line that
+--     is due in combat goes out a few seconds after the fight);
+--   * the gold per hour is the widget's own number (C.FarmRate), never a different sum;
+--   * no "search ... on CurseForge" tail; character XP per hour, kills and time instead.
 do
-  local nextAt
-  local function post()
-    if C.settings.groupAd == false or not SendChatMessage then return end
-    if InCombatLockdown and InCombatLockdown() then return end
-    local s = C.session
-    if not s or s.paused then nextAt = nil; return end
-    if not (C.GroupSize and C.GroupSize() > 1) then return end
-    -- 1.0.0 (Taylor: "always while a farm is running, even if I'm the only one with the
-    -- farm going"): a shared farm posts the group's numbers (from its leader only); any
-    -- other farm posts your own while you're in a party or raid
-    local net, secs, n
-    if s.sync and C.FarmView then
+  -- the same numbers the widget shows: net, seconds, kills, Kina users, shared, leader
+  function C.FarmRate(s)
+    s = s or C.session
+    if not s then return nil end
+    if C.FarmView then
       local v, group, leader = C.FarmView()
-      if not (v and group) then return end
+      if group then
+        if not v then return nil end
+        local n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
+        return { net = v.net or 0, secs = math.max(1, v.secs or 0), kills = v.kills or 0, users = math.max(1, n), group = true, leader = leader }
+      end
+    end
+    local sum = C.SessionSummary and C.SessionSummary(s)
+    if not sum then return nil end
+    return { net = sum.total or 0, secs = math.max(1, C.SessionSecs(s) or 0), kills = sum.kills or 0, users = 1 }
+  end
+  local function plain(c)
+    c = math.floor(c); local g, sv = math.floor(c / 10000), math.floor((c % 10000) / 100)
+    return (g > 0 and (g .. "g ") or "") .. sv .. "s"
+  end
+  local function shortN(n)
+    n = math.floor(n or 0)
+    if n >= 10000 then return string.format("%.1fk", n / 1000) end
+    return tostring(n)
+  end
+  function C.FarmAdLine(s)
+    local r = C.FarmRate(s)
+    if not r then return nil end
+    local parts = { "Kina farm tracker: " .. plain(r.net * 3600 / r.secs) .. "/h" }
+    local xph = C.GameXPPerHour and C.GameXPPerHour(s) or 0
+    if xph and xph > 0 then parts[#parts + 1] = shortN(xph) .. " XP/h" end
+    if (r.kills or 0) > 0 then parts[#parts + 1] = r.kills .. " kills" end
+    local m = math.floor(r.secs / 60)
+    parts[#parts + 1] = (m >= 60 and string.format("%dh %02dm", math.floor(m / 60), m % 60) or (m .. " min"))
+    local where = (GetInstanceInfo and IsInInstance and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
+    local msg = table.concat(parts, ", ")
+    if where and where ~= "" then msg = msg .. " in " .. where end
+    return msg, r
+  end
+  -- true = posted (or nothing to post this round); false = try again in a few seconds
+  local function post(s)
+    if not SendChatMessage then return true end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local msg, r = C.FarmAdLine(s)
+    if not msg then return false end
+    -- a shared farm's line comes from its leader only
+    if r.group and s.sync then
       local me = UnitName and UnitName("player")
-      if not leader or (leader:match("^[^%-]+") ~= me) then return end
-      net, secs = v.net or 0, math.max(1, v.secs or 0)
-      n = 0; for _ in pairs(v.members or {}) do n = n + 1 end
-    else
-      local sum = C.SessionSummary and C.SessionSummary(s)
-      if not sum then return end
-      net, secs, n = sum.total or 0, math.max(1, C.SessionSecs(s) or 0), 1
+      if not r.leader or (r.leader:match("^[^%-]+") ~= me) then return true end
     end
-    if secs < 900 or net < 1 then return end
-    local gph = net * 3600 / secs
-    local function plain(c)
-      c = math.floor(c); local g, sv = math.floor(c / 10000), math.floor((c % 10000) / 100)
-      return (g > 0 and (g .. "g ") or "") .. sv .. "s"
-    end
-    local where = (GetInstanceInfo and select(2, IsInInstance()) ~= "none" and GetInstanceInfo()) or (GetRealZoneText and GetRealZoneText()) or ""
-    local msg = string.format("Kina Addon - %d %s - %s per hour - %d XP/h - %s", n, n == 1 and "user" or "users", plain(gph), (C.GameXPPerHour and C.GameXPPerHour(s)) or 0, where)
-    -- someone in the group without Kina: say where to get it
-    local others = (C.GroupSize and C.GroupSize() or 1) - 1
-    if others > n - 1 then msg = msg .. " - search Kina Farm Groups on CurseForge" end
+    if r.net < 1 then return false end
     local chan = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
     pcall(SendChatMessage, msg, chan)
+    return true
   end
   local f = CreateFrame("Frame")
   local t = 0
   C.GuardScript(f, "OnUpdate", "Toast:206", function(_, el)
     t = t + el; if t < 5 then return end; t = 0
-    local now = GetTime and GetTime() or 0
-    if not C.session or C.session.paused then nextAt = nil; return end
-    if not nextAt then nextAt = now + 900; return end
-    if now >= nextAt then nextAt = now + 900; post() end
+    local s = C.session
+    if not s or s.paused or C.settings.groupAd == false then return end
+    if not (C.GroupSize and C.GroupSize() > 1) then return end
+    local secs = C.SessionSecs and C.SessionSecs(s) or 0
+    if secs < 900 then return end
+    local now = C.Now()
+    if s.adAt and now - s.adAt < 900 then return end
+    if post(s) then s.adAt = now end
   end)
 end
 
@@ -234,6 +261,10 @@ end
 -- the call itself (also used by the full Kina tooltip block): nil when it can't be disenchanted
 function C.DECall(id)
   if not (C.DEValue and C.BestRoute) then return end
+  -- 1.0.2: only real gear the game lets you disenchant (green trade goods and the like
+  -- used to get a disenchant value), and only when this character uses disenchanting
+  if C.CanDE and C.CanDE(id) ~= true then return end
+  if C.DEOn and not C.DEOn() then return end
   local dv = C.DEValue(id)
   if not dv or dv.ev < 1 then return end
   local _, _, det = C.BestRoute(id, 1)
@@ -281,7 +312,9 @@ do
 end
 
 -- 1.4.1 / 1.5.2 (Taylor): the Kina theme plays when a farm ends (it replaces the short
--- farm-end sting). Off by default (Settings > "Play the Kina theme when a farm ends").
+-- farm-end sting). 1.0.2 (Taylor: "the song at the end of the farm got swapped back to
+-- the short clip"): ON unless turned off (it was off by default, so a fresh settings
+-- file went back to the sting). Settings > "Play the Kina theme when a farm ends".
 -- (1.5.2: it used to wait for the Ledger and looked at the OLDEST farm, so it never played.)
 do
   local handle, playId = nil, 0
@@ -296,7 +329,7 @@ do
   T.MusicBack = musicBack
   function T.ThemeStop() if handle and StopSound then pcall(StopSound, handle, 1500) end; handle = nil; musicBack() end
   function T.ThemeAtFarmEnd()
-    if not (C.settings and C.settings.themeMusic == true and PlaySoundFile) or (C.Volume and C.Volume() == 0) then return false end
+    if not (C.settings and C.settings.themeMusic ~= false and PlaySoundFile) or (C.Volume and C.Volume() == 0) then return false end
     T.ThemeStop()
     local ok, will, h = pcall(PlaySoundFile, C.SoundFile and C.SoundFile("kina_theme") or ("Interface\\AddOns\\" .. ADDON .. "\\Sounds\\kina_theme.ogg"), "SFX")
     if ok and will then

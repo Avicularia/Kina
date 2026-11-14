@@ -12,6 +12,7 @@ local function reg() if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix the
 reg()
 local function send(msg, ch, target)
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return false end
+  if ch == "WHISPER" and not (C.CanWhisper and C.CanWhisper(target)) then return false end -- 1.0.2
   local ok, r = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, ch, target)
   return ok and r ~= false
 end
@@ -46,6 +47,7 @@ frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent", function(_, _, prefix, msg, channel, from)
   if prefix ~= PREFIX or type(msg) ~= "string" then return end
   local kind, rest = msg:match("^(%a+)|?(.*)$")
+  if C.Heard then C.Heard(from) end
   if kind == "ping" then
     local short = from and from:match("^[^%-]+")
     if short == me() then if selfPing then selfPing.back = GetTime() end; return end

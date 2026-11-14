@@ -563,6 +563,15 @@ C.On("PLAYER_MONEY", function()
   end)
 end)
 C.On("PLAYER_ENTERING_WORLD", function() lastMoney = GetMoney and GetMoney() or 0 end)
+-- 1.0.2 (Taylor: "Net Gained which includes quest rewards"): gold from a quest turned in
+-- while a farm runs. It's the farm's "gained" number only: never part of a split.
+C.On("QUEST_TURNED_IN", function(_, _, _, money)
+  money = C.Plain and C.Plain(money) or money
+  local s = C.session
+  if not s or s.paused or type(money) ~= "number" or money <= 0 or money > 1e9 then return end
+  s.money = s.money or {}
+  s.money.quest = (s.money.quest or 0) + money
+end)
 
 ------------------------------------------------------------------ sessions
 -- A farm session is saved as it runs (C.db.activeSession), so a /reload or a
@@ -668,6 +677,8 @@ end
 
 function C.StartSession(label, fromParty, campKey)
   if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end -- 1.5.2: a new farm ends the theme
+  -- 1.0.2: the group already has a shared farm running: join it, don't start a second one
+  if not fromParty and not C.session and C.FarmSync and C.FarmSync.JoinRunning and C.FarmSync.JoinRunning() then return end
   if C.Rules and C.Rules.Decay then pcall(C.Rules.Decay) end -- 1.5.4: idle weeks
   if C.session then C.StopSession() end
   lastMoney = GetMoney()
@@ -724,7 +735,11 @@ local function countBags(list, out)
     for slot = 1, (ok and slots) or 0 do
       if CT.GetContainerItemInfo then
         local info = CT.GetContainerItemInfo(bag, slot)
-        if info and info.itemID then out[info.itemID] = (out[info.itemID] or 0) + (info.stackCount or 1) end
+        if info and info.itemID then
+          out[info.itemID] = (out[info.itemID] or 0) + (info.stackCount or 1)
+          -- 1.0.2: the game itself says which items no merchant will buy
+          if C.NoteNoValue and type(info.hasNoValue) == "boolean" then C.NoteNoValue(info.itemID, info.hasNoValue) end
+        end
       elseif GetContainerItemInfo then -- older clients: the plain function (count 2nd, id 10th)
         local _, n, _, _, _, _, _, _, _, id = GetContainerItemInfo(bag, slot)
         if id then out[id] = (out[id] or 0) + (n or 1) end

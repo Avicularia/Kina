@@ -1002,6 +1002,37 @@ if C.PUBLIC then
   end
   local function back() ui.bookOf = nil; ui.offset = 0; C.Refresh() end
 
+  -- 1.0.2 (Taylor: "it's not very clear in the ledger what caused me to owe my party
+  -- members money. Big ticket items should be very obvious"): a farm's drops, biggest
+  -- first: { id, n, v = total value, who = looter, mine = true when you looted it }
+  function C.FarmDrops(s)
+    local out, by = {}, {}
+    local me = C.FirstName and C.FirstName(UnitName and UnitName("player") or "") or ""
+    local function add(id, n, v, who)
+      local k = id .. ":" .. tostring(who or "")
+      local e = by[k]
+      if not e then e = { id = id, n = 0, v = 0, who = who, mine = (who == nil) or (C.FirstName and C.FirstName(who) == me) or false }; by[k] = e; out[#out + 1] = e end
+      e.n = e.n + n; e.v = e.v + v
+    end
+    if s and s.sync and s.sync.chain then
+      local ex = C.FarmSync and C.FarmSync.Excluded and C.FarmSync.Excluded(s.sync) or {}
+      for _, ev in pairs(s.sync.chain) do
+        if type(ev) == "table" and ev.kind == "L" and not ex[ev.seq] then
+          local id, n, _, v = (ev.data or ""):match("^(%d*):(%d*):([^:]*):(%-?%d*)$")
+          id, n, v = tonumber(id), tonumber(n) or 1, tonumber(v) or 0
+          if id then add(id, n, n * v, ev.origin or "?") end
+        end
+      end
+    elseif s then
+      for id, n in pairs(s.items or {}) do add(id, n, (C.FarmValue and C.FarmValue(id) or 0) * n, nil) end
+    end
+    table.sort(out, function(a, b) if a.v ~= b.v then return a.v > b.v end; return a.id < b.id end)
+    return out
+  end
+  local function dropName(e)
+    local nm = (C.ItemLink and C.ItemLink(e.id)) or ("item " .. e.id)
+    return nm .. (e.n > 1 and (" x" .. e.n) or "")
+  end
   local function detail(s)
     local r = C.Books.Farm(s)
     local out = {}
@@ -1012,6 +1043,26 @@ if C.PUBLIC then
     row("", "items you looted (at the farm's prices)", money(res.items))
     if (res.used or 0) > 0 then row("", "consumables used", money(-(res.used or 0))) end
     row("", "your farm total", money(res.total))
+    -- why you owe: said first and in plain words, with the drops that caused it
+    do
+      local owe = 0
+      for _, d in ipairs(r.debts or {}) do if d.dir == "owe" then owe = owe + d.amt end end
+      if owe >= 1 and s.split and not s.noSplit then
+        local mine, share = r.mine or 0, r.lootShare or 0
+        row(ORANGE .. "Why you owe|r", "the loot you picked up was worth " .. money(mine) .. "; an even share of the group's loot is " .. money(share), "", "")
+        row("", ORANGE .. "you are holding " .. money(mine - share) .. " more than your share, so you pay it out|r", ORANGE .. money(owe) .. "|r", "")
+        local k = 0
+        for _, e in ipairs(C.FarmDrops(s)) do
+          if e.mine and e.v >= 1 and k < 5 then
+            k = k + 1
+            local big = e.v >= math.max(owe * 0.25, 1)
+            row("", (big and (ORANGE .. "BIG DROP|r  ") or "   ") .. dropName(e) .. GREY .. "  (you looted it)|r", (big and ORANGE or "") .. money(e.v) .. (big and "|r" or ""),
+              big and (ORANGE .. math.floor(e.v * 100 / math.max(1, mine) + 0.5) .. "% of your loot|r") or "")
+          end
+        end
+        if k == 0 then row("", GREY .. "   (this farm's item list wasn't kept)|r", "", "") end
+      end
+    end
     if r.unshared then
       row(GOLDC .. "Split|r", "not a shared farm: your partner's loot wasn't counted, so there was no split", "", GREY .. "nothing owed|r")
     elseif s.split and s.split.transfers then
@@ -1029,6 +1080,17 @@ if C.PUBLIC then
       if s.noSplit then row("", "no split (chosen at Start)", "", GREEN .. "nothing owed|r")
       elseif #s.split.transfers == 0 then row("", "everyone was even", "", GREEN .. "nothing owed|r") end
       for _, t in ipairs(s.split.transfers) do row("", t.from .. " pays " .. t.to, money(t.amt)) end
+      -- 1.0.2: the farm's biggest drops and who picked each one up
+      do
+        local drops = C.FarmDrops(s)
+        if #drops > 0 then
+          row(GOLDC .. "Top drops|r", "", "", "")
+          for i = 1, math.min(5, #drops) do
+            local e = drops[i]
+            row("", dropName(e), money(e.v), e.mine and (GOLDC .. "you|r") or (e.who and C.Books.Name(e.who) or ""))
+          end
+        end
+      end
       row(GOLDC .. "Debts|r", "", "", "")
       for _, d in ipairs(r.debts) do
         local left = d.amt - d.done
@@ -1074,8 +1136,8 @@ if C.PUBLIC then
         if not waiting then row(GOLDC .. "XP waiting|r", "", "", ""); waiting = true end
         if d.dir == "owe" then
           local tot = math.max(d.amt, 1)
-          row("", "pay " .. d.who .. " " .. C.Money(math.floor(left)), "", GREEN .. "+" .. math.floor(C.Rep.PayXP(tot) * left / tot * (C.PaySpeed and C.PaySpeed(s.stop) or 1)) .. "|r" .. GREY .. " (sooner = more)|r")
-        else row("", d.who .. " pays you " .. C.Money(math.floor(left)), "", GREEN .. "+" .. C.Rep.RECV_XP .. "|r") end
+          row("", "pay " .. d.who .. " " .. C.Money(math.floor(left)), "", GREEN .. "+" .. math.floor(C.DebtXP(s, tot, left / tot, s.stop)) .. "|r" .. GREY .. " (sooner = more)|r")
+        else row("", d.who .. " pays you " .. C.Money(math.floor(left)), "", GREEN .. "+" .. math.floor(C.DebtXP(s, math.max(d.amt, 1), left / math.max(d.amt, 1), s.stop)) .. "|r" .. GREY .. " (same as they get)|r") end
       end
     end
     -- 1.2.5: what was looted (everyone's, at the prices the split used) + the full log
@@ -2686,12 +2748,19 @@ local function buildSettings(f)
   header("Sound")
   toggle("Kina sounds (fanfares, payments, level-ups)", function() return st.farmSound ~= false end, function(v) if C.SetVolume then C.SetVolume(v and 4 or 0) else st.farmSound = v end; if C.RefreshWidget then C.RefreshWidget() end; if v and C.PlayClick then C.PlayClick() end end,
     "The volume itself is on the farm widget's speaker.")
-  toggle("Play the Kina theme when a farm ends", function() return st.themeMusic == true end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end,
+  toggle("Play the Kina theme when a farm ends", function() return st.themeMusic ~= false end, function(v) st.themeMusic = v; if not v and C.Toast then C.Toast.ThemeStop() end end,
     "The game's music pauses while it plays.")
   header("Item tooltips")
   toggle("Kina prices on item tooltips", function() return st.tooltip ~= false end, function(v) st.tooltip = v end)
   toggle("Only Kina (hide other add-ons' lines)", function() return st.tipOnly == true end, function(v) st.tipOnly = v end)
   toggle("Disenchant breakdown", function() return st.tipDE ~= false end, function(v) st.tipDE = v end)
+  -- 1.0.2
+  toggle("Big VENDOR / AUCTION / DISENCHANT call", function() return st.tipCall ~= false end, function(v) st.tipCall = v; if not v and C._TipCallHide then C._TipCallHide() end end,
+    "What to do with the item, in large letters above its tooltip.")
+  toggle("At a merchant: grey out what not to vendor", function() return st.vendorDim ~= false end, function(v) st.vendorDim = v; if C.VendorDimRefresh then C.VendorDimRefresh() end end,
+    "Items best sold to a vendor stay bright in your bags.")
+  toggle("This character disenchants", function() return C.DEOn() end, function(v) C.SetDEOn(v) end,
+    "Off: Kina never counts or suggests disenchanting on this character.")
   end
 
   if not C.PUBLIC then
