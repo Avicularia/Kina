@@ -201,7 +201,7 @@ C.On("TRADE_SHOW", function()
   if ask and GetTime() - ask.t < 120 and not (pendingPay and GetTime() - pendingPay.t < 60) then
     C.settleAsks[first(them0)] = nil
     pendingPay = { to = ask.due.to, amt = ask.due.amt, due = ask.due, t = GetTime() }
-    if StaticPopup_Hide then pcall(StaticPopup_Hide, "KINA_SETTLE_REQ") end
+    if StaticPopup_Hide then pcall(C.HidePopup, "KINA_SETTLE_REQ") end
   end
   local p = pendingPay
   if not p or GetTime() - p.t > 60 then pendingPay = nil; return end
@@ -250,8 +250,8 @@ end)
 -- The game needs a click from each player to finish a trade: Kina's Accept button is
 -- that click (if the client refuses it, press the trade window's own Trade button).
 local function popupAccept(text)
-  if not StaticPopupDialogs then return end
-  StaticPopupDialogs.KINA_TRADE_ACCEPT = StaticPopupDialogs.KINA_TRADE_ACCEPT or {
+  if not C.Dialogs then return end
+  C.Dialogs.KINA_TRADE_ACCEPT = C.Dialogs.KINA_TRADE_ACCEPT or {
     text = "%s", button1 = "Accept trade", button2 = "Not yet", timeout = 60, whileDead = false, hideOnEscape = true,
     OnAccept = function()
       local ok = AcceptTrade and pcall(AcceptTrade)
@@ -303,8 +303,8 @@ function C.OnSettleRequest(from, amt, label)
     C.Print(string.format("%s asked you to settle %s, but Kina has no matching debt (check your farm log).", tostring(from), C.Money(amt or 0)))
     return
   end
-  if not StaticPopupDialogs then return end
-  StaticPopupDialogs.KINA_SETTLE_REQ = StaticPopupDialogs.KINA_SETTLE_REQ or {
+  if not C.Dialogs then return end
+  C.Dialogs.KINA_SETTLE_REQ = C.Dialogs.KINA_SETTLE_REQ or {
     text = "%s asks you to settle %s.", button1 = "Pay", button2 = "Not now", timeout = 120, hideOnEscape = true,
     -- 0.9.13 (exploit test): pay the person who asked (it paid your first debt, whoever that was to)
     OnAccept = function(_, data) C.PayStart(data or C.PayDue()) end }
@@ -567,8 +567,7 @@ function C.AskDispute(d)
   C.ShowPopup("KINA_DISPUTE_ASK", string.format("Dispute the %s you owe %s?\n\nUse this when it was already paid or forgiven but Kina still shows it. %s's Kina asks them to clear it; if they do, any standing you lost for it comes back.",
     C.Money(math.floor(d.amt or 0)), C.Books and C.Books.Name(d.who) or d.who, C.Books and C.Books.Name(d.who) or d.who), nil, d)
 end
-StaticPopupDialogs = StaticPopupDialogs or {}
-StaticPopupDialogs["KINA_DISPUTE_ASK"] = {
+C.Dialogs["KINA_DISPUTE_ASK"] = {
   text = "%s", button1 = "Dispute", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   OnAccept = function(_, d) if d then C.DisputeDebt(d) end end,
 }
@@ -595,10 +594,26 @@ function C.OnDispute(from, amt, ref)
       end
     end
   end
-  return "unknown"
+  -- 1.0.3b (Taylor: she owes me on her side, but my Kina has no record of it): ask
+  C.ShowPopup("KINA_DISPUTE_UNKNOWN", string.format("%s's Kina says they owe you %s from a farm your Kina has no record of (it may have been played on another PC).\n\nClear it on their side?",
+    C.Books and C.Books.Name(from) or from, C.Money(math.floor(amt or 0))), nil, { from = from, ref = ref, amt = math.floor(amt or 0) })
+  return "asked-unknown"
 end
-StaticPopupDialogs = StaticPopupDialogs or {}
-StaticPopupDialogs["KINA_DISPUTE_DEBT"] = {
+C.Dialogs["KINA_DISPUTE_UNKNOWN"] = {
+  text = "%s", button1 = "Clear it", button2 = "Leave it", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
+  OnAccept = function(_, data)
+    if not data then return end
+    if C.Log then C.Log("forgive", "gave", data.from, data.amt, data.ref) end
+    local p = { who = data.from, amt = data.amt, ref = data.ref, t = C.Now() }
+    table.insert(fdb().pending, p); sendForgive(p)
+    if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, data.from, data.ref, "dsp") end
+    C.Print(string.format("|cff7CFC00cleared|r %s's debt to you.", data.from))
+  end,
+  OnCancel = function(_, data)
+    if data and C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, data.from, 0, data.ref, "dsn") end
+  end,
+}
+C.Dialogs["KINA_DISPUTE_DEBT"] = {
   text = "%s", button1 = "Clear it", button2 = "It's still owed", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
   OnAccept = function(_, data)
     if not data then return end

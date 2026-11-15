@@ -536,8 +536,8 @@ builders.debts = function(p)
           setBtn(l.btns[3], (not d.topup) and "Dispute" or nil, function() C.AskDispute(d); p.refresh() end, 100)
         else
           setBtn(l.btns[1], "Forgive", function()
-            if StaticPopupDialogs and StaticPopup_Show then
-              StaticPopupDialogs["KINA_FORGIVE"] = StaticPopupDialogs["KINA_FORGIVE"] or {
+            if C.Dialogs and StaticPopup_Show then
+              C.Dialogs["KINA_FORGIVE"] = C.Dialogs["KINA_FORGIVE"] or {
                 text = "Forgive %s?\n\nThe debt closes for both of you and can't be reopened.",
                 button1 = "Forgive", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
                 OnAccept = function(_, y) if y and C.Forgive then C.Forgive(y) end end }
@@ -868,11 +868,12 @@ builders.collections = function(p)
     r.port = r:CreateTexture(nil, "ARTWORK"); r.port:SetSize(30, 30); r.port:SetPoint("LEFT", 2, 0)
     if r.port.SetMask then pcall(r.port.SetMask, r.port, "Interface\\CharacterFrame\\TempPortraitAlphaMask") end
     r.stamp = text(r, "GameFontNormalSmall"); r.stamp:SetPoint("LEFT", 40, 8); r.stamp:SetWidth(80)
-    r.what = text(r, "GameFontHighlight"); r.what:SetPoint("LEFT", 124, 8); r.what:SetWidth(360)
-    r.sub = text(r, "GameFontHighlightSmall"); r.sub:SetPoint("LEFT", 124, -9); r.sub:SetWidth(360)
-    r.amt = text(r, "GameFontNormal", "RIGHT"); r.amt:SetPoint("RIGHT", -250, 0); r.amt:SetWidth(120)
+    r.what = text(r, "GameFontHighlight"); r.what:SetPoint("LEFT", 124, 8); r.what:SetWidth(300)
+    r.sub = text(r, "GameFontHighlightSmall"); r.sub:SetPoint("LEFT", 124, -9); r.sub:SetWidth(300)
+    r.amt = text(r, "GameFontNormal", "RIGHT"); r.amt:SetPoint("RIGHT", -366, 0); r.amt:SetWidth(100)
     r.b1 = CreateFrame("Button", nil, r, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(r.b1) end; r.b1:SetSize(110, 22); r.b1:SetPoint("RIGHT", -4, 0)
     r.b2 = CreateFrame("Button", nil, r, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(r.b2) end; r.b2:SetSize(110, 22); r.b2:SetPoint("RIGHT", r.b1, "LEFT", -6, 0)
+    r.b3 = CreateFrame("Button", nil, r, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(r.b3) end; r.b3:SetSize(110, 22); r.b3:SetPoint("RIGHT", r.b2, "LEFT", -6, 0)
     rows[i] = r
   end
   local empty = text(L, "GameFontHighlightSmall"); empty:SetPoint("TOPLEFT", 18, -52)
@@ -894,7 +895,7 @@ builders.collections = function(p)
         r.what:SetText((c.dir == "owe" and ("You owed " .. nm) or (nm .. " owed you")) .. GREY .. "  ·  " .. c.farm .. "|r")
         r.sub:SetText(GREY .. (c.t and date("%b %d", c.t) or "") .. (c.stamp == "lapsed" and ("  ·  " .. C.Money(math.floor(c.rest)) .. " still open") or "") .. "|r")
         r.amt:SetText((c.dir == "owe" and ORANGE or GOLD) .. C.Money(math.floor(c.amt)) .. "|r")
-        r.b1:Hide(); r.b2:Hide()
+        r.b1:Hide(); r.b2:Hide(); r.b3:Hide()
         if c.stamp == "lapsed" and c.dir == "owe" then
           r.b1:SetText("Pay late"); r.b1:Show()
           r.b1:SetScript("OnClick", function() if C.PayStart then C.PayStart({ to = c.who, amt = math.floor(c.rest), s = c.s }) end end)
@@ -908,7 +909,8 @@ builders.collections = function(p)
           end)
         end
         if C.OpenLedgerFarm then
-          local b = r.b1:IsShown() and r.b2 or r.b1
+          -- 1.0.3b: "Farm details" used to take the Dispute button's place
+          local b = (not r.b1:IsShown() and r.b1) or (not r.b2:IsShown() and r.b2) or r.b3
           b:SetText("Farm details"); b:Show(); b:SetScript("OnClick", function() C.OpenLedgerFarm(c.s) end)
         end
         r:Show()

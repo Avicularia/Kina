@@ -2027,8 +2027,8 @@ local RENAME = {
   EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
 }
 function C.RenameCamp(r)
-  if not (StaticPopupDialogs and StaticPopup_Show) then return end
-  StaticPopupDialogs["KINA_RENAME_CAMP"] = RENAME
+  if not (C.Dialogs and StaticPopup_Show) then return end
+  C.Dialogs["KINA_RENAME_CAMP"] = RENAME
   C.ShowPopup("KINA_RENAME_CAMP", nil, nil, { camp = r.camp })
 end
 
@@ -3457,8 +3457,8 @@ local function build()
       elseif d.dispute then
         local dd = d.dispute
         local vend = C.VendorPrice and C.VendorPrice(dd.id) or 0
-        if StaticPopupDialogs and StaticPopup_Show then
-          StaticPopupDialogs["KINA_DISPUTE"] = StaticPopupDialogs["KINA_DISPUTE"] or {
+        if C.Dialogs and StaticPopup_Show then
+          C.Dialogs["KINA_DISPUTE"] = C.Dialogs["KINA_DISPUTE"] or {
             text = "%s", button1 = "Dispute", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
             OnAccept = function(_, data)
               if not (data and data.s and data.s.sync and C.FarmSync) then return end
@@ -3483,7 +3483,7 @@ local function build()
         if kind == "plea" and C.AskForTime then C.AskForTime(od) elseif kind == "ext" and C.ExtendDebt then C.ExtendDebt(od) end
       elseif d.forgive then
         local od = d.forgive
-        StaticPopupDialogs["KINA_FORGIVE"] = StaticPopupDialogs["KINA_FORGIVE"] or {
+        C.Dialogs["KINA_FORGIVE"] = C.Dialogs["KINA_FORGIVE"] or {
           text = "Forgive %s?\n\nThe debt closes for both of you and can't be reopened.",
           button1 = "Forgive", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
           OnAccept = function(_, x) if x and C.Forgive then C.Forgive(x) end end }

@@ -108,7 +108,7 @@ SETTINGS.deOff = T
 SETTINGS.vendorDim = B
 SETTINGS.tipCall = B
 
-local DB = { t = T, f = {
+local DB = { t = T, f = { blocked = list({ t = T, f = { t = N, ev = S, fn = S, v = S, stack = S } }),
   settings = { t = T, f = SETTINGS },
   markets = map({ t = T, f = { items = map(T), history = map(T), scanTime = N } }),
   items = map({ t = T, f = { name = S, q = N, il = N, rl = N, cls = N, sub = N, eq = S, vend = N, bind = N } }),

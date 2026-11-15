@@ -113,6 +113,10 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "share" then if C.Mentor then C.Mentor.Share(); C.Mentor.CopyBox() end
   elseif cmd == "link" then if C.Mentor then C.Mentor.CopyBox() end
+  elseif cmd == "blocked" then
+    local b = C.db.blocked or {}
+    if #b == 0 then C.Print("no blocked actions recorded.") end
+    for i, x in ipairs(b) do C.Print(string.format("%d. %s  %s (v%s)", i, date and date("%m/%d %H:%M", x.t) or "", x.fn, x.v or "?")) end
   elseif cmd == "mentor" then if C.Mentor then C.Mentor.ShowPicker() end
   elseif cmd == "tracker" then
     -- 0.9.20: /kina tracker [on | off]

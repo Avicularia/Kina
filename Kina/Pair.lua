@@ -123,16 +123,16 @@ local function extraText(uid)
   return t
 end
 local function popups()
-  if not StaticPopupDialogs or StaticPopupDialogs.KINA_PAIR then return end
+  if not C.Dialogs or C.Dialogs.KINA_PAIR then return end
   local why = "Partners earn |cff33ff66+10%% Kina XP and standing|r on farms and payments together, on any of your characters, and the bond grows with the gold you farm together (up to |cff33ff66+20%%|r after about 20 hours)."
-  StaticPopupDialogs.KINA_PAIR = {
+  C.Dialogs.KINA_PAIR = {
     text = "%s runs Kina.\n\nMake them your Kina Partner?\n\n" .. why .. "%s",
     button1 = "Partner up", button2 = "Not now",
     timeout = 90, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     OnAccept = function(_, d) if d then P.Ask(d.name) end end,
     OnCancel = function(_, d, reason) if d and reason == "clicked" then db().snooze[d.uid] = C.Now() end end,
   }
-  StaticPopupDialogs.KINA_PAIR_ASK = {
+  C.Dialogs.KINA_PAIR_ASK = {
     text = "%s wants you as their Kina Partner.\n\n" .. why .. "%s",
     button1 = "Accept", button2 = "No thanks",
     timeout = 120, whileDead = true, hideOnEscape = true, preferredIndex = 3,

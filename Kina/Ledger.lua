@@ -444,8 +444,8 @@ function C.LedgerFixHeld()
     end
   end
   if #list == 0 then C.Print("ledger: every held item is still in your bags, bank or on the AH. Nothing to fix."); return end
-  if not (StaticPopupDialogs and StaticPopup_Show) then return end
-  StaticPopupDialogs.KINA_FIXHELD = {
+  if not (C.Dialogs and StaticPopup_Show) then return end
+  C.Dialogs.KINA_FIXHELD = {
     text = "%s", button1 = YES or "Yes", button2 = NO or "No", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     OnAccept = function(_, data)
       for _, x in ipairs(data) do

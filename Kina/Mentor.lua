@@ -87,10 +87,10 @@ function M.Link() return C.UPDATE_URL or "curseforge.com/wow/addons/kina-farm-gr
 -- 0.9.23 (Taylor, like RestedXP's video link): a box with the link selected, Ctrl+C to copy
 function M.CopyBox(title)
   local link = M.Link()
-  if not StaticPopupDialogs then return end
-  if not StaticPopupDialogs.KINA_COPY then
+  if not C.Dialogs then return end
+  if not C.Dialogs.KINA_COPY then
     local function eb(self) return self.editBox or self.EditBox or (self.GetEditBox and self:GetEditBox()) end
-    StaticPopupDialogs.KINA_COPY = {
+    C.Dialogs.KINA_COPY = {
       text = "%s", button1 = OKAY or "Okay", hasEditBox = 1, editBoxWidth = 300,
       timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
       OnShow = function(self, data)

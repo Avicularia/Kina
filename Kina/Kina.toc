@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 1.0.3
+## Version: 1.0.4
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -15,6 +15,7 @@ Core.lua
 Schema.lua
 SkinData.lua
 Skin.lua
+Dialog.lua
 Data.lua
 DropData.lua
 CampData.lua

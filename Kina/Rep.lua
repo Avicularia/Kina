@@ -619,8 +619,8 @@ end
 
 -- first login: say plainly what is collected and offer the switch right there
 C.On("PLAYER_LOGIN", function()
-  if C.settings.dataNoticeSeen or not StaticPopupDialogs then return end
-  StaticPopupDialogs.KINA_DATA_NOTICE = StaticPopupDialogs.KINA_DATA_NOTICE or {
+  if C.settings.dataNoticeSeen or not C.Dialogs then return end
+  C.Dialogs.KINA_DATA_NOTICE = C.Dialogs.KINA_DATA_NOTICE or {
     text = "Welcome to Kina!\n\nKina collects which mobs drop what and the auction prices you see, and shares them with other Kina users to build the farm and price features of a future version. Nothing about you, your chat or other players is collected.\n\nYour Kina level only grows while sharing is on. You can change this any time in Settings.",
     button1 = "Keep sharing", button2 = "Turn it off", timeout = 0, whileDead = true, hideOnEscape = false,
     OnAccept = function() C.settings.dataNoticeSeen = C.Now() end,
@@ -631,9 +631,9 @@ C.On("PLAYER_LOGIN", function()
 end)
 -- shown after the tour when the tour is running (Tour.lua calls it when it ends)
 function C.ShowDataNotice()
-  if C.settings.dataNoticeSeen or not (StaticPopupDialogs and StaticPopupDialogs.KINA_DATA_NOTICE) then return end
+  if C.settings.dataNoticeSeen or not (C.Dialogs and C.Dialogs.KINA_DATA_NOTICE) then return end
   if C.Tour and C.Tour.active then return end
-  if C.ShowPopup then C.ShowPopup("KINA_DATA_NOTICE") else StaticPopup_Show("KINA_DATA_NOTICE") end
+  if C.ShowPopup then C.ShowPopup("KINA_DATA_NOTICE") else C.ShowPopup("KINA_DATA_NOTICE") end
 end
 
 -- 0.9.18: the bond (farms together) with someone's account, partner or not

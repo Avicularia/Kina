@@ -1,3 +1,10 @@
+# Kina 1.0.4 (hotfix)
+
+- Fix: "Kina has been blocked from an action only available to the Blizzard UI" when pressing Escape, opening Kina or closing other windows. Kina's questions now use its own dialog box instead of the game's popup.
+- Fix: the Dispute button now shows on lapsed debts in Ledger > Collections.
+- Disputes now work even when the other player's Kina has no record of that farm (it asks them).
+- New: /kina blocked lists any action the game blocked, to help track down problems.
+
 # Kina 1.0.3
 
 - New: bond crest on your partner's portrait, Uncommon to Legendary with 1-5 gems (20 levels, +10.5% to +20%).

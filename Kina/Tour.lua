@@ -322,7 +322,7 @@ function T.Start(at)
   saved = { widget = C.settings and C.settings.hudShown, main = C.UI and C.UI.frame and C.UI.frame:IsShown(), tab = C.UI and C.UI.tab }
   T.active = true
   -- the data notice waits for the tour (it covered the widget the tour was showing)
-  if StaticPopup_Hide then pcall(StaticPopup_Hide, "KINA_DATA_NOTICE") end
+  if StaticPopup_Hide then pcall(C.HidePopup, "KINA_DATA_NOTICE") end
   local i = 1
   if type(at) == "string" then i = T.Find(at) or 1 elseif type(at) == "number" then i = at end
   T.Go(i)

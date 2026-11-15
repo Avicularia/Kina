@@ -881,8 +881,8 @@ function C.StopSession(at, why, silent, fromParty)
     -- 1.1.1: apart most of the farm (different zones)? ask before splitting
     local apart, together = s.apartTicks or 0, s.togetherTicks or 0
     local noSplitYet = not (C.FarmSync.Totals(s.sync) or {}).noSplit
-    if not s.apartAsked and noSplitYet and apart > together and apart >= 6 and StaticPopupDialogs and StaticPopup_Show then
-      StaticPopupDialogs["KINA_APART"] = StaticPopupDialogs["KINA_APART"] or {
+    if not s.apartAsked and noSplitYet and apart > together and apart >= 6 and C.Dialogs and StaticPopup_Show then
+      C.Dialogs["KINA_APART"] = C.Dialogs["KINA_APART"] or {
         text = "You and your group were in different zones for most of this farm.\n\nSplit the loot anyway?",
         button1 = "Split it", button2 = "Don't split", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
         OnAccept = function() local x = C.session; if x then x.apartAsked = true; C.StopSession() end end,
@@ -1487,7 +1487,7 @@ do
     if not (IsInGroup and IsInGroup()) then return true end
     return UnitIsGroupLeader and UnitIsGroupLeader("player") and true or false
   end
-  if StaticPopupDialogs then StaticPopupDialogs["KINA_INSTANCE_FARM"] = {
+  if C.Dialogs then C.Dialogs["KINA_INSTANCE_FARM"] = {
     text = "%s", button1 = "Start farm", button2 = "Not now",
     OnAccept = function(_, data)
       if not data then return end
@@ -1497,7 +1497,7 @@ do
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   } end
   local function check()
-    if not (StaticPopup_Show and StaticPopupDialogs) then return end
+    if not (C.ShowPopup and C.Dialogs) then return end
     if not (IsInInstance) then return end
     local inside, kind = IsInInstance()
     if not inside or (kind ~= "party" and kind ~= "raid") then askedFor = nil; return end

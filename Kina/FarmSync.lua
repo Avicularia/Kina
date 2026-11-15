@@ -73,8 +73,8 @@ local function onInvite(sid, leader, label, camp)
     F.Accept(sid, leader, label, camp)
     return
   end
-  if not (StaticPopupDialogs and StaticPopup_Show) then return end
-  StaticPopupDialogs["KINA_FARM_INVITE"] = StaticPopupDialogs["KINA_FARM_INVITE"] or {
+  if not (C.Dialogs and StaticPopup_Show) then return end
+  C.Dialogs["KINA_FARM_INVITE"] = C.Dialogs["KINA_FARM_INVITE"] or {
     text = "%s started a group farm: %s\n\nJoin it? Both widgets show the same numbers and Kina splits the loot fairly.",
     button1 = "Join", button2 = "Not now", button3 = "Always join",
     timeout = 120, whileDead = true, hideOnEscape = true, preferredIndex = 3,
@@ -97,7 +97,7 @@ local function onInvite(sid, leader, label, camp)
       F.Accept(d.sid, d.leader, d.label, d.camp)
     end,
   }
-  StaticPopup_Show("KINA_FARM_INVITE", leader, (label and label ~= "") and label or "farm",
+  C.ShowPopup("KINA_FARM_INVITE", leader, (label and label ~= "") and label or "farm",
     { sid = sid, leader = leader, label = label, camp = camp })
 end
 

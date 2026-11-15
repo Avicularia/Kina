@@ -2,11 +2,12 @@
 -- Separate addon from Kina Scout: own namespace, own SavedVariables (KinaDB),
 -- own slash command (/kina), own frame names. Never writes another addon's data.
 local ADDON, C = ...
+C.Dialogs = C.Dialogs or {} -- 1.0.4: Kina's own question definitions (never the game's popup table)
 C.name = "Kina"
-C.version = "1.0.3"
+C.version = "1.0.4"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 182
+C.BUILD = 183
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -111,10 +112,7 @@ end
 -- 0.9.8: Kina's confirm popups (Forgive, Pay, Dispute...) are the game's popups, which sit
 -- on a lower layer than the Kina window: they opened hidden behind it. Kina steps back
 -- first (clicking Kina again brings it forward).
-function C.ShowPopup(which, ...)
-  if C.LowerKina then pcall(C.LowerKina) end
-  return StaticPopup_Show(which, ...)
-end
+-- 1.0.4: C.ShowPopup is now Kina's own dialog (Dialog.lua), never the game's popup.
 C.SCHEMA = 1
 
 local floor = math.floor
@@ -645,3 +643,26 @@ C.On("PLAYER_LOGIN", function()
     end
   end)
 end)
+
+-- 1.0.3b (Taylor: "Kina has been blocked from an action only available to the Blizzard
+-- UI" when opening Kina): the game names the blocked function in this event. Kina prints
+-- it once and keeps the last few (with where they came from) in its saved data, so the
+-- cause can be found without a taint log. /kina blocked shows them again.
+do
+  local seen = {}
+  local function note(ev, addon, fn)
+    if addon ~= "Kina" then return end
+    fn = tostring(fn or "?")
+    C.db.blocked = C.db.blocked or {}
+    local stack = debugstack and debugstack(3, 6, 0) or ""
+    table.insert(C.db.blocked, 1, { t = C.Now and C.Now() or 0, ev = ev, fn = fn, v = C.version, stack = stack:sub(1, 600) })
+    while #C.db.blocked > 8 do table.remove(C.db.blocked) end
+    if not seen[fn] then
+      seen[fn] = true
+      if C.Print then C.Print("|cffff8040the game blocked an action:|r " .. fn .. " (" .. ev .. "). Kina saved the details; please tell Taylor.") end
+    end
+  end
+  local f = CreateFrame("Frame")
+  f:RegisterEvent("ADDON_ACTION_FORBIDDEN"); f:RegisterEvent("ADDON_ACTION_BLOCKED")
+  f:SetScript("OnEvent", function(_, ev, addon, fn) pcall(note, ev, addon, fn) end)
+end
