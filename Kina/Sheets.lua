@@ -234,6 +234,7 @@ local function youPage(p, them)
     local klv = pr and pr.kinaLv
     if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1, pr and pr.recruits); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
       if C.Cos.SetFounder then C.Cos.SetFounder(cos, pr and pr.dev) end
+      if C.Cos.SetBond then C.Cos.SetBond(cos, C.Cos.BondFor(who)) end
       cos.xpF:Hide(); cos.stF:Hide() end
     name:SetText(who)
     local cls = ch and ch.class and (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ch.class] or ch.class)
@@ -271,7 +272,7 @@ local function youPage(p, them)
       { "Standing now", tostring(stand or "?") },
       { "Installs shared", tostring(pr and pr.recruits or 0) },
       { "Partner bond", ((C.Pair and C.Pair.IsPartner(who)) and (GREEN .. "your partner, +" .. math.floor(C.Pair.Bonus(who) * 100 + 0.5) .. "%|r  ") or "")
-        .. ((C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (tostring(C.Rep.BondOf(who)) .. " farm" .. (C.Rep.BondOf(who) == 1 and "" or "s")) or (GREY .. "none yet|r")) },
+        .. ((C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (C.Rep.BondText(C.Rep.BondOf(who)) .. ", " .. math.floor(C.Rep.BondFrac(C.Rep.BondOf(who)) * 100) .. "% full") or (GREY .. "none yet|r")) },
     })
     -- 0.9.18: Kina Partner
     local P = C.Pair
@@ -288,7 +289,7 @@ local function youPage(p, them)
           if not GameTooltip then return end
           GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(isP and "End partnership" or "Partner up")
           GameTooltip:AddLine(isP and "Ends your Kina partnership. Your bond is kept if you partner up again."
-            or "Asks them to be your Kina Partner: +10% Kina XP and standing on farms and payments together, growing +1% every 5 farms together (up to +20%).", 1, 1, 1, true)
+            or "Asks them to be your Kina Partner: +10% Kina XP and standing on farms and payments together, growing with the gold you farm together (up to +20% in about 20 hours).", 1, 1, 1, true)
           GameTooltip:Show()
         end)
       else pairB:Hide() end
@@ -531,7 +532,8 @@ builders.debts = function(p)
           setBtn(l.btns[1], "Pay " .. C.Money(math.floor(d.amt)), function()
             if C.PayStart then C.PayStart({ to = d.who, amt = math.floor(d.amt), s = d.s }) end end, 150)
           setBtn(l.btns[2], (not d.topup and not (sp.plea and sp.plea[d.key])) and "Ask for more time" or nil, function() C.AskForTime(d); p.refresh() end, 150)
-          setBtn(l.btns[3], nil)
+          -- 1.0.2b: "it was already paid / forgiven": ask them to clear it
+          setBtn(l.btns[3], (not d.topup) and "Dispute" or nil, function() C.AskDispute(d); p.refresh() end, 100)
         else
           setBtn(l.btns[1], "Forgive", function()
             if StaticPopupDialogs and StaticPopup_Show then
@@ -896,6 +898,8 @@ builders.collections = function(p)
         if c.stamp == "lapsed" and c.dir == "owe" then
           r.b1:SetText("Pay late"); r.b1:Show()
           r.b1:SetScript("OnClick", function() if C.PayStart then C.PayStart({ to = c.who, amt = math.floor(c.rest), s = c.s }) end end)
+          r.b2:SetText("Dispute"); r.b2:Show()
+          r.b2:SetScript("OnClick", function() C.AskDispute({ dir = "owe", who = c.who, amt = math.floor(c.rest), s = c.s, farm = c.farm }) end)
         elseif c.stamp == "lapsed" and c.dir == "owed" then
           r.b1:SetText("Forgive"); r.b1:Show()
           r.b1:SetScript("OnClick", function()

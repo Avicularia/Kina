@@ -424,6 +424,52 @@ function K.SetFounder(o, on)
     o.laurel:Show(); o.laurelGlint:Show()
   elseif o.laurel then o.laurel:Hide(); o.laurelGlint:Hide() end
 end
+-- 1.0.2b (Taylor, Nov 14): the bond crest on your partner's portrait. Two-tone shield:
+-- the tier is its colour (Uncommon green, Rare blue, Epic purple, Legendary orange, with a
+-- bronze/silver/gold/pale-gold rim; Legendary glows), and 1-5 gems are the level in the tier.
+-- Art: Taylor's Scenario shield and gem, recoloured per tier (Media/Cos/bond_*).
+local GEMPOS = { [1] = { { 0, -0.02 } }, [2] = { { -0.17, -0.02 }, { 0.17, -0.02 } },
+  [3] = { { -0.18, -0.13 }, { 0.18, -0.13 }, { 0, 0.12 } },
+  [4] = { { -0.17, -0.15 }, { 0.17, -0.15 }, { -0.17, 0.12 }, { 0.17, 0.12 } },
+  [5] = { { -0.19, -0.17 }, { 0.19, -0.17 }, { 0, -0.02 }, { -0.19, 0.13 }, { 0.19, 0.13 } } }
+function K.SetBond(o, cu)
+  if not o then return end
+  if cu == nil or o.plain then
+    if o.bond then o.bond:Hide(); for _, g in ipairs(o.bondGems) do g:Hide() end end
+    return
+  end
+  local R = C.Rep
+  local W = o.W or 80
+  local S = W * 0.62                      -- the crest's square
+  if not o.bond then
+    o.bond = o.top:CreateTexture(nil, "OVERLAY", nil, 4)
+    o.bond:SetSize(S, S)
+    o.bond:SetPoint("CENTER", o.portrait, "BOTTOMLEFT", W * 0.08, W * 0.12)
+    o.bondGems = {}
+    for i = 1, 5 do
+      local g = o.top:CreateTexture(nil, "OVERLAY", nil, 5)
+      o.bondGems[i] = g
+    end
+  end
+  local tier, gems = R.BondTier(cu), R.BondGems(cu)
+  o.bond:SetTexture(P .. "bond_shield_" .. tier); o.bond:Show()
+  local Hs = S / 1.2                      -- the shield's height inside the square
+  local Ws = Hs * 0.8085
+  local gs = Ws * (gems <= 2 and 0.30 or gems <= 4 and 0.27 or 0.25) * (64 / 44)
+  for i = 1, 5 do
+    local g = o.bondGems[i]
+    local pos = GEMPOS[gems] and GEMPOS[gems][i]
+    if pos then
+      g:SetTexture(P .. "bond_gem_" .. tier); g:SetSize(gs, gs); g:ClearAllPoints()
+      g:SetPoint("CENTER", o.bond, "CENTER", pos[1] * Hs, -pos[2] * Hs); g:Show()
+    else g:Hide() end
+  end
+end
+-- your partner's bond as seen by you (nil for anyone else)
+function K.BondFor(name)
+  if not (name and C.Pair and C.Pair.IsPartner and C.Pair.IsPartner(name)) then return nil end
+  return C.Rep and C.Rep.BondOf and C.Rep.BondOf(name) or 0
+end
 -- who is a founder: your own team install, or a Kina user whose hello says so
 function K.IsFounder(name)
   if not name or (C.IsMyChar and C.IsMyChar(name)) then return C.Unlocked and C.Unlocked() and C.PUBLIC or false end

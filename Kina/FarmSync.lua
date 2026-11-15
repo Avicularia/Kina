@@ -134,6 +134,10 @@ function F.Node()
       price = function(id, suffix) return C.SplitValue and (C.SplitValue(id, suffix)) or 0 end, -- the split price (thin greens at their floor)
       leaderGone = leaderGone,
       inGroup = function(name) return unitOf(name) ~= nil end,
+      present = function(name) -- 1.0.2b: in the group and online
+        local u = unitOf(name)
+        return u ~= nil and not (UnitIsConnected and UnitIsConnected(u) == false)
+      end,
       onForged = function()
         local s = C.session
         if s and not s.forgedSaid then
@@ -234,7 +238,7 @@ function F.View()
   if not (s and node and node.s == s) then return nil end
   local t = Core.Totals(s)
   return { secs = node:Elapsed(), net = t.net, coin = t.coin, items = t.items, used = t.used, kills = t.kills,
-    paused = t.paused, byLooter = t.byLooter, members = t.members, noSplit = t.noSplit,
+    paused = t.paused, byLooter = t.byLooter, heldBy = t.heldBy, members = t.members, noSplit = t.noSplit,
     behind = (s.leaderHead or 0) > s.head or next(s.outbox) ~= nil }, s.leader
 end
 function F.Totals(s, reprice) return Core.Totals(s, reprice) end

@@ -54,6 +54,9 @@ function B.Farm(s, gains, bySid)
     r.lootSplit, r.lootShare = sp.total or 0, sp.each or 0
     local n = 0
     for who, v in pairs(sp.incomes or {}) do n = n + 1; if isMe(who) then r.mine = v end end
+    -- 1.0.2b: a member's fair share counts only the drops while they were in the farm
+    for who, v in pairs(sp.held or {}) do if isMe(who) then r.mine = v end end
+    for who, v in pairs(sp.fair or {}) do if isMe(who) then r.lootShare = v end end
     r.players = math.max(1, n)
     local gv = s.gview
     if gv and gv.net then

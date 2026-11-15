@@ -10,7 +10,7 @@ local _, C = ...
 --     you both ask). Each Kina writes "partner|on|<their Kina ID>|<name>" in its own log.
 --   - Partners earn +10% Kina XP and standing on farms together (any character of your
 --     partner's in the farm when it ends) and on payments with any of their characters.
---   - The bond grows: +1% more for every 5 qualifying farms together, up to +20% at 50.
+--   - The bond grows with gold farmed together, level-scaled, up to +20% (~20 hours). 1.0.2b
 --     The bond is kept per account: going back to an old partner picks up where you left.
 --   - When a Kina user joins your party and you have no partner, Kina asks once (the old
 --     partner popup, revamped). "Not now" leaves that account alone for 7 days.
@@ -119,12 +119,12 @@ local function extraText(uid)
   local chars = S() and S().CharsOf and S().CharsOf(uid) or {}
   if #chars > 1 then t = t .. "\n\nTheir characters: " .. table.concat(chars, ", ") .. "." end
   local bonds = C.Rep and C.Rep.BondOf and C.Rep.BondOf(uid) or 0
-  if bonds > 0 then t = t .. string.format("\n\nYou already have a bond of %d farm%s together: it picks up where you left off.", bonds, bonds == 1 and "" or "s") end
+  if bonds > 0 then t = t .. string.format("\n\nYou already have a %s bond (+%d%%%%) together: it picks up where you left off.", C.Rep.BondText(bonds), math.floor(C.Rep.PairBonus(bonds) * 100 + 0.5)) end
   return t
 end
 local function popups()
   if not StaticPopupDialogs or StaticPopupDialogs.KINA_PAIR then return end
-  local why = "Partners earn |cff33ff66+10%% Kina XP and standing|r on farms and payments together, on any of your characters, and the bond grows with every 5 farms you do together (up to |cff33ff66+20%%|r)."
+  local why = "Partners earn |cff33ff66+10%% Kina XP and standing|r on farms and payments together, on any of your characters, and the bond grows with the gold you farm together (up to |cff33ff66+20%%|r after about 20 hours)."
   StaticPopupDialogs.KINA_PAIR = {
     text = "%s runs Kina.\n\nMake them your Kina Partner?\n\n" .. why .. "%s",
     button1 = "Partner up", button2 = "Not now",
@@ -173,7 +173,7 @@ function P.OnKinaMate(name)
   local cur = P.Partner()
   if cur == uid then
     local b, n = P.Bonus()
-    C.Print(string.format("%syour partner %s is here:|r +%d%% XP and standing on what you do together (%d farm%s of bond).", GREEN, first(name) or "?", pct(b), n, n == 1 and "" or "s"))
+    C.Print(string.format("%syour partner %s is here:|r +%d%% XP and standing on what you do together (%s bond).", GREEN, first(name) or "?", pct(b), C.Rep.BondText(n)))
     return
   end
   if cur then return end -- one partner at a time: no nagging
@@ -224,8 +224,7 @@ function P.Line()
   local cur = P.Partner()
   if not cur then return GREY .. "No partner yet: partner up with a Kina user in your party for +10%.|r" end
   local b, n = P.Bonus()
-  local nextAt = (math.floor(n / 5) + 1) * 5
+  local frac = C.Rep.BondFrac(n)
   return string.format("%sYour partner %s|r  %s+%d%%|r%s", GOLD, P.PartnerName() or "?", GREEN, pct(b),
-    GREY .. string.format("  ·  %d farm%s together", n, n == 1 and "" or "s")
-    .. (b < (C.Rep.PAIR_MAX or 0.2) and string.format(", +1%% more at %d", nextAt) or ", full bond") .. "|r")
+    GREY .. "  ·  |r" .. C.Rep.BondText(n) .. GREY .. string.format(" bond, %d%% full", math.floor(frac * 100)) .. "|r")
 end

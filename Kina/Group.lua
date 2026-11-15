@@ -46,7 +46,13 @@ C.heardAt = {}
 function C.Heard(name)
   if type(name) ~= "string" or name == "" then return end
   local t = GetTime and GetTime() or 0
+  local was = C.heardAt[firstName(name)]
   C.heardAt[name] = t; C.heardAt[firstName(name)] = t
+  -- 1.0.2b (Taylor: "Scarlet forgave my debt but it hasn't updated on mine"): a note
+  -- waiting for this player (a forgiven debt) goes out as soon as their Kina is heard
+  if (not was or t - was > 60) and C.db and C.db.forgive and C.db.forgive.pending and #C.db.forgive.pending > 0 and C.ResendForgive then
+    C.After(2, C.ResendForgive)
+  end
 end
 function C.CanWhisper(name)
   if type(name) ~= "string" or name == "" then return false end
@@ -64,6 +70,22 @@ function C.CanWhisper(name)
       end
     end
   end
+  -- 1.0.2b: an online guild member (AH scans and price data are swapped across the guild)
+  if IsInGuild and IsInGuild() and GetNumGuildMembers and GetGuildRosterInfo then
+    local n = GetNumGuildMembers() or 0
+    for i = 1, math.min(n, 1000) do
+      local nm, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
+      if nm and firstName(nm) == want then return online == true end
+    end
+  end
+  -- 1.0.2b: someone on your friends list who is online
+  if C_FriendList and C_FriendList.GetFriendInfo then
+    local ok, fi = pcall(C_FriendList.GetFriendInfo, want)
+    if ok and type(fi) == "table" and fi.connected ~= nil then return fi.connected == true end
+  end
+  -- someone outside your group and guild: only right after their Kina spoke to yours
+  -- (group and guild members above are checked against who is online, so long
+  -- transfers to them, like a whole AH scan, keep going)
   local t = C.heardAt[name] or C.heardAt[want]
   return t ~= nil and ((GetTime and GetTime() or 0) - t) < 120
 end

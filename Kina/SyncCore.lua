@@ -183,8 +183,13 @@ function Core:file(origin, oseq, kind, data, at)
     s.wrapping = nil
     return ev
   end
+  -- 1.0.2b: made while that player was away from the group (2+ minutes): theirs alone
+  local away
+  for _, w in ipairs((s.aways or {})[origin] or {}) do
+    if at >= w.from and (not w.to or at < w.to) then away = true end
+  end
   local ev = self:append(origin, oseq, kind, data)
-  if ev and inPause and not open then self:append(self:name(), 0, "E", ev.seq .. ":1") end
+  if ev and ((inPause and not open) or (away and (kind == "L" or kind == "U"))) then self:append(self:name(), 0, "E", ev.seq .. ":1") end
   return ev
 end
 
@@ -480,6 +485,30 @@ function Core:Tick()
       s.lastInvite = now
       self:send(table.concat({ "I", s.sid, self:name(), s.label or "", s.camp or "" }, "|"))
     end
+    -- 1.0.2b (Taylor): a member out of the group (or offline) for 2 minutes is "away":
+    -- drops while they're gone aren't shared with them, and what they loot meanwhile stays
+    -- theirs. Back in the group, they're back in the split. Shorter drops change nothing.
+    if not s.closed and self.env.present and now - (s.lastAway or 0) >= 5 then
+      s.lastAway = now
+      s.gone = s.gone or {}; s.aways = s.aways or {}
+      for who in pairs(self:members()) do
+        if who ~= self:name() then
+          local list = s.aways[who]
+          local open = list and list[#list] and not list[#list].to and list[#list]
+          if self.env.present(who) then
+            s.gone[who] = nil
+            if open then open.to = now; self:append(self:name(), 0, "B", who) end
+          else
+            s.gone[who] = s.gone[who] or now
+            if not open and now - s.gone[who] >= 120 then
+              s.aways[who] = list or {}
+              table.insert(s.aways[who], { from = s.gone[who] + 120 })
+              self:append(self:name(), 0, "A", who)
+            end
+          end
+        end
+      end
+    end
     if s.stopping and not s.closed then
       if self:stopReady() then
         s.stopping = nil
@@ -593,11 +622,26 @@ function Core.Totals(s, reprice)
       if id and not unitVal[id] then unitVal[id] = tonumber(v) or 0 end
     end
   end
+  -- 1.0.2b (Taylor: "it's requiring me to pay people who weren't even part of the farm
+  -- but joined the group before it ended. Loot gained before they opted in should not
+  -- count"): each drop is shared only by the members who were in the farm when it was
+  -- looted. owed[x] = x's fair share of every drop while x was in.
+  local present, owed = {}, {}
+  local function share(origin, val)
+    local n = 0
+    for _ in pairs(present) do n = n + 1 end
+    if not present[origin] then n = n + 1 end
+    for who in pairs(present) do owed[who] = (owed[who] or 0) + val / n end
+    if not present[origin] then owed[origin] = (owed[origin] or 0) + val / n end
+  end
   for _, ev in ipairs(s.chain) do
     out.events = out.events + 1
     local k = ev.kind
-    if k == "J" then out.members[ev.origin] = true; out.byLooter[ev.origin] = out.byLooter[ev.origin] or 0
-    elseif k == "Q" then out.members[ev.origin] = nil
+    if k == "J" then out.members[ev.origin] = true; out.byLooter[ev.origin] = out.byLooter[ev.origin] or 0; present[ev.origin] = true
+    elseif k == "Q" then out.members[ev.origin] = nil; present[ev.origin] = nil
+    elseif (k == "A" or k == "B") and (ev.oseq or 0) == 0 and out.members[ev.data or ""] then
+      -- 1.0.2b: the leader's note that a member is away from the group / back
+      if k == "A" then present[ev.data] = nil else present[ev.data] = true end
     elseif k == "P" then paused = ev.data == "1"
     elseif k == "N" then
       -- 1.0.10: a "don't split" farm. 0.9.1 (security): set by whoever started it before
@@ -614,6 +658,7 @@ function Core.Totals(s, reprice)
         local val = (tonumber(n) or 1) * (tonumber(v) or 0)
         out.items = out.items + val
         out.byLooter[ev.origin] = (out.byLooter[ev.origin] or 0) + val
+        share(ev.origin, val)
       elseif k == "C" then
         local c = tonumber(ev.data) or 0
         out.coin = out.coin + c
@@ -634,6 +679,7 @@ function Core.Totals(s, reprice)
           local val = per * (tonumber(gn) or 1)
           out.items = out.items - val
           out.byLooter[ev.origin] = (out.byLooter[ev.origin] or 0) - val
+          share(ev.origin, -val)
           out.deSwaps = (out.deSwaps or 0) + 1
         end
       elseif k == "K" then
@@ -642,6 +688,18 @@ function Core.Totals(s, reprice)
         if key ~= "" and not kills[key] then kills[key] = true; out.kills = out.kills + 1 end
       end
     end
+  end
+  -- byLooter becomes what the even split needs: held - fair share + the average, so
+  -- Split() pays out exactly held - fair share. heldBy keeps what each one looted.
+  do
+    local held, total, n = {}, 0, 0
+    for who, v in pairs(out.byLooter) do held[who] = v; total = total + v; n = n + 1 end
+    out.heldBy = held
+    local avg = n > 0 and total / n or 0
+    local adj = {}
+    for who, v in pairs(held) do adj[who] = v - (owed[who] or 0) + avg end
+    out.byLooter = adj
+    out.owedBy = owed
   end
   if out.nVotes and not out.noSplit then
     local by = {}

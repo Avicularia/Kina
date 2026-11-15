@@ -104,7 +104,7 @@ local TOPICS = {
     .. "is told. Debts you already have still need settling.\n"
     .. H("Partners") .. "Pick one Kina user as your Partner (it takes both of you: one asks, the other accepts). Partners earn "
     .. G .. "+10% Kina XP and standing|r on farms together (your partner in the farm when it ends) and on payments between you. "
-    .. "The bond grows: " .. G .. "+1% more for every 5 farms|r together, up to " .. G .. "+20%|r at 50. Your bond with each person is "
+    .. "The bond grows with the " .. G .. "gold you farm together|r (scaled to your level, longer farms count a bit extra), up to " .. G .. "+20%|r in about 20 hours: Your partner's portrait shows a bond crest: Uncommon, Rare, Epic, then Legendary, with 1 to 5 gems for the level (20 levels, +0.5% each). Your bond with each person is "
     .. "kept, so going back to an old partner picks up where you left off. Kina asks when a Kina user joins your party and you have "
     .. "no partner; end it from their profile or " .. G .. "/kina partner end|r.\n\n"
     .. GR .. "Other players' standing is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "

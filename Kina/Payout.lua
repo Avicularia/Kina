@@ -499,22 +499,131 @@ function C.Forgive(d)
   return true
 end
 -- the debtor's side: someone forgave what we owed them on one farm
+-- 1.0.2b (Taylor: "Scarlet forgave my debt but it's still there"): the farm can be waiting
+-- for AH prices on my side (Debts() hides those) - the forgiveness found nothing, was
+-- still confirmed, and the forgiver's Kina stopped sending it: lost. Now the farm is
+-- looked up directly, held or not, and it's only confirmed once it's applied (until then
+-- the forgiver's Kina keeps re-sending it).
 function C.OnForgiven(from, amt, ref)
   from = first(from)
+  local me = first(UnitName and UnitName("player") or "")
   local hit = false
-  for _, d in ipairs(C.Debts()) do
-    if d.dir == "owe" and not d.topup and first(d.who) == from and d.s and (farmRef(d.s) == ref or (not hit and ref:sub(1, 1) == "t" and math.abs(d.amt - (amt or 0)) < 1)) then
-      local sp = d.s.split
-      sp.paid = sp.paid or {}; sp.paid[d.key] = true
-      sp.forgiven = sp.forgiven or {}; sp.forgiven[d.key] = math.floor(d.amt)
-      if C.Log then C.Log("forgive", "got", from, math.floor(d.amt), ref) end
-      C.Print(string.format("|cff7CFC00%s forgave the %s you owed them|r (%s). Nothing to pay.", C.Books and C.Books.Name(from) or from, C.Money(math.floor(d.amt)), d.farm or "farm"))
-      hit = true
+  local function apply(s, t)
+    local sp = s.split
+    sp.paid = sp.paid or {}
+    if sp.paid[t.to] == true then return end
+    local left = math.floor(t.amt or 0)
+    if type(sp.paid[t.to]) == "number" then left = left - sp.paid[t.to] end
+    sp.paid[t.to] = true
+    sp.forgiven = sp.forgiven or {}; sp.forgiven[t.to] = math.max(0, left)
+    if C.Log then C.Log("forgive", "got", from, math.max(0, left), ref) end
+    C.Print(string.format("|cff7CFC00%s forgave the %s you owed them|r (%s). Nothing to pay.", C.Books and C.Books.Name(from) or from, C.Money(math.max(0, left)), s.label or "farm"))
+    hit = true
+  end
+  for _, s in ipairs(C.db.sessions or {}) do
+    if s.split and s.split.transfers and farmRef(s) == ref then
+      for _, t in ipairs(s.split.transfers) do
+        if (t.from == "you" or first(t.from) == me) and first(t.to) == from then apply(s, t) end
+      end
+      if not hit and s.split.paid and s.split.paid[from] == true then hit = true end -- already done (a re-send)
+      for k in pairs(s.split.paid or {}) do if first(k) == from and s.split.paid[k] == true then hit = true end end
     end
   end
-  if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, ref) end
+  -- an older single-player farm, matched by amount
+  if not hit and type(ref) == "string" and ref:sub(1, 1) == "t" then
+    for _, d in ipairs(C.Debts()) do
+      if not hit and d.dir == "owe" and not d.topup and first(d.who) == from and math.abs(d.amt - (amt or 0)) < 1 then
+        local sp = d.s.split
+        sp.paid = sp.paid or {}; sp.paid[d.key] = true
+        sp.forgiven = sp.forgiven or {}; sp.forgiven[d.key] = math.floor(d.amt)
+        if C.Log then C.Log("forgive", "got", from, math.floor(d.amt), ref) end
+        hit = true
+      end
+    end
+  end
+  if hit and C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, ref) end
+  if hit then C.OnForgiveAck(from, ref, "dsp") end
   if C.RefreshWidget then C.RefreshWidget() end
+  if C.Refresh then pcall(C.Refresh) end
   return hit
+end
+-- 1.0.2b (Taylor: "I need a way to remove or dispute that debt, and so does everyone"):
+-- the one who owes asks the one owed to clear a debt ("it was forgiven / already paid").
+-- The one owed decides: Clear it (a forgiveness, so the lapse penalty is given back too)
+-- or It's still owed. If their Kina already shows it forgiven or paid, it just sends the
+-- forgiveness again, no question. The request waits and re-sends until it's answered.
+function C.DisputeDebt(d, why)
+  if not (d and d.dir == "owe" and d.s and d.s.split) then return false end
+  local p = { who = first(d.who), amt = math.floor(d.amt or d.rest or 0), ref = farmRef(d.s), t = C.Now(), kind = "dsp" }
+  for _, q in ipairs(fdb().pending) do if q.kind == "dsp" and q.who == p.who and q.ref == p.ref then return true end end
+  table.insert(fdb().pending, p)
+  sendForgive(p)
+  if C.Log then C.Log("dispute", "debt", p.who, p.amt, p.ref) end
+  C.Print(string.format("asked %s to clear the %s debt (%s). Their Kina asks them; you'll see the answer here.", C.Books and C.Books.Name(d.who) or d.who, C.Money(p.amt), d.farm or "farm"))
+  return true
+end
+function C.AskDispute(d)
+  if not d then return end
+  C.ShowPopup("KINA_DISPUTE_ASK", string.format("Dispute the %s you owe %s?\n\nUse this when it was already paid or forgiven but Kina still shows it. %s's Kina asks them to clear it; if they do, any standing you lost for it comes back.",
+    C.Money(math.floor(d.amt or 0)), C.Books and C.Books.Name(d.who) or d.who, C.Books and C.Books.Name(d.who) or d.who), nil, d)
+end
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs["KINA_DISPUTE_ASK"] = {
+  text = "%s", button1 = "Dispute", button2 = "Cancel", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  OnAccept = function(_, d) if d then C.DisputeDebt(d) end end,
+}
+-- the one owed: someone disputes what they owe me
+function C.OnDispute(from, amt, ref)
+  from = first(from)
+  local me = first(UnitName and UnitName("player") or "")
+  for _, s in ipairs(C.db.sessions or {}) do
+    if s.split and s.split.transfers and farmRef(s) == ref then
+      for _, t in ipairs(s.split.transfers) do
+        local to = (t.to == "you") and me or first(t.to)
+        if to == me and first(t.from) == from then
+          local sp = s.split
+          local done = (sp.received and sp.received[t.from] == true) or (sp.forgiven and sp.forgiven[t.from])
+          if done then
+            -- already closed here: tell their Kina again
+            if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, from, math.floor(t.amt or 0), ref) end
+            return "resent"
+          end
+          C.ShowPopup("KINA_DISPUTE_DEBT", string.format("%s disputes the %s they owe you from %s: they say it was already paid or forgiven.\n\nClear it?",
+            C.Books and C.Books.Name(from) or from, C.Money(math.floor(t.amt or 0)), s.label or "a farm"), nil, { s = s, t = t, from = from, ref = ref })
+          return "asked"
+        end
+      end
+    end
+  end
+  return "unknown"
+end
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs["KINA_DISPUTE_DEBT"] = {
+  text = "%s", button1 = "Clear it", button2 = "It's still owed", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
+  OnAccept = function(_, data)
+    if not data then return end
+    local sp = data.s.split
+    local key = data.t.from
+    local left = math.floor(data.t.amt or 0)
+    if type(sp.paid) == "table" and type(sp.paid[key]) == "number" then left = left - sp.paid[key] end
+    sp.received = sp.received or {}; sp.received[key] = true
+    sp.forgiven = sp.forgiven or {}; sp.forgiven[key] = math.max(0, left)
+    if C.Log then C.Log("forgive", "gave", data.from, math.max(0, left), data.ref) end
+    local p = { who = data.from, amt = math.max(0, left), ref = data.ref, t = C.Now() }
+    table.insert(fdb().pending, p); sendForgive(p)
+    if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, data.from, data.ref, "dsp") end
+    C.Print(string.format("|cff7CFC00cleared|r %s's debt (%s).", data.from, data.s.label or "farm"))
+    if C.Refresh then pcall(C.Refresh) end
+  end,
+  OnCancel = function(_, data)
+    if not data then return end
+    if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, data.from, 0, data.ref, "dsn") end
+  end,
+}
+-- the one who owes: the answer "it's still owed"
+function C.OnDisputeDenied(from, ref)
+  C.OnForgiveAck(from, ref, "dsp")
+  C.Print(string.format("|cffffc54a%s says the debt is still owed|r: pay it from the Ledger, or talk it over with them.", C.Books and C.Books.Name(from) or from))
 end
 function C.OnForgiveAck(from, ref, kind)
   local keep = {}

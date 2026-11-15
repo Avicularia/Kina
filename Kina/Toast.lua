@@ -207,12 +207,86 @@ do
   local function shortN(n)
     n = math.floor(n or 0)
     if n >= 10000 then return string.format("%.1fk", n / 1000) end
+    if n >= 1000 then return string.format("%d,%03d", math.floor(n / 1000), n % 1000) end
     return tostring(n)
+  end
+  -- 1.0.2b (Taylor: "I need how many Kina users ... it helps us advertise"): every Kina
+  -- user in your group, you included (tracker-only users count too)
+  function C.KinaUsersInGroup()
+    local users = 1
+    local me = (UnitName and UnitName("player") or ""):match("^[^%-]+") or ""
+    local seen = { [me] = true }
+    for _, a in pairs(C.Share and C.Share.DB and C.Share.DB().authors or {}) do
+      local k = a.name and a.name:match("^[^%-%s]+")
+      if k and not seen[k] and a.seen and C.Now() - a.seen < 1800 and C.InGroupName(a.name) then seen[k] = true; users = users + 1 end
+    end
+    return users
+  end
+  -- 1.0.2b (Taylor: "when the farm ends, in the party chat I want the stats from the farm"):
+  -- one line to party/raid chat when a farm of 5+ minutes ends (never whispers; a shared
+  -- farm's line comes from its leader; Settings > "Post farm stats to group chat").
+  function C.FarmEndLine(s)
+    if not (s and s.stop and s.start) then return nil end
+    local net, secs, kills = 0, 0, 0
+    if s.gview and s.gview.net then
+      net, secs, kills = s.gview.net or 0, s.gview.secs or 0, s.gview.kills or 0
+    else
+      local r = s.result or {}
+      net, secs, kills = r.total or 0, r.secs or 0, r.kills or 0
+    end
+    if secs < 300 then return nil end
+    local users = C.KinaUsersInGroup()
+    local m = math.floor(secs / 60)
+    local parts = {
+      (s.label or "Farm") .. " done",
+      (m >= 60 and string.format("%dh %02dm", math.floor(m / 60), m % 60) or (m .. " min")),
+      plain(math.max(0, net)) .. " total",
+      plain(math.max(0, net) * 3600 / math.max(1, secs)) .. "/h",
+    }
+    local xph = C.GameXPPerHour and C.GameXPPerHour(s)
+    if xph and xph > 0 then parts[#parts + 1] = shortN(xph) .. " XP/h" end
+    if kills > 0 then parts[#parts + 1] = kills .. " kills" end
+    local drops = C.FarmDrops and C.FarmDrops(s) or {}
+    local best = drops[1]
+    local tail = {}
+    if s.split and s.split.transfers and not s.noSplit then
+      local n = #s.split.transfers
+      tail[#tail + 1] = n == 0 and "split: everyone even" or ("split: " .. n .. (n == 1 and " trade" or " trades"))
+    end
+    local head = "Kina (" .. users .. (users == 1 and " user" or " users") .. "): "
+    local msg = head .. table.concat(parts, ", ")
+    if best and best.v and best.v >= 1 then
+      local link = (C.ItemLink and C.ItemLink(best.id)) or nil
+      local name = link or ("item " .. best.id)
+      local cand = msg .. ", best drop " .. name .. (best.n > 1 and (" x" .. best.n) or "") .. " " .. plain(best.v)
+      if #cand + 40 <= 255 then msg = cand end
+    end
+    for _, t in ipairs(tail) do if #msg + #t + 2 <= 255 then msg = msg .. ", " .. t end end
+    return msg
+  end
+  function C.FarmEndAd(s)
+    if C.settings.groupAd == false or not SendChatMessage then return end
+    if not (C.GroupSize and C.GroupSize() > 1) then return end
+    if s.sync and s.sync.leader then
+      local me = UnitName and UnitName("player")
+      if (s.sync.leader:match("^[^%-]+")) ~= me then return end
+    end
+    local tries = 0
+    local function go()
+      tries = tries + 1
+      if InCombatLockdown and InCombatLockdown() and tries < 60 then return C.After(5, go) end
+      local msg = C.FarmEndLine(s)
+      if not msg then return end
+      pcall(SendChatMessage, msg, (IsInRaid and IsInRaid()) and "RAID" or "PARTY")
+    end
+    -- a few seconds: the split and the best drop are filed by then
+    C.After(4, go)
   end
   function C.FarmAdLine(s)
     local r = C.FarmRate(s)
     if not r then return nil end
-    local parts = { "Kina farm tracker: " .. plain(r.net * 3600 / r.secs) .. "/h" }
+    local users = math.max(C.KinaUsersInGroup(), r.users or 1)
+    local parts = { "Kina farm tracker (" .. users .. (users == 1 and " user" or " users") .. "): " .. plain(r.net * 3600 / r.secs) .. "/h" }
     local xph = C.GameXPPerHour and C.GameXPPerHour(s) or 0
     if xph and xph > 0 then parts[#parts + 1] = shortN(xph) .. " XP/h" end
     if (r.kills or 0) > 0 then parts[#parts + 1] = r.kills .. " kills" end
@@ -384,3 +458,30 @@ end
 
 -- 1.5.4: a reload or logout during the theme left the game's music off: put it back
 C.On("PLAYER_LOGIN", function() if C.Toast and C.Toast.MusicBack then pcall(C.Toast.MusicBack) end end)
+
+-- 1.0.2b (Taylor: "make the best drop link a hover tooltip capable link"): the item in
+-- Kina's farm line is a real item link (anyone can click it to see the item). With
+-- Kina, hovering ANY item link in chat shows its tooltip, no click needed. Only hooks
+-- the chat windows' own hover events; nothing is stored on them.
+do
+  local hooked = {}
+  local function enter(self, link)
+    if type(link) ~= "string" or not link:find("^item:") then return end
+    if not (GameTooltip and GameTooltip.SetOwner and GameTooltip.SetHyperlink) then return end
+    GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+    pcall(GameTooltip.SetHyperlink, GameTooltip, link)
+    GameTooltip:Show()
+  end
+  local function leave() if GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end end
+  local function hookAll()
+    for i = 1, (NUM_CHAT_WINDOWS or 10) do
+      local f = _G["ChatFrame" .. i]
+      if f and f.HookScript and not hooked[f] then
+        hooked[f] = true
+        f:HookScript("OnHyperlinkEnter", C.Safe("chat link hover", enter))
+        f:HookScript("OnHyperlinkLeave", C.Safe("chat link hover", leave))
+      end
+    end
+  end
+  C.On("PLAYER_ENTERING_WORLD", function() pcall(hookAll) end)
+end

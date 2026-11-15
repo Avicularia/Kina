@@ -246,6 +246,8 @@ local function partyStrip()
           GameTooltip:AddLine("Click to share Kina in party chat.", 0.25, 0.86, 0.43)
         else
           if C.Cos and C.Cos.IsFounder and C.Cos.IsFounder(self.who) then GameTooltip:AddLine("Kina Founder", 0.47, 0.71, 1) end
+          local bcu = C.Cos and C.Cos.BondFor and C.Cos.BondFor(self.who)
+          if bcu then GameTooltip:AddLine("Your Kina partner: " .. C.Rep.BondText(bcu) .. "  |cff33ff66+" .. string.format("%.1f", C.Rep.PairBonus(bcu) * 100) .. "%|r", 1, 1, 1) end
           GameTooltip:AddLine("Click for their Kina profile", 1, 1, 1)
         end
         GameTooltip:Show()
@@ -272,6 +274,7 @@ local function partyStrip()
       local klv = pr and pr.kinaLv
       C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
       if C.Cos.SetFounder then C.Cos.SetFounder(c.cos, pr and pr.dev) end
+      if C.Cos.SetBond then C.Cos.SetBond(c.cos, C.Cos.BondFor(m.name)) end
       if klv and klv > 0 then c.cos.plate:Show(); c.cos.num:Show() else c.cos.plate:Hide(); c.cos.num:Hide() end
       NOKINA[c] = (pr == nil) or nil
       if C.Cos.SetPlain then C.Cos.SetPlain(c.cos, pr == nil) end

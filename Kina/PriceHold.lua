@@ -94,9 +94,30 @@ function H.Preview(on)
 end
 
 ------------------------------------------------------------------ the hold
+-- 1.0.2b (Taylor: "stopping farms and starting new ones before the party members have
+-- picked scan or not"): starting a new farm while an older one still waits for MY answer
+-- counts as "skip" for it (a "scan" already picked still stands), so the older farm's
+-- debts don't sit hidden for a day behind a window that's gone.
+function H.MovedOn()
+  for i = 1, math.min(#(C.db.sessions or {}), 10) do
+    local s = C.db.sessions[i]
+    if s.hold and not s.hold.done and s.hold.me == "wait" then
+      C.Print(string.format("new farm: the %s farm goes ahead without your AH scan.", s.label or "last"))
+      if win and win.s == s and win.Hide then win:Hide() end
+      H.Answer(s, "skip")
+    end
+  end
+end
 function H.Begin(s)
   if C.settings and C.settings.askScan == false then return end
   if s.noSplit or not (s.split and s.split.transfers and #s.split.transfers > 0) then return end
+  -- 1.0.2b (Taylor): an AH scan from the last 15 minutes (yours or one a groupmate shared)
+  -- already priced this split: no need to ask anyone to scan again
+  local last = math.max((C.market and C.market.scanTime) or 0, (C.Share and C.Share.NewestScan and C.Share.NewestScan()) or 0)
+  if last > 0 and C.Now() - last <= 900 then
+    C.Print(string.format("this farm is priced from the AH scan %d min ago: no new scan needed.", math.floor((C.Now() - last) / 60)))
+    return
+  end
   s.hold = { at = C.Now(), me = "wait", peers = {}, leader = s.sync and s.sync.leader and first(s.sync.leader) or nil }
   if C.After then C.After(5, function() if s.hold and not s.hold.done then H.ShowWindow(s) end end) else H.ShowWindow(s) end
 end
@@ -142,6 +163,12 @@ end
 function H.Apply(s, by)
   if not (C.FarmSync and C.FarmSync.Split) then s.hold.done = true; return end
   local total, each, transfers = C.FarmSync.Split(by)
+  -- 1.0.2b: the looted values and fair shares move with the new prices
+  local old = s.split.total or 0
+  if old > 0 and total > 0 then
+    local f = total / old
+    for _, m in ipairs({ s.split.held or {}, s.split.fair or {} }) do for k, v in pairs(m) do m[k] = math.floor(v * f + 0.5) end end
+  end
   s.split.total, s.split.each, s.split.incomes, s.split.transfers = total, each, by, transfers
   s.hold.done = true
   C.Print(string.format("|cffffc54aFarm split re-priced|r (%s) from fresh auction prices:", s.label or "farm"))

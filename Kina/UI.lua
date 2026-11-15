@@ -843,7 +843,7 @@ local function farmLog(s, live)
     row("", "|cffffc54aGroup total|r", "everything the group looted (loot lines) + coin, what the widget shows", "", signedMoney(gf.net))
     -- each player's line has their own consumables taken out, so it's the admin view only
     do
-      for who, v in pairs(gf.byLooter) do row("", "   " .. who, "looted", "", signedMoney(v)) end
+      for who, v in pairs(gf.heldBy or gf.byLooter) do row("", "   " .. who, "looted", "", signedMoney(v)) end
     end
     row("", "   coin", "", "", signedMoney(gf.coin))
     -- 1.0.0: consumables are personal (your own net, below), never part of the group total or split
@@ -1226,6 +1226,7 @@ if C.PUBLIC then
           elseif g.kind == "vouchgave" then what = string.format("vouched for %s", C.Books.Name(g.who))
           elseif g.kind == "refused" then what = string.format("%syou refused %s's full payment and the debt ran out (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
           elseif g.kind == "lapsed" then what = string.format("%sa debt to %s lapsed unpaid (%d rep)|r", ORANGE, C.Books.Name(g.who), g.rep or -50)
+          elseif g.kind == "unlapsed" then what = string.format("%s%s cleared a lapsed debt: standing back (+%d rep)|r", GREEN or "|cff7CFC00", C.Books.Name(g.who), g.rep or 50)
           elseif g.kind == "tour" then what = string.format("|cffffc54afinished the Kina tour (+%d rep)|r", g.rep or 0)
           elseif g.kind == "jail" then what = "took the one-time pardon: standing back to 1"
           elseif g.kind == "decay" then what = string.format("%sidle week(s) (%+d rep)|r", GREY, g.rep or 0)
@@ -1280,10 +1281,13 @@ tabs.Session = function()
   end
   local out = {}
   local function add(label, r, live, ref)
+    -- 1.0.2b (Taylor: "the vendor/items are not lining up"): coin, vendor and items each
+    -- get their own column, and XP per hour its own, so nothing wraps into the next one
+    local xph = ref and C.GameXPPerHour and C.GameXPPerHour(ref)
     out[#out + 1] = { slog = ref, cols = { (live and "|cff7CFC00" or "") .. label .. (live and "|r" or ""), string.format("%d min", math.floor(r.secs / 60)),
-      C.Money(r.total), C.Money(r.perHour), string.format("|cffe6c85acoin|r %s  ·  |cff9d9d9dvendor|r %s  ·  |cff6ec27aitems|r %s%s", C.Money(r.coin),
-      C.Money(r.vendor), C.Money(r.items), (r.pickpocket or 0) > 0 and ("  ·  pickpocket " .. C.Money(r.pickpocket)) or ""), tostring(r.kills) .. ((ref and C.GameXPPerHour and C.GameXPPerHour(ref)) and ("  |cff9d9d9d" .. C.FmtXPH(C.GameXPPerHour(ref)) .. "|r") or "") },
-      sort = { label, r.secs, r.total, r.perHour, r.coin + r.pickpocket, r.kills } }
+      C.Money(r.total), C.Money(r.perHour), C.Money((r.coin or 0) + (r.pickpocket or 0)), C.Money(r.vendor or 0), C.Money(r.items or 0),
+      tostring(r.kills or 0), (xph and xph > 0) and C.FmtXPH(xph) or "-" },
+      sort = { label, r.secs, r.total, r.perHour, (r.coin or 0) + (r.pickpocket or 0), r.vendor or 0, r.items or 0, r.kills or 0, xph or 0 } }
   end
   local s = C.SessionSummary()
   if s then add("Current", s, true, "current") end
@@ -1303,7 +1307,7 @@ tabs.Session = function()
     { "Earned", "|cffffc54a" .. C.Money(math.floor(tot)) .. "|r" }, { "Average per hour", "|cffffc54a" .. C.Money(secs > 0 and math.floor(tot * 3600 / secs) or 0) .. "|r" },
     { "Best farm", best and ("|cffffc54a" .. C.Money(math.floor(best.result.perHour or 0)) .. "/h|r") or "-", best and best.label or nil } }
   return "|cffffc54aFarms|r  |cff9d9d9dclick a farm to open its log|r",
-    { "Farm", "Length", "Total", "Per hour", "Made of", "Kills" }, { 0, 220, 300, 400, 500, 790 }, out, { tiles = tiles }
+    { "Farm", "Length", "Total", "Per hour", "|cffe6c85aCoin|r", "|cff9d9d9dVendor|r", "|cff6ec27aItems|r", "Kills", "XP/h" }, { 0, 200, 270, 360, 460, 560, 660, 760, 820 }, out, { tiles = tiles }
 end
 
 ------------------------------------------------------------------ column help

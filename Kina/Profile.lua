@@ -201,6 +201,7 @@ function P.ShowCard(name)
   if o.cos and C.Cos then
     C.Cos.UpdatePortrait(o.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
     if C.Cos.SetFounder then C.Cos.SetFounder(o.cos, pr and pr.dev) end
+      if C.Cos.SetBond then C.Cos.SetBond(o.cos, C.Cos.BondFor(o.who or name)) end
     if klv and klv > 0 then o.cos.plate:Show(); o.cos.num:Show() else o.cos.plate:Hide(); o.cos.num:Hide() end
   end
   o.name:SetText(name)

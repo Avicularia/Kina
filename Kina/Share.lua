@@ -983,6 +983,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
           C.OnSettleConfirm(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "fgv" and C.FirstName and C.FirstName(to) == mine and C.OnForgiven then
           C.OnForgiven(from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "dsp" and C.FirstName and C.FirstName(to) == mine and C.OnDispute then
+          C.OnDispute(from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "dsn" and C.FirstName and C.FirstName(to) == mine and C.OnDisputeDenied then
+          C.OnDisputeDenied(from, label)
+        elseif uid and uid ~= db().uid and action == "dsa" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
+          C.OnForgiveAck(from, label, "dsp")
         elseif uid and uid ~= db().uid and action == "fga" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
           C.OnForgiveAck(from, label)
         elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and C.FirstName and C.FirstName(to) == mine and C.OnDebtNote then
@@ -1292,7 +1298,7 @@ function S.SendForgiveAck(to, ref, kind)
   if not db().opts.enabled then return end
   local ch = groupChannel()
   -- the answer names what it answers: fga (forgive), pla (plea), exa (extension)
-  local ack = ({ plea = "pla", ext = "exa" })[kind or ""] or "fga"
+  local ack = ({ plea = "pla", ext = "exa", dsp = "dsa" })[kind or ""] or "fga"
   local msg = table.concat({ "T", db().uid, to or "", ack, "0", ((tostring(ref or "")):gsub("|", "")) }, "|")
   if ch then enqueue(msg, ch, nil, true) end
 end

@@ -104,26 +104,38 @@ end
 --    positive (not below 0), +50/week while negative (+25 Blacklisted), never above -20
 --  * while this Kina is out of date ("frozen" lines) nothing is gained or lost
 R.BLACKLIST, R.BREAK_REP = -1000, -99
-local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT", "tourDone", "partner", "bonds", "partnerName", "pchars", "track" }
+local STATE_KEYS = { "maxEver", "lowEver", "recoverTo", "black", "everBlack", "jailUsed", "frozen", "negSecs", "posSecs", "lastT", "fell", "lastFall", "lastFarmT", "tourDone", "partner", "bonds", "goldU", "partnerName", "pchars", "track" }
 -- 0.9.18 (Taylor): Partners. +10% XP and standing on farms and payments together, and
 -- the bond grows +1% for every 5 qualifying farms together, up to +20% (Pair.lua)
 R.PAIR_BASE, R.PAIR_STEP, R.PAIR_EVERY, R.PAIR_MAX = 0.10, 0.01, 5, 0.20
 -- 0.9.19: partners are ACCOUNTS (their Kina ID), never characters. Bonds are kept per
 -- Kina ID as "uid=12;uid=3", and the partner's characters as ";uid/name;" (strings, so
 -- the rolled-up state's hash covers them)
+-- (a bonds string from before 1.0.2b counts farms: 1 farm = 1.6 units)
+local function bondV2(s)
+  if type(s) ~= "string" or s == "" or s:sub(1, 3) == "v2;" then return s end
+  local out = {}
+  for n, v in s:gmatch("([^;=]+)=(%d+)") do out[#out + 1] = n .. "=" .. math.floor((tonumber(v) or 0) * 160) end
+  return "v2;" .. table.concat(out, ";")
+end
+R._BondV2 = bondV2
 local function bondGet(s, name)
   if type(s) ~= "string" or not name then return 0 end
+  s = bondV2(s)
   for n, v in s:gmatch("([^;=]+)=(%d+)") do if n == name then return tonumber(v) or 0 end end
   return 0
 end
 local function bondSet(s, name, v)
   local out, done = {}, false
-  for n, x in (type(s) == "string" and s or ""):gmatch("([^;=]+)=(%d+)") do
-    if n == name then x = tostring(v); done = true end
-    out[#out + 1] = n .. "=" .. x
+  for n, x in (bondV2(type(s) == "string" and s or "") or ""):gmatch("([^;=]+)=(%d+)") do
+    if n == "v2" then n = nil end
+    if n then
+      if n == name then x = tostring(v); done = true end
+      out[#out + 1] = n .. "=" .. x
+    end
   end
   if not done then out[#out + 1] = name .. "=" .. tostring(v) end
-  return table.concat(out, ";")
+  return "v2;" .. table.concat(out, ";")
 end
 local function charKey(name) return (type(name) == "string" and name:match("^%s*([^%s%-]+)") or ""):lower() end
 function R.AddChar(s, uid, name)
@@ -136,7 +148,51 @@ function R.HasChar(s, uid, name)
   local k = charKey(name)
   return type(s) == "string" and k ~= "" and s:find(";" .. uid .. "/" .. k .. ";", 1, true) ~= nil
 end
-function R.PairBonus(bond) return math.min(R.PAIR_MAX, R.PAIR_BASE + R.PAIR_STEP * math.floor((bond or 0) / R.PAIR_EVERY)) end
+-- 1.0.2b (Taylor, Nov 14): the bond grows from GOLD earned together, not farm counts.
+-- Each farm with your partner adds "gold units": your share of the farm's gold divided by
+-- what a player of that level usually makes in an hour, times 1 + 0.01 per minute of the
+-- farm (15 minutes = 1.15x). About 20 hours of ordinary farming together fills it, on a
+-- curve (quicker at the start). Level-scaled, so a level 20 pair needs far less gold than
+-- a level 60 pair. Bonds are kept in hundredths of a unit ("v2;uid=n;...").
+-- (The same gold units, for every farm, feed the future gold cosmetics track: st.goldU.)
+R.EXPECT = { { 1, 500 }, { 10, 4000 }, { 20, 10000 }, { 30, 25000 }, { 40, 50000 }, { 50, 80000 }, { 60, 120000 } }
+function R.ExpectedGPH(lvl)
+  lvl = tonumber(lvl) or 1
+  local E = R.EXPECT
+  if lvl <= E[1][1] then return E[1][2] end
+  for i = 2, #E do
+    if lvl <= E[i][1] then
+      local a, b = E[i - 1], E[i]
+      return a[2] + (b[2] - a[2]) * (lvl - a[1]) / (b[1] - a[1])
+    end
+  end
+  return E[#E][2]
+end
+function R.GoldUnits(copper, lvl) return math.max(0, copper or 0) / R.ExpectedGPH(lvl) end
+R.BOND_FULL = 32        -- units: ~20 hours at a usual rate in ~1 hour farms (x1.6)
+R.BOND_CURVE = 0.8
+function R.BondFrac(cu) return math.min(1, ((cu or 0) / 100) / R.BOND_FULL) ^ R.BOND_CURVE end
+-- 20 bond levels (Taylor, Nov 14): 4 tiers of 5, each level +0.5% (+10.5% ... +20%)
+function R.BondLevel(cu) return math.max(0, math.min(20, math.floor(R.BondFrac(cu) * 20 + 1e-9))) end
+function R.PairBonus(cu) return R.PAIR_BASE + 0.005 * R.BondLevel(cu) end
+function R.BondTier(cu) return math.max(1, math.ceil(R.BondLevel(cu) / 5)) end
+function R.BondGems(cu) local l = R.BondLevel(cu); if l == 0 then return 0 end; return l - (R.BondTier(cu) - 1) * 5 end
+R.BOND_TIERS = { "Uncommon", "Rare", "Epic", "Legendary" }
+R.BOND_COLORS = { "|cff1eff00", "|cff0070dd", "|cffa335ee", "|cffff8000" }
+function R.BondText(cu)
+  local l = R.BondLevel(cu)
+  if l == 0 then return "new bond" end
+  return R.BOND_COLORS[R.BondTier(cu)] .. R.BOND_TIERS[R.BondTier(cu)] .. " " .. R.BondGems(cu) .. "|r"
+end
+-- one farm's gold units (x100) from its farmend line: your share of the group's gold, at
+-- the group's highest level, times the minutes multiplier (older lines: 1.6 units)
+function R.FarmBondCU(f)
+  local secs, net, n = tonumber(f[7]) or 0, tonumber(f[13]), tonumber(f[14])
+  local lvl = math.max(tonumber(f[12]) or 0, tonumber(f[11]) or 0)
+  if not net or not n or lvl < 1 then return 160 end
+  local u = R.GoldUnits(net / math.max(1, n), lvl) * (1 + 0.01 * secs / 60)
+  return math.floor(u * 100 + 0.5)
+end
 R.TOUR_XP, R.TOUR_REP = 50, 20 -- 0.9.2 (Taylor): finishing the welcome tour, once
 R.STATE_KEYS = STATE_KEYS
 function R.Mult(st)
@@ -165,6 +221,7 @@ function R.Replay(lines, st, gains)
       st.recoverTo = math.max(st.recoverTo or 0, st.maxEver)
     end
   end
+  local lapsedRefs = {}
   local function gainRep(x, t)
     if st.frozen or st.track or x <= 0 then return 0 end
     local g = math.floor(x * R.Mult(st) + 0.5)
@@ -262,6 +319,12 @@ function R.Replay(lines, st, gains)
       local gr = gainRep(rp, t)
       if want > 0 and gains then gains[#gains + 1] = { t = t, xp = got, want = want, kind = paidOff >= 1 and "pay" or "receipt", who = who, rep = gr,
         paidOff = paidOff, cameIn = cameIn, via = f[3], gave = tonumber(f[5]) or 0, got = tonumber(f[6]) or 0, paused = not st.share or nil } end
+    elseif kind == "forgive" and f[3] == "got" and (lapsedRefs[f[6] or ""] or 0) > 0 then
+      -- 1.0.2b (Taylor): a debt that "lapsed" but was forgiven (or cleared by a dispute)
+      -- gives back the standing the lapse took
+      lapsedRefs[f[6]] = lapsedRefs[f[6]] - 1
+      if not st.frozen then st.rep = st.rep + math.abs(R.LAPSE_REP); after(t) end
+      if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "unlapsed", who = f[4] or "?", rep = math.abs(R.LAPSE_REP) } end
     elseif kind == "forgive" and f[3] == "gave" then
       local got = gainXP(R.FORGIVE_XP)
       if gains and got > 0 then gains[#gains + 1] = { t = t, xp = got, want = R.FORGIVE_XP, kind = "forgive", who = f[4] or "?" } end
@@ -301,10 +364,13 @@ function R.Replay(lines, st, gains)
       local r = loseRep(hit, t)
       if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "refused", who = f[3] or "?", rep = r } end
     elseif kind == "lapsed" then
+      lapsedRefs[f[5] or ""] = (lapsedRefs[f[5] or ""] or 0) + 1
       local r = loseRep(-R.LAPSE_REP, t)
       if gains then gains[#gains + 1] = { t = t, xp = 0, want = 0, kind = "lapsed", who = f[3] or "?", rep = r } end
     elseif kind == "farmend" then
       local sid, secs, mates = f[4] or "", tonumber(f[7]) or 0, tonumber(f[10]) or 0
+      -- 1.0.2b: lifetime gold units (the coming gold cosmetics track): every finished farm
+      if secs >= FARM_MIN_SECS then st.goldU = (st.goldU or 0) + R.FarmBondCU(f) end
       st.lastFarmT = t
       local why = R.Unqualified(f)
       if why then
@@ -320,7 +386,7 @@ function R.Replay(lines, st, gains)
           local bond = bondGet(st.bonds, st.partner)
           pb = R.PairBonus(bond)
           want = math.floor(want * (1 + pb) + 0.5); repW = math.floor(repW * (1 + pb) + 0.5)
-          st.bonds = bondSet(st.bonds, st.partner, bond + 1)
+          st.bonds = bondSet(st.bonds, st.partner, bond + R.FarmBondCU(f))
         end
         local got = gainXP(want)
         gainRep(repW, t)
@@ -461,7 +527,7 @@ function R.MineNow()
     best = st.maxEver or math.max(0, rp), lowest = st.lowEver or math.min(0, rp), negDays = neg / DAY, posDays = pos / DAY,
     black = ok and st.black or (rp <= R.BLACKLIST) or nil, everBlack = st.everBlack or (not ok and mark and mark.black) or nil, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
     lastFarmT = st.lastFarmT, fell = st.fell or 0, frozen = st.frozen, bad48 = n48, bad7 = n7,
-    partner = st.partner, partnerName = st.partnerName, pchars = st.pchars, bondFarms = st.partner and bondGet(st.bonds, st.partner) or 0,
+    partner = st.partner, partnerName = st.partnerName, pchars = st.pchars, bondFarms = st.partner and bondGet(st.bonds, st.partner) or 0, goldU = st.goldU or 0,
     pairBonus = st.partner and R.PairBonus(bondGet(st.bonds, st.partner)) or 0, bonds = st.bonds }
 end
 

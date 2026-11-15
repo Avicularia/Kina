@@ -54,35 +54,42 @@ end
 -- nothing of the game's bag frames is changed. Works with the game's own bags.
 -- Settings > "Grey out what not to vendor"; off in combat.
 do
-  local veils, used = {}, 0
+  -- 1.0.2b (Taylor: with other bag add-ons the veils "turn into floating boxes doing
+  -- nothing in the middle of the screen"): each veil is now a child of the bag button it
+  -- covers, so it moves, scales and hides with that button wherever a bag add-on puts
+  -- it, and only buttons that are actually on screen get one.
+  local veilOf = setmetatable({}, { __mode = "k" }) -- [button] = veil
+  local live = {}
   local open = false
-  local function veil()
-    used = used + 1
-    local v = veils[used]
+  local function veil(b)
+    local v = veilOf[b]
     if not v then
-      v = CreateFrame("Frame", nil, UIParent)
-      v:SetFrameStrata("HIGH")
+      v = CreateFrame("Frame", nil, b)
       v.grey = v:CreateTexture(nil, "OVERLAY"); v.grey:SetAllPoints(); v.grey:SetColorTexture(0.10, 0.10, 0.11, 0.78)
       v.mark = v:CreateTexture(nil, "OVERLAY"); v.mark:SetSize(12, 12); v.mark:SetPoint("TOPLEFT", 1, -1)
       v.mark:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
       if v.EnableMouse then v:EnableMouse(false) end
-      veils[used] = v
+      v:SetAllPoints(b)
+      veilOf[b] = v
     end
+    if b.GetFrameLevel and v.SetFrameLevel then v:SetFrameLevel((b:GetFrameLevel() or 1) + 6) end
+    live[#live + 1] = v
     return v
   end
-  local function clear() for i = 1, #veils do veils[i]:Hide() end; used = 0 end
+  local function clear() for i = 1, #live do live[i]:Hide() end; live = {} end
+  local function onScreen(f) return f and (f.IsVisible and f:IsVisible() or false) end
   local function eachButton(fn)
     local function frame(f)
-      if not (f and f.IsShown and f:IsShown()) then return end
+      if not onScreen(f) then return end
       if f.EnumerateValidItems then
-        for _, b in f:EnumerateValidItems() do fn(b) end
+        for _, b in f:EnumerateValidItems() do if onScreen(b) then fn(b) end end
         return
       end
       local name = f.GetName and f:GetName()
       if not name then return end
       for i = 1, 40 do
         local b = _G[name .. "Item" .. i]
-        if b and b.IsShown and b:IsShown() then fn(b) end
+        if onScreen(b) then fn(b) end
       end
     end
     frame(_G.ContainerFrameCombinedBags)
@@ -103,9 +110,7 @@ do
       if type(id) ~= "number" then return end
       if type(info.hasNoValue) == "boolean" and C.NoteNoValue then C.NoteNoValue(id, info.hasNoValue) end
       local sell = (not info.hasNoValue) and C.ItemCall(id) == "VENDOR"
-      local v = veil()
-      v:ClearAllPoints(); v:SetAllPoints(b)
-      if b.GetFrameLevel and v.SetFrameLevel then v:SetFrameLevel((b:GetFrameLevel() or 1) + 6) end
+      local v = veil(b)
       if sell then v.grey:Hide(); v.mark:Show() else v.grey:Show(); v.mark:Hide() end
       v:Show()
     end)
@@ -117,7 +122,7 @@ do
     C.After(0.2, function() queued = nil; local ok = pcall(paint); if not ok then clear() end end)
   end
   C.VendorDimRefresh = later
-  function C.VendorDimCount() local n, sell = 0, 0; for i = 1, used do n = n + 1; if veils[i].mark:IsShown() then sell = sell + 1 end end; return n, sell end
+  function C.VendorDimCount() local n, sell = 0, 0; for i = 1, #live do n = n + 1; if live[i].mark:IsShown() then sell = sell + 1 end end; return n, sell end
   -- bags opened after the merchant: look again now and then while it's open
   local tk, acc = CreateFrame("Frame"), 0
   C.GuardScript(tk, "OnUpdate", "vendor veil", function(_, el)

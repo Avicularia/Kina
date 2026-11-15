@@ -1,3 +1,21 @@
+# Kina 1.0.3
+
+- New: bond crest on your partner's portrait, Uncommon to Legendary with 1-5 gems (20 levels, +10.5% to +20%).
+- The partner bond now grows with gold farmed together, scaled to your level (about 20 hours to max).
+- New: Dispute a debt that was already paid or forgiven; the person owed can clear it.
+- A lapsed debt that gets forgiven or cleared gives back the standing it took.
+- New: farm-end line in party chat with time, gold/h, XP/h, kills, best drop and the split.
+- The 15-minute chat line shows how many Kina users are in the group.
+- Hover an item link in chat to see its tooltip.
+- Late joiners only share loot from after they joined; members away 2+ minutes are out of the split until back.
+- No AH scan question if anyone scanned in the last 15 minutes; a new farm counts as "skip" for the last one.
+- Fix: forgiveness now always lands, even while a farm waits on the AH scan question.
+- Fix: no more floating grey boxes at merchants with bag add-ons.
+- Fix: Farms table columns no longer overlap.
+- Fix: "Who showed you Kina?" only shows once.
+- Fix: AH scans are shared with guild members again.
+- Needs a full WoW restart once (new art).
+
 # Kina 1.0.2
 
 - Kina only ever exchanges its data with players who are online in your group or whose Kina just spoke to yours. No more "No player named..." lines.

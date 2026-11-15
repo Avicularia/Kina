@@ -211,10 +211,14 @@ local function decide()
   if d.decided or d.done then return end
   -- 1.0.1 (Taylor: "clicked X... it's stuck in a loop every few minutes"): closing the
   -- window is an answer too; it opens on its own once, then only by /kina mentor
-  if d.pickDismissed or shownOnce then return end
+  -- 1.0.2b (Taylor: "every time a Kina user joins my group it asks me who showed me
+  -- Kina. That should only happen once"): shown once per install, kept in the saved
+  -- data, however it was closed (X, Escape, a reload). /kina mentor reopens it.
+  if d.pickDismissed or d.pickShown or shownOnce then return end
   if #M.Candidates() == 0 then return end
   if C.Tour and C.Tour.active then C.After(10, decide); return end -- after the tour
   shownOnce = true
+  d.pickShown = C.Now()
   if M.ShowPicker then pcall(M.ShowPicker) end
 end
 local function onClaim(from, rest)

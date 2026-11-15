@@ -677,6 +677,7 @@ end
 
 function C.StartSession(label, fromParty, campKey)
   if C.Toast and C.Toast.ThemeStop then pcall(C.Toast.ThemeStop) end -- 1.5.2: a new farm ends the theme
+  if C.PriceHold and C.PriceHold.MovedOn then pcall(C.PriceHold.MovedOn) end -- 1.0.2b
   -- 1.0.2: the group already has a shared farm running: join it, don't start a second one
   if not fromParty and not C.session and C.FarmSync and C.FarmSync.JoinRunning and C.FarmSync.JoinRunning() then return end
   if C.Rules and C.Rules.Decay then pcall(C.Rules.Decay) end -- 1.5.4: idle weeks
@@ -924,7 +925,11 @@ function C.StopSession(at, why, silent, fromParty)
           tostring(s.sync.leader), C.Money(t.items or 0), C.Money(mt.items or 0)))
       end
     end
-    s.split = { total = total, each = each, incomes = by, transfers = transfers, loot = true }
+    -- 1.0.2b: what each one looted, and their fair share (only drops while they were in)
+    local held, fair = {}, {}
+    for who, v in pairs(t.heldBy or {}) do held[who] = math.floor(v + 0.5) end
+    for who, v in pairs(t.owedBy or {}) do fair[who] = math.floor(v + 0.5) end
+    s.split = { total = total, each = each, incomes = by, held = held, fair = fair, transfers = transfers, loot = true }
     s.settled, s.gsplitShown = true, true
     -- 0.9.0 (Taylor): the split waits for fresh AH scans (or everyone skipping)
     if #transfers > 0 and C.PriceHold and C.PriceHold.Begin then pcall(C.PriceHold.Begin, s) end
@@ -986,6 +991,7 @@ function C.StopSession(at, why, silent, fromParty)
   C.session = nil
   C.db.activeSession = nil
   if C.FarmEnded then pcall(C.FarmEnded, s) end
+  if C.FarmEndAd and not silent then pcall(C.FarmEndAd, s) end -- 1.0.2b
   if not silent and not (C.Toast and C.Toast.ThemeAtFarmEnd and C.Toast.ThemeAtFarmEnd()) then C.PlayCue("stop") end
   -- 1.5.0: a qualifying group farm just ended: remind about vouching
   if not silent and s.sync then
