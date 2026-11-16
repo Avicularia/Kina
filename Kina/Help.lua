@@ -76,6 +76,9 @@ local TOPICS = {
     .. H("Idle weeks") .. "After 7 days with no farm on any of your characters: positive standing loses 100 a week (never below 0); "
     .. "negative standing gains 50 a week (25 while Blacklisted), up to -20." },
 
+  -- 1.0.5: the season's cosmetics, drawn (SeasonGuide.lua builds the page)
+  { "Season 1 Cosmetics", "", guide = true },
+
   { "Kina level",
     "Kina level goes from I to XX. It comes from XP, and XP never goes down.\n\n"
     .. "- Farming: 1 XP a minute, for farms of 15 minutes or more.\n"
@@ -162,8 +165,15 @@ C.RegisterPanel("help", function(p)
     title:SetText(TOPICS[i][1])
     local w = math.max(300, (page:GetWidth() or 560) - 60)
     child:SetWidth(w); body:SetWidth(w)
-    body:SetText(TOPICS[i][2])
-    child:SetHeight((body:GetStringHeight() or 300) + 20)
+    if TOPICS[i].guide and C.SeasonGuide then
+      body:SetText(""); body:Hide()
+      local ok, h = pcall(C.SeasonGuide.Show, child, w)
+      child:SetHeight((ok and h or 300) + 20)
+    else
+      if C.SeasonGuide then C.SeasonGuide.Hide() end
+      body:Show(); body:SetText(TOPICS[i][2])
+      child:SetHeight((body:GetStringHeight() or 300) + 20)
+    end
     if sf.SetVerticalScroll then sf:SetVerticalScroll(0) end
   end
   for i, t in ipairs(TOPICS) do
@@ -175,6 +185,18 @@ C.RegisterPanel("help", function(p)
   local tour = CreateFrame("Button", nil, nav, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(tour) end
   tour:SetSize(162, 26); tour:SetPoint("BOTTOMLEFT", 14, 14); tour:SetText("Replay the tour")
   tour:SetScript("OnClick", function() if C.Tour then C.Tour.Start() end end)
-  p.refresh = function() show(sel) end
+  -- 1.0.5: what's new in the latest big update, any time
+  local wn = CreateFrame("Button", nil, nav, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(wn) end
+  wn:SetSize(162, 26); wn:SetPoint("BOTTOMLEFT", tour, "TOPLEFT", 0, 6); wn:SetText("What's new")
+  wn:SetScript("OnClick", function() if C.WhatsNew then C.WhatsNew.Show() end end)
+  p.refresh = function()
+    if C.helpWant then
+      for i, t in ipairs(TOPICS) do if t[1] == C.helpWant then sel = i end end
+      C.helpWant = nil
+    end
+    show(sel)
+  end
   p.show = show
 end)
+-- open Help at a topic by its title
+function C.ShowHelpTopic(name) C.helpWant = name; if C.Refresh then C.Refresh() end end

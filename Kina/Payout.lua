@@ -478,10 +478,52 @@ end
 ------------------------------------------------------------------ forgive (1.0.10)
 -- The person owed can forgive what's left of a debt at any time. Their Kina tells the
 -- debtor's Kina (re-sent until it answers), and the debt closes on both sides.
+-- 1.0.5: a name that is me on any of my characters
+local function isMine(n) n = first(n); return n ~= nil and n ~= "" and (n == first(UnitName and UnitName("player") or "") or (C.IsMyChar and C.IsMyChar(n)) or false) end
 local function farmRef(s) return (s and s.sync and s.sync.sid) or ("t" .. tostring(s and s.start or 0)) end
 local function fdb() C.db.forgive = C.db.forgive or { pending = {} }; C.db.forgive.pending = C.db.forgive.pending or {}; return C.db.forgive end
 local function sendForgive(p)
   if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, p.who, p.amt, p.ref, p.kind) end
+end
+-- 1.0.5 (Taylor: "we click Dispute and nothing happens"): a dispute names the character the
+-- debt is on ("ref~Deputize"), so the other side finds the farm whichever alt you're on now
+local function splitRef(ref)
+  local base, ch = tostring(ref or ""):match("^([^~]*)~(.*)$")
+  return base or tostring(ref or ""), ch
+end
+C._SplitRef = splitRef
+-- requests waiting for MY answer (a dispute someone sent me): kept until I answer, shown
+-- again at login, so a closed popup or a logout never loses one
+local function asks() fdb().asks = fdb().asks or {}; return fdb().asks end
+local function askKey(from, ref) return tostring(first(from)) .. "|" .. tostring(ref) end
+local function answered(from, ref)
+  local a = asks(); a[askKey(from, ref)] = nil
+end
+C._Asks = asks
+-- every note gets a receipt from the other Kina ("rcv"): a request (dispute, plea) then
+-- waits for the person's answer; anything else is done once it arrived
+local NEEDS_ANSWER = { dsp = true, plea = true, ext = true }
+function C.SendReceipt(to, kind, ref)
+  if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, first(to), 0, tostring(kind or "fgv") .. ":" .. tostring(ref or ""), "rcv") end
+end
+function C.OnReceipt(from, label)
+  local kind, ref = tostring(label or ""):match("^(%a+):(.*)$")
+  if not kind then return end
+  from = first(from)
+  local keep = {}
+  for _, p in ipairs(fdb().pending) do
+    if p.who == from and p.ref == ref and (p.kind or "fgv") == kind then
+      if NEEDS_ANSWER[kind] then
+        if not p.got then
+          p.got = C.Now()
+          C.Print(string.format("|cff7CFC00%s's Kina got your %s.|r Waiting for their answer.", C.Books and C.Books.Name(from) or from, kind == "dsp" and "dispute" or "request"))
+        end
+        keep[#keep + 1] = p
+      end
+    else keep[#keep + 1] = p end
+  end
+  fdb().pending = keep
+  if C.Refresh then pcall(C.Refresh) end
 end
 function C.Forgive(d)
   if not (d and d.dir == "owed" and d.s and d.s.split) then return false end
@@ -506,6 +548,8 @@ end
 -- the forgiver's Kina keeps re-sending it).
 function C.OnForgiven(from, amt, ref)
   from = first(from)
+  local rawRef = ref
+  ref = splitRef(ref)
   local me = first(UnitName and UnitName("player") or "")
   local hit = false
   local function apply(s, t)
@@ -523,7 +567,7 @@ function C.OnForgiven(from, amt, ref)
   for _, s in ipairs(C.db.sessions or {}) do
     if s.split and s.split.transfers and farmRef(s) == ref then
       for _, t in ipairs(s.split.transfers) do
-        if (t.from == "you" or first(t.from) == me) and first(t.to) == from then apply(s, t) end
+        if (t.from == "you" or first(t.from) == me or isMine(t.from)) and first(t.to) == from then apply(s, t) end
       end
       if not hit and s.split.paid and s.split.paid[from] == true then hit = true end -- already done (a re-send)
       for k in pairs(s.split.paid or {}) do if first(k) == from and s.split.paid[k] == true then hit = true end end
@@ -541,8 +585,9 @@ function C.OnForgiven(from, amt, ref)
       end
     end
   end
-  if hit and C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, ref) end
-  if hit then C.OnForgiveAck(from, ref, "dsp") end
+  if hit and C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, from, rawRef) end
+  C.SendReceipt(from, "fgv", rawRef)
+  if hit then C.OnForgiveAck(from, rawRef, "dsp"); if rawRef ~= ref then C.OnForgiveAck(from, ref, "dsp") end end
   if C.RefreshWidget then C.RefreshWidget() end
   if C.Refresh then pcall(C.Refresh) end
   return hit
@@ -554,11 +599,24 @@ end
 -- forgiveness again, no question. The request waits and re-sends until it's answered.
 function C.DisputeDebt(d, why)
   if not (d and d.dir == "owe" and d.s and d.s.split) then return false end
-  local p = { who = first(d.who), amt = math.floor(d.amt or d.rest or 0), ref = farmRef(d.s), t = C.Now(), kind = "dsp" }
-  for _, q in ipairs(fdb().pending) do if q.kind == "dsp" and q.who == p.who and q.ref == p.ref then return true end end
+  local mine = first((d.s and d.s.char) or (UnitName and UnitName("player")) or "")
+  local p = { who = first(d.who), amt = math.floor(d.amt or d.rest or 0), ref = farmRef(d.s) .. "~" .. tostring(mine or ""), t = C.Now(), kind = "dsp" }
+  for _, q in ipairs(fdb().pending) do if q.kind == "dsp" and q.who == p.who and q.ref == p.ref then
+      sendForgive(q)
+      C.Print(q.got and string.format("%s's Kina already has your dispute: it waits for them to answer.", tostring(p.who))
+        or string.format("sent the dispute to %s again. If they're offline it goes out when you're online together (or through the guild), or by mail from any mailbox after 10 minutes.", tostring(p.who)))
+      return true
+    end end
   table.insert(fdb().pending, p)
   sendForgive(p)
   if C.Log then C.Log("dispute", "debt", p.who, p.amt, p.ref) end
+  if C.After then C.After(60, function()
+    for _, q in ipairs(fdb().pending) do
+      if q == p and not q.got then
+        C.Print(string.format("|cffffc54a%s's Kina hasn't answered yet|r (offline?). Kina keeps trying whenever you're grouped or both online in the guild, and from any mailbox after 10 minutes you can send it by mail.", tostring(p.who)))
+      end
+    end
+  end) end
   C.Print(string.format("asked %s to clear the %s debt (%s). Their Kina asks them; you'll see the answer here.", C.Books and C.Books.Name(d.who) or d.who, C.Money(p.amt), d.farm or "farm"))
   return true
 end
@@ -574,20 +632,24 @@ C.Dialogs["KINA_DISPUTE_ASK"] = {
 -- the one owed: someone disputes what they owe me
 function C.OnDispute(from, amt, ref)
   from = first(from)
-  local me = first(UnitName and UnitName("player") or "")
+  C.SendReceipt(from, "dsp", ref)
+  local base, theirChar = splitRef(ref)
+  theirChar = (theirChar and theirChar ~= "") and first(theirChar) or nil
+  local a = asks()
+  a[askKey(from, ref)] = { from = from, amt = math.floor(amt or 0), ref = ref, t = C.Now() }
   for _, s in ipairs(C.db.sessions or {}) do
-    if s.split and s.split.transfers and farmRef(s) == ref then
+    if s.split and s.split.transfers and farmRef(s) == base then
       for _, t in ipairs(s.split.transfers) do
-        local to = (t.to == "you") and me or first(t.to)
-        if to == me and first(t.from) == from then
+        if (t.to == "you" or isMine(t.to)) and (first(t.from) == from or (theirChar and first(t.from) == theirChar)) then
           local sp = s.split
           local done = (sp.received and sp.received[t.from] == true) or (sp.forgiven and sp.forgiven[t.from])
           if done then
             -- already closed here: tell their Kina again
+            answered(from, ref)
             if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, from, math.floor(t.amt or 0), ref) end
             return "resent"
           end
-          C.ShowPopup("KINA_DISPUTE_DEBT", string.format("%s disputes the %s they owe you from %s: they say it was already paid or forgiven.\n\nClear it?",
+          C.ShowPopup("KINA_DISPUTE_DEBT", string.format("|cffffc54aDebt dispute|r\n\n%s disputes the %s they owe you from %s: they say it was already paid or forgiven.\n\nConfirm to clear the debt on both sides. Decline if it's still owed.",
             C.Books and C.Books.Name(from) or from, C.Money(math.floor(t.amt or 0)), s.label or "a farm"), nil, { s = s, t = t, from = from, ref = ref })
           return "asked"
         end
@@ -595,26 +657,31 @@ function C.OnDispute(from, amt, ref)
     end
   end
   -- 1.0.3b (Taylor: she owes me on her side, but my Kina has no record of it): ask
-  C.ShowPopup("KINA_DISPUTE_UNKNOWN", string.format("%s's Kina says they owe you %s from a farm your Kina has no record of (it may have been played on another PC).\n\nClear it on their side?",
+  C.ShowPopup("KINA_DISPUTE_UNKNOWN", string.format("|cffffc54aDebt dispute|r\n\n%s's Kina says they owe you %s from a farm your Kina has no record of (it may have been played on another PC or character).\n\nConfirm to clear it on their side. Decline if it's still owed.",
     C.Books and C.Books.Name(from) or from, C.Money(math.floor(amt or 0))), nil, { from = from, ref = ref, amt = math.floor(amt or 0) })
   return "asked-unknown"
 end
 C.Dialogs["KINA_DISPUTE_UNKNOWN"] = {
-  text = "%s", button1 = "Clear it", button2 = "Leave it", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
+  text = "%s", button1 = "Confirm dispute", button2 = "Decline", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
   OnAccept = function(_, data)
     if not data then return end
     if C.Log then C.Log("forgive", "gave", data.from, data.amt, data.ref) end
+    answered(data.from, data.ref)
     local p = { who = data.from, amt = data.amt, ref = data.ref, t = C.Now() }
     table.insert(fdb().pending, p); sendForgive(p)
     if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, data.from, data.ref, "dsp") end
     C.Print(string.format("|cff7CFC00cleared|r %s's debt to you.", data.from))
   end,
   OnCancel = function(_, data)
-    if data and C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, data.from, 0, data.ref, "dsn") end
+    if not data then return end
+    answered(data.from, data.ref)
+    local p = { who = data.from, amt = 0, ref = data.ref, t = C.Now(), kind = "dsn" }
+    table.insert(fdb().pending, p); sendForgive(p)
+    C.Print(string.format("declined %s's dispute: the debt stays.", tostring(data.from)))
   end,
 }
 C.Dialogs["KINA_DISPUTE_DEBT"] = {
-  text = "%s", button1 = "Clear it", button2 = "It's still owed", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
+  text = "%s", button1 = "Confirm dispute", button2 = "Decline", timeout = 0, whileDead = true, hideOnEscape = false, preferredIndex = 3,
   OnAccept = function(_, data)
     if not data then return end
     local sp = data.s.split
@@ -624,6 +691,7 @@ C.Dialogs["KINA_DISPUTE_DEBT"] = {
     sp.received = sp.received or {}; sp.received[key] = true
     sp.forgiven = sp.forgiven or {}; sp.forgiven[key] = math.max(0, left)
     if C.Log then C.Log("forgive", "gave", data.from, math.max(0, left), data.ref) end
+    answered(data.from, data.ref)
     local p = { who = data.from, amt = math.max(0, left), ref = data.ref, t = C.Now() }
     table.insert(fdb().pending, p); sendForgive(p)
     if C.Share and C.Share.SendForgiveAck then pcall(C.Share.SendForgiveAck, data.from, data.ref, "dsp") end
@@ -632,11 +700,15 @@ C.Dialogs["KINA_DISPUTE_DEBT"] = {
   end,
   OnCancel = function(_, data)
     if not data then return end
-    if C.Share and C.Share.SendForgive then pcall(C.Share.SendForgive, data.from, 0, data.ref, "dsn") end
+    answered(data.from, data.ref)
+    local p = { who = data.from, amt = 0, ref = data.ref, t = C.Now(), kind = "dsn" }
+    table.insert(fdb().pending, p); sendForgive(p)
+    C.Print(string.format("declined %s's dispute: the debt stays.", tostring(data.from)))
   end,
 }
 -- the one who owes: the answer "it's still owed"
 function C.OnDisputeDenied(from, ref)
+  C.SendReceipt(from, "dsn", ref)
   C.OnForgiveAck(from, ref, "dsp")
   C.Print(string.format("|cffffc54a%s says the debt is still owed|r: pay it from the Ledger, or talk it over with them.", C.Books and C.Books.Name(from) or from))
 end
@@ -795,6 +867,7 @@ end
 -- from their Kina: a plea (we're owed) or an extension (we owe)
 function C.OnDebtNote(kind, from, amt, ref)
   from = first(from)
+  C.SendReceipt(from, kind, ref)
   for _, d in ipairs(C.Debts()) do
     if not d.topup and first(d.who) == from and d.s and farmRef(d.s) == ref then
       local sp = d.s.split
@@ -816,12 +889,29 @@ end
 function C.ResendForgive()
   local keep = {}
   for _, p in ipairs(fdb().pending) do
-    if C.Now() - (p.t or 0) < 30 * 86400 then keep[#keep + 1] = p; sendForgive(p) end
+    if C.Now() - (p.t or 0) < 30 * 86400 then
+      keep[#keep + 1] = p; sendForgive(p)
+      -- 1.0.5: not answered after 2 minutes and they aren't reachable: the guild carries it
+      -- (again every 30 minutes)
+      if not p.got and C.Now() - (p.t or 0) > 120 and (not p.couriered or C.Now() - p.couriered > 1800)
+        and not (C.CanWhisper and C.CanWhisper(p.who)) and C.Share and C.Share.Courier then
+        pcall(C.Share.Courier, p)
+      end
+    end
   end
   fdb().pending = keep
 end
 C.On("GROUP_ROSTER_UPDATE", function() if C.db and C.db.forgive and #C.db.forgive.pending > 0 then C.After(5, C.ResendForgive) end end)
+if C_Timer and C_Timer.NewTicker then
+  C_Timer.NewTicker(300, function() if C.db and C.db.forgive and #(C.db.forgive.pending or {}) > 0 then pcall(C.ResendForgive) end end)
+end
 C.On("INIT", function() C.After(20, function() if C.db.forgive and #C.db.forgive.pending > 0 then C.ResendForgive() end end) end)
+-- 1.0.5: a dispute I haven't answered yet asks again after login (30 days at most)
+C.On("INIT", function() C.After(25, function()
+  for k, q in pairs(asks()) do
+    if C.Now() - (q.t or 0) > 30 * 86400 then asks()[k] = nil else pcall(C.OnDispute, q.from, q.amt, q.ref) end
+  end
+end) end)
 
 -- money really moved between you and who (trade or mail): pay down what you owe them
 -- with what you gave, and what they owe you with what you got. Logged, and confirmed
@@ -971,13 +1061,43 @@ local function mailName(who)
   return name .. "-" .. realm
 end
 C._MailName = mailName
+-- 1.0.5 (Taylor: "please use the character's full name" mailing "Mr Bowjangles"): on WoW
+-- Forever some players must be mailed by their first word ("Vellaura"), others by the whole
+-- name ("Mr Bowjangles"). Kina tries the name that worked last time, then the first word,
+-- then the whole name; when the game rejects one, the next is tried.
+local function wholeName(who)
+  local full = (C.GroupMemberName and C.GroupMemberName(who)) or tostring(who or "")
+  local name, realm = full:match("^%s*([^%-]-)%s*%-(.*)$")
+  if not name then name, realm = full:match("^%s*(.-)%s*$"), "" end
+  name = (name or ""):gsub("%s+", " ")
+  if name == "" then return nil end
+  local mine = ((GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""):gsub("%s", "")
+  realm = (realm or ""):gsub("%s", "")
+  if realm == "" or realm:lower() == mine:lower() then return name end
+  return name .. "-" .. realm
+end
+local function mailNames(who)
+  local out, seen = {}, {}
+  local function add(n) if n and n ~= "" and not seen[n:lower()] then seen[n:lower()] = true; out[#out + 1] = n end end
+  local known = C.db.mailAs and C.db.mailAs[first(who) or ""]
+  add(known); add(mailName(who)); add(wholeName(who))
+  return out
+end
+C._MailNames = mailNames
+local function rememberName(who, to)
+  C.db.mailAs = C.db.mailAs or {}
+  if first(who) then C.db.mailAs[first(who)] = to end
+end
 
 local queue, sending = {}, nil
 local function sendNext()
   sending = table.remove(queue, 1)
   if not sending then if C.RefreshSettle then C.RefreshSettle() end; return end
   local d = sending
-  local to = mailName(d.who)
+  d.names = d.names or mailNames(d.who)
+  d.try = (d.try or 0) + 1
+  local to = d.names[d.try]
+  d.to = to
   if not to then
     C.Print("|cffff8040can't mail " .. tostring(d.who) .. "|r: Kina doesn't have a usable character name for them.")
     sending = nil; return sendNext()
@@ -999,12 +1119,20 @@ end
 C.On("MAIL_SEND_SUCCESS", function()
   local d = sending
   if not d then return end
+  if d.to then rememberName(d.who, d.to) end
   if d.dir == "owe" then C.SettleMoved(d.who, math.floor(d.amt), 0, "mail")
   else C.Print("asked " .. d.who .. " to settle (mail sent).") ; d.asked = true end
   C.After(0.6, sendNext)
 end)
 C.On("MAIL_FAILED", function()
-  if sending then C.Print("|cffff8040mail to " .. sending.who .. " failed|r (wrong name or realm?). The rest were not sent.") end
+  -- the game didn't take that name: try their other spelling before giving up
+  if sending and sending.names and sending.try < #sending.names then
+    local d = sending
+    table.insert(queue, 1, d)
+    C.After(0.5, sendNext)
+    return
+  end
+  if sending then C.Print("|cffff8040mail to " .. sending.who .. " failed|r (Kina tried " .. table.concat(sending.names or {}, " and ") .. "). The rest were not sent.") end
   sending = nil; queue = {}
   if C.RefreshSettle then C.RefreshSettle() end
 end)
@@ -1045,6 +1173,16 @@ function C.RefreshSettle()
     else row.d = nil; row.cb:Hide(); row.text:Hide(); row.cb:SetChecked(false) end
   end
   sf.empty:SetText(#debts == 0 and "Nobody owes anybody. Nice." or "")
+  local notes = C.MailableNotes and C.MailableNotes() or {}
+  if sf.notes then
+    if #notes > 0 then
+      local who = {}
+      for _, p in ipairs(notes) do who[#who + 1] = tostring(p.who) end
+      sf.notes:SetText(string.format("|cffffc54a%d Kina note%s waiting|r for %s: they haven't been online with you. Press Mail notes to send them by mail.",
+        #notes, #notes == 1 and "" or "s", table.concat(who, ", ")))
+      sf.mailNotes:Show()
+    else sf.notes:SetText(""); sf.mailNotes:Hide() end
+  end
 end
 function C.ShowSettle()
   if not sf then
@@ -1075,14 +1213,133 @@ function C.ShowSettle()
     all:SetSize(110, 22); all:SetPoint("LEFT", send, "RIGHT", 6, 0); all:SetText("Tick all")
     all:SetScript("OnClick", function() for _, row in ipairs(f.rows) do if row.d then row.cb:SetChecked(true) end end end)
     if C.ButtonTip then C.ButtonTip(all, "Tick all", "Selects every row, so one Send settles everything.") end
+    -- 1.0.5: notes that couldn't be delivered in game
+    f.notes = C.Text(f, "OVERLAY", "GameFontHighlightSmall"); f.notes:SetPoint("BOTTOMLEFT", 12, 40); f.notes:SetWidth(400); f.notes:SetJustifyH("LEFT")
+    local mn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(mn) end
+    mn:SetSize(120, 22); mn:SetPoint("LEFT", all, "RIGHT", 6, 0); mn:SetText("Mail notes")
+    mn:SetScript("OnClick", function() C.MailNotes() end)
+    if C.ButtonTip then C.ButtonTip(mn, "Mail notes", "Forgiveness, disputes and requests Kina couldn't deliver because you weren't online together go out as short letters (normal postage). Their Kina reads them at their mailbox.") end
+    f.mailNotes = mn
     sf = f
   end
   sf:ClearAllPoints()
   if MailFrame and MailFrame:IsShown() then sf:SetPoint("TOPLEFT", MailFrame, "TOPRIGHT", 4, 0) else sf:SetPoint("CENTER") end
   sf:Show(); C.RefreshSettle()
 end
--- the mailbox opens: show it when there is something to settle
-C.On("MAIL_SHOW", function()
-  C.After(0.3, function() if #C.Debts() > 0 then C.ShowSettle() end end)
+-- 1.0.5 (Taylor: "build mail backup for sure, that's our catch-all"): notes Kina couldn't
+-- deliver because the two of you weren't online together (a forgiveness, a dispute, a
+-- plea for time) can go by mail. At the mailbox Kina lists them; YOU press "Mail notes"
+-- (Kina never sends mail by itself). Each is a real letter (normal postage) with a short
+-- code; the other player's Kina reads it when they open their mailbox and acts on it.
+local NOTE_SUBJ = "Kina note"
+local NOTE_KINDS = { fgv = true, dsp = true, plea = true, ext = true, dsn = true, fga = true, dsa = true }
+local NOTE_TEXT = {
+  fgv = "I forgave what you owed me from %s.", dsp = "I'm disputing the %s debt from %s: it was already paid or forgiven.",
+  plea = "Could I have a bit more time to pay the %s from %s?", ext = "I gave you more time to pay the %s from %s.",
+}
+function C.MailableNotes()
+  local out = {}
+  for _, p in ipairs(fdb().pending) do
+    local k = p.kind or "fgv"
+    if NOTE_KINDS[k] and not p.mailed and not p.got and C.Now() - (p.t or 0) >= 600 then out[#out + 1] = p end
+  end
+  return out
+end
+local function noteBody(p)
+  local k = p.kind or "fgv"
+  local farm = p.label
+  if not farm then
+    for _, s in ipairs(C.db.sessions or {}) do if farmRef(s) == p.ref then farm = s.label end end
+  end
+  farm = farm or "a farm"
+  local line = k == "fgv" and string.format(NOTE_TEXT.fgv, farm) or string.format(NOTE_TEXT[k] or "", C.Money(p.amt or 0), farm)
+  -- the code: no "|" (the game reads it as an escape), so ":" and "#"
+  return line .. "\n\n(Kina reads this for you: [kina#" .. k .. "#" .. math.floor(p.amt or 0) .. "#" .. tostring(p.ref or "") .. "])"
+end
+local noteQueue, noteSending = {}, nil
+local function noteNext()
+  noteSending = table.remove(noteQueue, 1)
+  if not noteSending then if C.RefreshSettle then C.RefreshSettle() end; return end
+  noteSending.names = noteSending.names or C._MailNames(noteSending.who)
+  noteSending.try = (noteSending.try or 0) + 1
+  local to = noteSending.names[noteSending.try]
+  noteSending.to = to
+  if not to then noteSending = nil; return noteNext() end
+  if SetSendMailMoney then SetSendMailMoney(0) end
+  SendMail(to, NOTE_SUBJ, noteBody(noteSending))
+end
+function C.MailNotes(list)
+  if not (SendMail and MailFrame and MailFrame:IsShown()) then C.Print("open a mailbox first."); return end
+  noteQueue = {}
+  for _, p in ipairs(list or C.MailableNotes()) do noteQueue[#noteQueue + 1] = p end
+  if #noteQueue == 0 then C.Print("no notes waiting."); return end
+  noteNext()
+end
+C.On("MAIL_SEND_SUCCESS", function()
+  local p = noteSending
+  if not p then return end
+  p.mailed = C.Now()
+  if p.to then C.db.mailAs = C.db.mailAs or {}; C.db.mailAs[C.FirstName and C.FirstName(p.who) or p.who] = p.to end
+  p.names, p.try, p.to = nil, nil, nil
+  C.Print(string.format("mailed a Kina note to %s.", p.who))
+  noteSending = nil
+  C.After(0.6, noteNext)
 end)
-C.On("MAIL_CLOSED", function() if sf then sf:Hide() end end)
+C.On("MAIL_FAILED", function()
+  if noteSending and noteSending.names and noteSending.try < #noteSending.names then
+    table.insert(noteQueue, 1, noteSending); noteSending = nil
+    C.After(0.5, noteNext); return
+  end
+  if noteSending then C.Print("|cffff8040the Kina note to " .. noteSending.who .. " couldn't be mailed|r (wrong name or realm?).") end
+  if noteSending then noteSending.names, noteSending.try, noteSending.to = nil, nil, nil end
+  noteSending = nil; noteQueue = {}
+end)
+-- reading notes: once per letter (remembered), only Kina's own subject
+function C.ReadNote(sender, body)
+  local k, amt, ref = tostring(body or ""):match("%[kina#(%a+)#(%-?%d+)#([^%]]*)%]")
+  if not k or not NOTE_KINDS[k] then return false end
+  amt = tonumber(amt) or 0
+  if k == "fgv" and C.OnForgiven then C.OnForgiven(sender, amt, ref)
+  elseif k == "dsp" and C.OnDispute then C.OnDispute(sender, amt, ref)
+  elseif k == "dsn" and C.OnDisputeDenied then C.OnDisputeDenied(sender, ref)
+  elseif (k == "fga" or k == "dsa") and C.OnForgiveAck then C.OnForgiveAck(sender, ref, k == "dsa" and "dsp" or nil)
+  elseif (k == "plea" or k == "ext") and C.OnDebtNote then C.OnDebtNote(k, sender, amt, ref) end
+  return true
+end
+C.On("MAIL_INBOX_UPDATE", function()
+  if not (GetInboxNumItems and GetInboxHeaderInfo and GetInboxText) then return end
+  C.db.seenMail = C.db.seenMail or {}
+  local seen = C.db.seenMail
+  for i = 1, GetInboxNumItems() do
+    local _, _, sender, subject, _, _, daysLeft = GetInboxHeaderInfo(i)
+    if sender and subject == NOTE_SUBJ then
+      -- remembered by its content (the days left on a letter change as time passes)
+      local ok, body = pcall(GetInboxText, i)
+      local code = ok and body and tostring(body):match("%[kina#[^%]]*%]")
+      local key = code and ("note|" .. sender .. "|" .. code)
+      if key and not seen[key] then
+        seen[key] = C.Now()
+        pcall(C.ReadNote, sender, body)
+      end
+    end
+  end
+end)
+-- the mailbox opens: show it when there is something to settle or a note to mail
+C.On("MAIL_SHOW", function()
+  C.After(0.3, function()
+    if #C.Debts() > 0 or #C.MailableNotes() > 0 then C.ShowSettle() end
+    -- 1.0.5: say it plainly: notes that couldn't be delivered can go now (only on your click)
+    local n = #C.MailableNotes()
+    if n > 0 then
+      local who = {}
+      for _, q in ipairs(C.MailableNotes()) do who[#who + 1] = tostring(q.who) end
+      C.ShowPopup("KINA_MAIL_NOTES", string.format("|cffffc54aKina notes waiting|r\n\n%d note%s (disputes, answers, forgiveness) couldn't reach %s because you weren't online together.\n\nSend %s by mail now? Normal postage (30c each). Their Kina reads it when they open their mailbox.",
+        n, n == 1 and "" or "s", table.concat(who, ", "), n == 1 and "it" or "them"))
+    end
+  end)
+end)
+C.On("MAIL_CLOSED", function() if sf then sf:Hide() end; if C.HidePopup then pcall(C.HidePopup, "KINA_MAIL_NOTES") end end)
+C.Dialogs["KINA_MAIL_NOTES"] = {
+  text = "%s", button1 = "Mail them", button2 = "Not now", timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  OnAccept = function() C.MailNotes() end,
+}

@@ -4,7 +4,7 @@
 local ADDON, C = ...
 C.Dialogs = C.Dialogs or {} -- 1.0.4: Kina's own question definitions (never the game's popup table)
 C.name = "Kina"
-C.version = "1.0.4"
+C.version = "1.0.5"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
 C.BUILD = 183

@@ -413,7 +413,7 @@ do
       end
       playId = playId + 1
       local mine = playId
-      if C.After then C.After(31, function() if playId == mine then handle = nil; musicBack() end end) end -- the theme is 30 s
+      if C.After then C.After(27, function() if playId == mine then handle = nil; musicBack() end end) end -- 1.0.5: the theme ends at its first fade-out (26.6 s)
       return true
     end
     return false

@@ -26,7 +26,7 @@ local function box(parent)
 end
 
 -- a progress bar: a dark tray with a coloured fill and a centred label
-local function bar(parent, r, g, b)
+local function bar(parent, r, g, b, plain)
   local f = CreateFrame("Frame", nil, parent)
   f:SetHeight(18)
   local bg = f:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.55)
@@ -34,7 +34,7 @@ local function bar(parent, r, g, b)
   fill:SetColorTexture(r, g, b, 0.85)
   if fill.SetGradient and CreateColor then pcall(fill.SetGradient, fill, "VERTICAL", CreateColor(r * 0.55, g * 0.55, b * 0.55, 0.9), CreateColor(r, g, b, 0.9)) end
   local edge = {}
-  for _, p in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+  for _, p in ipairs(plain and {} or { { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
     local t = f:CreateTexture(nil, "BORDER"); t:SetColorTexture(0.94, 0.57, 0.03, 0.8)
     t:SetPoint(p[1]); t:SetPoint(p[2]); if p[3] then t:SetHeight(1) else t:SetWidth(1) end
     edge[#edge + 1] = t
@@ -65,21 +65,33 @@ end
 function C.RegisterPanel(name, fn) builders[name] = fn end
 C.SheetKit = { text = text, box = box, heading = heading, bar = bar }
 
+-- 1.0.5 (Taylor: text, boxes and art must fit or scale with the window): pages are
+-- laid out for the default window (848 x 534 inside it) and scaled with the window;
+-- a big window makes everything bigger, a small one a little smaller.
+C.PANEL_W, C.PANEL_H = 848, 534
+local function place(p, u)
+  local top = u.panelTop or 92
+  local W = math.max(100, (u.frame:GetWidth() or 880) - 32)
+  local H = math.max(100, (u.frame:GetHeight() or 660) - top - 44)
+  local s = math.max(0.7, math.min(1.6, W / C.PANEL_W, H / C.PANEL_H))
+  p:SetScale(s); p:ClearAllPoints()
+  p:SetPoint("TOPLEFT", u.frame, "TOPLEFT", 16 / s, -top / s)
+  p:SetSize(W / s, H / s)
+  p.pageScale = s
+end
+C.PlacePanel = place
 function C.ShowPanel(name)
   local u = ui()
   if not (u and u.frame) then return end
   if name and not panels[name] and builders[name] then
     local p = CreateFrame("Frame", nil, u.frame)
-    p:SetPoint("TOPLEFT", u.frame, "TOPLEFT", 16, -(u.panelTop or 92))
-    p:SetPoint("BOTTOMRIGHT", u.frame, "BOTTOMRIGHT", -16, 44)
+    place(p, u)
     builders[name](p)
     panels[name] = p
   end
   for n, p in pairs(panels) do
     if n == name then
-      p:ClearAllPoints()
-      p:SetPoint("TOPLEFT", u.frame, "TOPLEFT", 16, -(u.panelTop or 92))
-      p:SetPoint("BOTTOMRIGHT", u.frame, "BOTTOMRIGHT", -16, 44)
+      place(p, u)
       p:Show()
       -- (0.9.2: a page that fails to draw is logged, not silently left half-drawn)
       if p.refresh then local ok, err = pcall(p.refresh); if not ok and C.LogError then C.LogError("panel " .. tostring(n), err) end end
@@ -91,31 +103,33 @@ end
 local function youPage(p, them)
   -- 1.5.4 (Taylor): the portrait takes the left half (about 4x bigger), the numbers the
   -- right. The same page shows anyone else's profile (C.UI.youWho), with their data.
-  local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0); idBox:SetPoint("RIGHT", p, "CENTER", -6, 0)
+  local idBox = box(p); idBox:SetPoint("TOPLEFT", 0, 0); idBox:SetPoint("BOTTOM", p, "BOTTOM", 0, 0); idBox:SetWidth(340) -- (1.0.5: 40% of the page, see relayout)
   local PW = C.Cos and 200 or 96
   local portraitBox = CreateFrame("Frame", nil, idBox); portraitBox:SetSize(PW, PW); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -104) -- 0.9.10: lower, so the star clears the tab bar
   if iron() and not C.Cos then C.Skin.Tile(portraitBox, 6) end
   local portrait = portraitBox:CreateTexture(nil, "ARTWORK"); portrait:SetPoint("TOPLEFT", 7, -7); portrait:SetPoint("BOTTOMRIGHT", -7, 7)
   local cos
-  local name = text(idBox, "GameFontNormalLarge", "CENTER"); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62); name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local name = text(idBox, "GameFontNormalLarge", "CENTER"); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62) -- (offset set again in relayout); name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
   local line = text(idBox, "GameFontHighlight", "CENTER"); line:SetPoint("TOP", name, "BOTTOM", 0, -6); line:SetPoint("LEFT", idBox, "LEFT", 10, 0); line:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
-  local standT = text(idBox, "GameFontNormal", "CENTER"); standT:SetPoint("TOP", line, "BOTTOM", 0, -6); standT:SetPoint("LEFT", idBox, "LEFT", 10, 0); standT:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
-  local lvl = text(idBox, "GameFontNormalLarge", "CENTER"); lvl:SetPoint("TOP", standT, "BOTTOM", 0, -6); lvl:SetPoint("LEFT", idBox, "LEFT", 10, 0); lvl:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local standT = text(idBox, "GameFontNormal", "CENTER"); if standT.SetWordWrap then standT:SetWordWrap(true) end
+  standT:SetPoint("TOP", line, "BOTTOM", 0, -6); standT:SetPoint("LEFT", idBox, "LEFT", 10, 0); standT:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  local lvl = text(idBox, "GameFontNormalLarge", "CENTER"); if lvl.SetWordWrap then lvl:SetWordWrap(true) end -- (1.0.5: the founder line was cut to "Kina II...")
+  lvl:SetPoint("TOP", standT, "BOTTOM", 0, -6); lvl:SetPoint("LEFT", idBox, "LEFT", 10, 0); lvl:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
   local share = text(idBox, "GameFontHighlightSmall"); share:SetPoint("BOTTOMLEFT", 14, 12)
   -- someone else's page: back, commend / bad, whisper
   local back = CreateFrame("Button", nil, idBox, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(back) end; back:SetSize(90, 22); back:SetPoint("TOPLEFT", 10, -10); back:SetText("< Back to me")
   back:SetScript("OnClick", function() if C.UI then C.UI.youWho = nil end; if C.Refresh then C.Refresh() end end)
   local wh = CreateFrame("Button", nil, idBox, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(wh) end; wh:SetSize(90, 24); wh:SetText("Whisper"); wh:SetPoint("BOTTOM", idBox, "BOTTOM", 0, 12)
 
-  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(166)
+  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(156)
   local h1 = heading(prog, "Kina level"); h1:SetPoint("TOPLEFT", 16, -14)
-  local xpBar = bar(prog, 0.85, 0.65, 0.15); xpBar:SetPoint("TOPLEFT", 16, -48); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local xpBar = bar(prog, 0.85, 0.65, 0.15, true); xpBar:SetPoint("TOPLEFT", 16, -48); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -6); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local h2 = heading(prog, "Standing", true); h2:SetPoint("TOPLEFT", 16, -90)
-  local stBar = bar(prog, 0.30, 0.62, 0.95); stBar:SetPoint("TOPLEFT", 16, -110); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  local stBar = bar(prog, 0.30, 0.62, 0.95, true); stBar:SetPoint("TOPLEFT", 16, -110); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
   local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -7); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
 
-  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(228)
+  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(212)
   local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
   -- 0.9.18: Kina Partner (who, the bonus, the bond)
   -- (1.0.0: the partner line is a record row now; it overlapped the rows under the heading)
@@ -145,14 +159,14 @@ local function youPage(p, them)
   local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -50); colB:SetPoint("BOTTOMRIGHT", -16, 10)
   for i = 1, 14 do -- (1.5.4: two columns of six; 0.9.10: seven, for installs shared)
     local col = i <= 7 and colA or colB
-    local y = -((i - 1) % 7) * 24
+    local y = -((i - 1) % 7) * 22
     if (i - 1) % 2 == 0 then -- 1.5.5: zebra rows
-      local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(22)
+      local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(20)
       z:SetColorTexture(1, 0.8, 0.51, 0.04)
     end
     local l = text(col, "GameFontHighlightSmall"); l:SetPoint("TOPLEFT", 0, y)
     local r = text(col, "GameFontHighlight", "RIGHT"); r:SetPoint("TOPRIGHT", 0, y)
-    l:SetPoint("RIGHT", r, "LEFT", -6, 0)
+    r:SetPoint("LEFT", l, "RIGHT", 6, 0) -- (1.0.5: long values cut with "..." instead of covering the label)
     recL[i], recR[i] = l, r
   end
 
@@ -168,10 +182,26 @@ local function youPage(p, them)
   end
   local profNone = text(profBox, "GameFontHighlightSmall"); profNone:SetPoint("TOPLEFT", 16, -50); profNone:SetPoint("RIGHT", profBox, "RIGHT", -16, 0)
 
+  -- 1.0.5: sizes follow the page (the page itself scales with the window)
+  local function relayout()
+    local W, H = p:GetWidth() or C.PANEL_W, p:GetHeight() or C.PANEL_H
+    local iw = math.floor(math.max(300, math.min(W * 0.4, 560))); idBox:SetWidth(iw)
+    local ps = math.max(0.85, math.min(1.7, (iw - 30) / 320, (H - 300) / 210))
+    portraitBox:SetScale(ps); portraitBox:ClearAllPoints(); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -104 / ps)
+    name:ClearAllPoints(); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62)
+    name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  end
   local function setRows(rows)
+    relayout()
+    local colW = recL[1]:GetParent():GetWidth() or 200
     for i = 1, #recL do
       local x = rows[i]
-      recL[i]:SetText(x and (GREY .. x[1] .. "|r") or ""); recR[i]:SetText(x and x[2] or "")
+      local l, r = recL[i], recR[i]
+      l:SetText(x and (GREY .. x[1] .. "|r") or "")
+      l:SetWidth(math.min((l:GetStringWidth() or 60) + 2, colW * 0.55))
+      r:SetText(x and x[2] or "")
+      -- a shorter form when the full one doesn't fit
+      if x and x[3] and (r:GetStringWidth() or 0) > colW - l:GetWidth() - 8 then r:SetText(x[3]) end
     end
   end
   local function setProfs(profs, mine)
@@ -211,8 +241,7 @@ local function youPage(p, them)
     for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
     cos.try = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; if v[1] == "ring" and C.Cos.UpdateGlows then C.Cos.UpdateGlows() end; redo() end)
     cos.try:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
-    cos.bars = C.Cos.Picker(prog, "Bar frames", { { "on", "on" }, { "off", "off" } }, function(v) pv.bars = v; redo() end)
-    cos.bars:SetPoint("TOPRIGHT", prog, "TOPRIGHT", -14, -10)
+    cos.bars = CreateFrame("Frame", nil, prog); cos.bars:Hide() -- (1.0.5: the bar-frame preview is gone)
   end
   local function standingLine(stName, pts, vn, vbad)
     return C.Cos.StandingColor(stName) .. stName .. "|r" .. GREY .. "  " .. (pts or 0) .. " rep|r"
@@ -273,7 +302,26 @@ local function youPage(p, them)
       { "Installs shared", tostring(pr and pr.recruits or 0) },
       { "Partner bond", ((C.Pair and C.Pair.IsPartner(who)) and (GREEN .. "your partner, +" .. math.floor(C.Pair.Bonus(who) * 100 + 0.5) .. "%|r  ") or "")
         .. ((C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (C.Rep.BondText(C.Rep.BondOf(who)) .. ", " .. math.floor(C.Rep.BondFrac(C.Rep.BondOf(who)) * 100) .. "% full") or (GREY .. "none yet|r")) },
+      -- 1.0.5 (Taylor): their record and Kina high score (click either for more)
+      { "Kina high score", C.Record and C.Record.HighScoreText(C.Record.Of(who)) or "",
+        C.Record and (C.Record.HighScoreText(C.Record.Of(who)):match("^(.-/hr|r)")) or nil },
+      { "Record", (C.Record and C.Record.Summary(C.Record.Of(who), who) or "") .. "  |cff78beff>|r" },
     })
+    if C.Record then
+      C.Record.Request(who)
+      p.recClick = p.recClick or {}
+      for k, idx in ipairs({ 9, 10 }) do
+        local b = p.recClick[k]
+        if not b then
+          b = CreateFrame("Button", nil, recR[idx]:GetParent()); p.recClick[k] = b
+          b:SetPoint("TOPLEFT", recL[idx], "TOPLEFT", -4, 4); b:SetPoint("BOTTOMRIGHT", recR[idx], "BOTTOMRIGHT", 4, -4)
+          b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+          local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.8, 0.4, 0.08)
+        end
+        b:SetScript("OnClick", function() if idx == 9 then C.Profile.hsAnchor = b; C.Record.ShowHighScore(who) else C.Record.Show(who) end end)
+        b:Show()
+      end
+    end
     -- 0.9.18: Kina Partner
     local P = C.Pair
     if P then
@@ -318,7 +366,7 @@ local function youPage(p, them)
     if C.Cos then
       makeCos()
       -- 0.9.20: the Try previews only when unlocked (admin password in Settings)
-      if cos.try then if C.Unlocked() then cos.try:Show(); cos.bars:Show() else cos.try:Hide(); cos.bars:Hide() end end
+      if cos.try then if C.Unlocked() then cos.try:Show() else cos.try:Hide(); cos.bars:Hide() end end
       local pv = C.Cos.preview
       local rec0 = C.YouRecord and C.YouRecord() or {}
       local starter = (rec0.farms or 0) == 0 or ((rec0.farms or 0) == 1 and ((rec0.oweNow or 0) >= 1 or (rec0.owedNow or 0) >= 1))
@@ -332,7 +380,7 @@ local function youPage(p, them)
       local vn, _, vbad = 0, nil, 0
       if C.Vouch then vn, _, vbad = C.Vouch.Counts() end
       standT:SetText(standingLine(stName, m.rep, vn, vbad) .. (m.everBlack and "\n|cff8a1010once Blacklisted|r" or ""))
-      if pv.bars == "on" then cos.xpF:Show(); cos.stF:Show() else cos.xpF:Hide(); cos.stF:Hide() end
+      cos.xpF:Hide(); cos.stF:Hide() -- (1.0.5, Taylor: no frames on the level / standing bars)
     end
     share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
     local R = C.Rep
@@ -357,19 +405,29 @@ local function youPage(p, them)
       { "Your share of farms", money(r.share) },
       { "Debts you paid", tostring(r.paid or 0) .. (r.paidAmt and r.paidAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.paidAmt)) .. ")|r") or "") },
       { "Paid to you", tostring(r.recv or 0) .. (r.recvAmt and r.recvAmt > 0 and (GREY .. " (" .. C.Money(math.floor(r.recvAmt)) .. ")|r") or "")
-        .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or "") },
+        .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. " extra|r") or ""),
+        tostring(r.recv or 0) .. ((r.recvExtra or 0) >= 1 and (GREY .. " +" .. C.Money(math.floor(r.recvExtra)) .. "|r") or "") },
       -- 0.9.10: people who installed Kina because of you (counted once their Kina has
       -- farmed 15+ minutes and told yours)
       { "Installs shared", tostring(C.Mentor and C.Mentor.Count() or 0) },
       { "Open now", (r.oweNow or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(r.oweNow)) .. "|r") or ((r.owedNow or 0) >= 1 and (GOLD .. "owed " .. C.Money(math.floor(r.owedNow)) .. "|r") or (GREEN .. "all settled|r")) },
       { "Standing", tostring(m.rep or 0) .. (mult and ("  " .. mult) or "") },
       { "Best / lowest", tostring(m.best or 0) .. GREY .. "  /  |r" .. tostring(m.lowest or 0) },
-      { "Days positive / negative", string.format("%d%s  /  |r%d", math.floor(m.posDays or 0), GREY, math.floor(m.negDays or 0)) },
+      { "Kina high score", C.Record and (C.Record.HighScoreText(C.Record.Of(UnitName("player"))) .. "  |cff78beff>|r") or "",
+        C.Record and ((C.Record.HighScoreText(C.Record.Of(UnitName("player"))):match("^(.-/hr|r)") or "") .. " |cff78beff>|r") or nil }, -- 1.0.5
       { "Forgave / forgiven", tostring(r.forgaveN or 0) .. GREY .. "  /  |r" .. tostring(r.forgivenN or 0) },
-      { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r") },
+      { "Waiting to confirm", ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d paid, %d to you", r.paidPend or 0, r.recvPend or 0) .. "|r") or (GREEN .. "none|r"),
+        ((r.paidPend or 0) + (r.recvPend or 0)) > 0 and (ORANGE .. string.format("%d / %d", r.paidPend or 0, r.recvPend or 0) .. "|r") or nil },
       { "Farmed with", r.partners or (GREY .. "nobody yet|r") },
       { "Kina Partner", C.Pair and C.Pair.Short() or (GREY .. "none yet|r") },
     })
+    -- 1.0.5: your high score opens that farm
+    if C.Record and not p.hsMine then
+      local b = CreateFrame("Button", nil, recR[10]:GetParent()); p.hsMine = b
+      b:SetPoint("TOPLEFT", recL[10], "TOPLEFT", -4, 4); b:SetPoint("BOTTOMRIGHT", recR[10], "BOTTOMRIGHT", 4, -4)
+      local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 0.8, 0.4, 0.08)
+      b:SetScript("OnClick", function() C.Record.ShowHighScore(UnitName("player")) end)
+    end
   end
 end
 

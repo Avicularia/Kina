@@ -48,11 +48,11 @@ local tabs = {}
 -- Private Kina: only what the duo needs. Where to make money (Dungeons, Farms, Hot),
 -- how to level the professions cheaply (Skill up), the farm log (Session), Settings.
 -- (The other tabs' code and data are kept, just not shown.)
-local tabOrder = { "Dungeons", "Farms", "Hot", "Skill up", "Session", "Settings" }
+local tabOrder = { "Hot Farms", "Dungeons", "Farms", "Hot", "Skill up", "Session", "Settings" }
 -- Public Kina: the farm log with debts and payments, the ledger, and settings. The
 -- advice tabs (and the data behind them) come back in a later public version.
-if C.PUBLIC then tabOrder = { "Session", "Ledger", "You", "Settings", "Help" } end -- 1.2.0: You (character sheet); 0.9.1: Help
-local HOME = tabOrder[1] == "Session" and "Session" or "Hot"
+if C.PUBLIC then tabOrder = { "Hot Farms", "Session", "Ledger", "You", "Settings", "Help" } end -- 1.0.5: Hot Farms, far left -- 1.2.0: You (character sheet); 0.9.1: Help
+local HOME = C.PUBLIC and "Session" or "Hot"
 local TAB_OK = {}
 for _, t in ipairs(tabOrder) do TAB_OK[t] = true end
 TAB_OK.Profile = C.PUBLIC and true or nil
@@ -162,6 +162,46 @@ local function distText(d)
   if d == math.huge then return "|cff9d9d9dother continent|r" end
   if d >= 1000 then return string.format("%.1fk yd", d / 1000) end
   return string.format("%d yd", math.floor(d + 0.5))
+end
+
+-- 1.0.5: Hot Farms. The hot mobs (burning logo) and kill-on-sight mobs near your level,
+-- best first: top 10 within 5 levels unless "All levels" is on. Click a row for where it
+-- is and a waypoint to the middle of its thickest spawn.
+tabs["Hot Farms"] = function()
+  local H = C.Hot
+  if not H then return "Hot mobs are not loaded.", {}, {}, {} end
+  local all = ui.hotAll
+  local list = H.Farms(not all and 4 or nil)
+  local q = ui.search["Hot Farms"]
+  local out = {}
+  for _, r in ipairs(list) do
+    local why = ""
+    for _, d in ipairs(r.det) do
+      if d.kind == "item" then
+        why = string.format("%s %d%%%s", itemName(d.id), math.floor(d.rate * 100 + 0.5),
+          d.how == "AH" and string.format(" |cff9d9d9d(sells ~%d/hr)|r", math.floor((d.sold or 0) + 0.5)) or " |cff9d9d9d(vendor)|r")
+        break
+      elseif d.kind == "coin" and d.value > 0 then why = "coin" end
+    end
+    local icon = r.tier == "hot" and (r.grey and "|cff9d9d9dHOT|r" or "|cffff7a1aHOT|r") or (r.grey and "|cff9d9d9dkill|r" or "|cffffc54akill|r")
+    local name = (r.grey and "|cff9d9d9d" or "|cffffffff") .. r.name .. "|r" .. (r.elite and " |cffffc54a(elite)|r" or "")
+    if not (q and q:find("%S")) or C.LooseMatch(q, r.name) or C.LooseMatch(q, r.zone or "") then
+      out[#out + 1] = { npc = r.npc, hot = true, cols = { icon, name, r.zone or "?", tostring(r.lvl), C.Money(math.floor(r.value + 0.5)), why },
+        sort = { r.tier == "hot" and 2 or 1, r.name, r.zone or "", r.lvl, r.value, why } }
+    end
+    if not all and #out >= 10 then break end
+  end
+  local L = (UnitLevel and UnitLevel("player")) or 1
+  local head
+  if #out == 0 then
+    head = all and "No hot mobs yet. Prices come from AH scans and kill data from Kina users: scan the AH and farm, and it fills in."
+      or string.format("No hot mobs from level %d to %d. Press All levels to see the rest.", math.max(1, L - 2), L + 4)
+  else
+    head = string.format("%s, gold per kill. |cffff7a1aHOT|r = best in its zone and far above its level. |cff9d9d9dGrey|r = fewer than %d Kina kills so far.",
+      all and "Every level" or string.format("Top 10 from level %d to %d (where you're headed)", math.max(1, L - 2), L + 4), H.KINA_KILLS)
+      .. (C.HotNudge and C.HotNudge.TodayText() and ("   " .. C.HotNudge.TodayText()) or "")
+  end
+  return head, { "", "Mob", "Zone", "Lvl", "Per kill", "Why it's hot" }, { 0, 44, 270, 420, 460, 560 }, out
 end
 
 tabs.Farms = function()
@@ -1901,6 +1941,63 @@ function C.ShowMob(npc, farm)
   detail:Show(); if C.RaiseKina then C.RaiseKina() else detail:Raise() end
 end
 
+-- 1.0.5: a hot mob's page: why it's hot, where it is, how thick it spawns, and a waypoint
+-- to the middle of its thickest spawn.
+function C.ShowHotMob(npc)
+  local H = C.Hot
+  local r = H and H.Info(npc)
+  if not r then return C.ShowMob(npc) end
+  if not ui.frame then C.Toggle() end
+  if not detail then buildDetail() end
+  placeDetail()
+  local tierText = r.tier == "hot" and "|cffff7a1aHOT|r: never skip it, worth stopping to farm"
+    or (r.tier == "kos" and "|cffffc54aKill on sight|r: well above other mobs your level" or "Not hot right now")
+  local lines = {
+    (r.grey and "|cff9d9d9d" or "|cffffffff") .. r.name .. "|r" .. (r.elite and "  |cffffc54aElite|r" or ""),
+    string.format("Level %d   %s   %s", r.lvl, H.TYPE_NAME[r.type] or "?", r.zone or "?"),
+    tierText,
+    string.format("|cffffc54aPer kill: %s|r   %.1fx the usual mob of its level, %.1fx the top 10%%   #%d of %d in %s",
+      C.Money(math.floor(r.value + 0.5)), r.xMed or 0, r.xTop or 0, r.rank or 0, r.zoneN or 0, r.zone or "its zone"),
+  }
+  lines[#lines + 1] = "Where the gold comes from:"
+  for i, d in ipairs(r.det) do
+    if i > 6 then break end
+    if d.kind == "coin" then
+      if d.value > 0 then lines[#lines + 1] = string.format("   coin %s (%s)", C.Money(math.floor(d.value + 0.5)), d.how) end
+    else
+      local how = d.how == "AH" and string.format("AH after cut; ~%d sell per hour, %d listed", math.floor((d.sold or 0) + 0.5), d.listed or 0) or "vendor"
+      lines[#lines + 1] = string.format("   %s  %d%% x %s (%s) = %s", itemCell(d.id), math.floor(d.rate * 100 + 0.5), C.Money(math.floor(d.price + 0.5)), how, C.Money(math.floor(d.value + 0.5)))
+    end
+  end
+  local s = H.Spot(npc)
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "|cffffc54aWhere|r"
+  if s then
+    lines[#lines + 1] = string.format("   thickest spawn: %s %.1f, %.1f%s", r.zone or "?", s.x * 100, s.y * 100, s.noMap and " (no map pin for this zone yet)" or "")
+    if s.total then
+      local dense = (s.inCamp or 0) >= 15 and "|cff7CFC00thick|r" or ((s.inCamp or 0) >= 7 and "|cffffc54agood|r" or "|cff9d9d9dsparse|r")
+      lines[#lines + 1] = string.format("   %d spawn points in all, %d of them in the main camp (%s)", s.total, s.inCamp or 0, dense)
+    elseif s.inCamp then
+      lines[#lines + 1] = string.format("   %d Kina kills recorded around this spot", s.inCamp)
+    end
+    lines[#lines + 1] = "   |cff9d9d9dfrom " .. s.how .. "|r"
+  else
+    lines[#lines + 1] = "   no spawn points known yet: once Kina users kill it, it shows where"
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = string.format("Kina data: %d kills recorded by Kina users%s", r.kinaKills or 0,
+    r.grey and string.format(" |cff9d9d9d(the logo stays grey until %d)|r", H.KINA_KILLS) or "")
+  lines[#lines + 1] = string.format("|cff9d9d9dDrop rates from %s (%d loots). Prices from your AH scans.|r", r.source == "Kina" and "Kina users' kills" or "Wowhead Forever", r.loots or 0)
+  setLines(lines)
+  detail.graph:Hide()
+  setButtons({
+    { "Waypoint: thickest spawn", function() H.Waypoint(npc) end },
+    { "Mob details", function() C.ShowMob(npc) end },
+    { "Close", function() detail:Hide() end },
+  })
+  detail:Show(); if C.RaiseKina then C.RaiseKina() else detail:Raise() end
+end
+
 -- A ledger row: everything that happened to one item you bought, and what it made.
 function C.ShowFlip(r)
   if not ui.frame then C.Toggle() end
@@ -2590,7 +2687,7 @@ local function buildSettings(f)
   toggle("Share drop data and auction prices", function() return C.ShareData() end, function(v) C.SetShareData(v) end,
     "Kina collects which mobs drop what and the auction prices you see, and shares them with other Kina users. You don't see this data yet: it builds the farm and price features of a future Kina. Your Kina level only grows while this is on. Nothing about you, your chat or other players is collected.")
   note(function() return C.ShareData() and "on: your Kina level can grow" or "|cffff8040off: your Kina level is paused|r" end)
-  toggle("Also share with my guild", function() return C.Share.DB().opts.guild end, function(v) C.Share.DB().opts.guild = v end,
+  toggle("Also share with my guild", function() return C.Share.DB().opts.guild end, function(v) C.Share.DB().opts.guild = v; C.Share.DB().opts.guildOptOut = true end,
     "Guild members who run Kina also see your Kina level and get your shared data.")
   -- 1.2.6: a visible Sync button; progress shows on the scan bar, answers in chat
   action("Sync prices with my group now", function() if C.Share and C.Share.Command then C.Share.Command("now") end end)
@@ -2662,6 +2759,8 @@ local function buildSettings(f)
   header("Farming")
   toggle("Show the farm widget", function() return st.hudShown ~= false end, function(v) C.ShowWidget(v) end)
   toggle("Show the minimap button", function() return not st.minimapHide end, function(v) C.ShowMinimapButton(v) end)
+  toggle("Point out hot mobs near me", function() return not st.hotNudgeOff end, function(v) st.hotNudgeOff = not v end,
+    "A small line under your quest tracker when a hot mob is close (never in combat, dungeons or cities).")
   if not C.PUBLIC then
   toggle("HOT alerts in chat after a scan", function() return st.hotAlerts ~= false end, function(v) st.hotAlerts = v end,
     "A chat line when a craft spikes to 2x+ its week price and is worth 1g+/hour, or something you own spiked.")
@@ -2722,6 +2821,8 @@ local function buildSettings(f)
     local lbl = C.Text(p, "OVERLAY", "GameFontHighlightSmall"); at()(lbl)
     local sl = CreateFrame("Slider", "KinaTextScaleSlider", p)
     sl:SetOrientation("HORIZONTAL"); sl:SetSize(150, 16)
+    sl:EnableMouse(true) -- (1.0.5: a slider only takes the mouse when told to; it couldn't be dragged)
+    if sl.SetFrameLevel then sl:SetFrameLevel((p:GetFrameLevel() or 1) + 10) end
     sl:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + (COLW - 10 - INSET) - 150, -6 - y + 1)
     local track = sl:CreateTexture(nil, "BACKGROUND")
     track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(4); track:SetColorTexture(0.86, 0.53, 0.06, 0.55)
@@ -2841,7 +2942,7 @@ local function buildSettings(f)
   header("Share data with other Kina users")
   toggle("Share with my party / raid", function() return S.DB().opts.enabled end, function(v) S.DB().opts.enabled = v; S.InvalidateMarket() end,
     "Pools AH scans, mob loot, vendor and merchant prices with group members who run Kina.")
-  toggle("Also share with my guild", function() return S.DB().opts.guild end, function(v) S.DB().opts.guild = v end)
+  toggle("Also share with my guild", function() return S.DB().opts.guild end, function(v) S.DB().opts.guild = v; S.DB().opts.guildOptOut = true end)
   toggle("Say in chat when data arrives", function() return S.DB().opts.verbose end, function(v) S.DB().opts.verbose = v end)
   action("Sync with my group now", function()
     if C.ResetSyncAsks then C.ResetSyncAsks() end
@@ -3156,6 +3257,10 @@ local function build()
     self:SetText(ui.ledgerDays and ("Ledger: " .. ui.ledgerDays .. " days") or "Ledger: all time"); ui.tab = "Ledger"; C.Refresh() end)
   days:SetPoint("RIGHT", sess, "LEFT", -6, 0)
   days:Hide() -- Private Kina: no Ledger tab
+  local hotB = button(f, "All levels", 110, function(self)
+    ui.hotAll = not ui.hotAll; self:SetText(ui.hotAll and "Near my level" or "All levels"); ui.tab = "Hot Farms"; C.Refresh() end)
+  hotB:SetPoint("BOTTOMLEFT", 16, 10); hotB:Hide()
+  ui.hotButton = hotB
   ui.ledgerDaysButton = days
   ui.scanBar = buildScanBar(f)
   -- Public Kina: no scan button, scan bar or farm-advice buttons (those tabs are hidden);
@@ -3421,6 +3526,8 @@ local function build()
       if not d then return end
       if d.route and (d.route.route or d.route.kind ~= "Kill") and not (d.route.kind == "Pick+Kill") then
         if btn == "RightButton" then C.FarmRowMenu(d.route) else C.ShowFarmRow(d.route) end
+      elseif d.hot and C.ShowHotMob then
+        C.ShowHotMob(d.npc)
       elseif d.npc then
         if btn == "RightButton" then mobMenu(d) else C.ShowMob(d.npc, d.farm) end
       elseif d.syncRef and btn == "RightButton" and C.FarmSync then
@@ -3699,6 +3806,7 @@ function C.Refresh()
   ui.head:SetText(head)
   ui.headClick = opts.headClick
   -- public Ledger: the period button (7 days / 30 days / all time) only on the Ledger list
+  if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms") end
   if C.PUBLIC and ui.ledgerDaysButton then
     if tab == "Ledger" and not ui.bookOf then ui.ledgerDaysButton:Show() else ui.ledgerDaysButton:Hide() end
     if ui.roiBar and ui.roiBar.held then ui.roiBar.held:Hide() end

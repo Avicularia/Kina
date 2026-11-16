@@ -54,6 +54,16 @@ function C.Heard(name)
     C.After(2, C.ResendForgive)
   end
 end
+-- 1.0.5: is this player an online member of my guild?
+function C.GuildOnline(name)
+  local want = firstName(tostring(name or ""))
+  if want == "" or not (IsInGuild and IsInGuild() and GetNumGuildMembers and GetGuildRosterInfo) then return false end
+  for i = 1, math.min(GetNumGuildMembers() or 0, 1000) do
+    local nm, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
+    if nm and firstName(nm) == want then return online == true end
+  end
+  return false
+end
 function C.CanWhisper(name)
   if type(name) ~= "string" or name == "" then return false end
   local want = firstName(name)

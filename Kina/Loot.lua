@@ -82,6 +82,8 @@ local function countKill(guid, fromParty)
     local k = { npc = id, t = GetTime and GetTime() or 0, key = key }
     recentKills[#recentKills + 1] = k; recentByKey[key] = k
     if #recentKills > 30 then recentByKey[table.remove(recentKills, 1).key] = nil end
+    -- 1.0.5: your kills feed "your last 20 kills" and today's hot-mob tally (farm or not)
+    if C.HotNudge then pcall(C.HotNudge.NoteKill, id) end
   end
   if tagged[key] then return end
   tagged[key] = true

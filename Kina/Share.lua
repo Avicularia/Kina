@@ -62,7 +62,14 @@ local function db()
   if type(d) ~= "table" then d = {}; C.db.share = d end
   d.opts = d.opts or {}
   if d.opts.enabled == nil then d.opts.enabled = true end
-  if d.opts.guild == nil then d.opts.guild = false end
+  -- 1.0.5 (Taylor: "that needs to be opt out, not opt in"): guild sharing (AH prices and
+  -- drop data only, never gold or debts) is on for everyone; switching it off is kept.
+  -- Everyone who had it off from the old default is switched on once, with a note.
+  if d.opts.guild == nil then d.opts.guild = true end
+  if not d.opts.guildOptOut then
+    if d.opts.guild == false then d.opts.guild = true; d.opts.guildNote = true end
+    d.opts.guildOptOut = true
+  end
   if not d.uid then
     -- random id, stable per character: lets peers keep your data apart from others'
     d.uid = string.format("%06x%06x", math.random(0, 0xffffff), math.random(0, 0xffffff))
@@ -251,12 +258,28 @@ local function hello(channel, target, force)
   return true
 end
 
+-- 1.0.5: the digest: every Kina's data I hold and how new it is ("D|me|uid.ver,uid.ver").
+-- A guildmate missing something newer asks me for just the difference.
+function S.SendDigest(channel)
+  local d = db()
+  if not (d.opts.enabled and (not C.ShareData or C.ShareData())) then return end
+  local parts = {}
+  for uid, a in pairs(d.authors or {}) do
+    if a.loot and (a.loot.ver or 0) > 0 and uid:match("^%x+$") then parts[#parts + 1] = uid .. "." .. b36(a.loot.ver) end
+  end
+  parts[#parts + 1] = d.uid .. "." .. b36(S.StampLoot())
+  -- sent as debt-note-style "T" lines (every letter A-Z is taken): T|me||dgs|0|uid.ver,...
+  if #parts > 0 then packed(table.concat({ "T", d.uid, "", "dgs", "0", "" }, "|"), parts, ",", channel, nil) end
+end
+
 function S.Announce(force)
   local used = {}
   if not db().opts.enabled then return used end
   local g = groupChannel()
   if g and hello(g, nil, force) then used[#used + 1] = g:lower() end
   if db().opts.guild and IsInGuild and IsInGuild() and hello("GUILD", nil, force) then used[#used + 1] = "guild" end
+  if db().opts.guild and IsInGuild and IsInGuild() and force then pcall(S.SendDigest, "GUILD") end
+  if g and force then pcall(S.SendDigest, g) end
   return used
 end
 
@@ -324,11 +347,19 @@ end
 
 local function sendLoot(ch, to, uid, base)
   local d = db()
-  local ver = S.StampLoot()
+  -- 1.0.5 (Taylor: "constant updates to everyone's Kina from everyone in the guild"): I also
+  -- pass on what other Kinas recorded (still under their name), so data spreads through
+  -- whoever is online, not only between two players online at the same time
+  local relay = uid ~= d.uid
+  local a = relay and d.authors and d.authors[uid]
+  if relay and not (a and a.loot and a.loot.npcs) then return end
+  local ver = relay and (a.loot.ver or 0) or S.StampLoot()
+  local src = relay and a.loot.npcs or C.db.loot
   local count = 0
   enqueue(table.concat({ "B", uid, "L", b36(ver), b36(base) }, "|"), ch, to)
-  for npc, r in pairs(C.db.loot) do
-    if type(r) == "table" and (d.lootStamp[npc] or 0) > base and ((r.kills or 0) + (r.looted or 0) + (r.pp or 0)) > 0 then
+  for npc, r in pairs(src) do
+    local stamp = relay and (r.v or ver) or (d.lootStamp[npc] or 0)
+    if type(r) == "table" and stamp > base and ((r.kills or 0) + (r.looted or 0) + (r.pp or 0)) > 0 then
       count = count + 1
       local nums = table.concat({ b36(r.kills), b36(r.looted), b36(r.coin), b36(r.coinLoots), b36(r.pp),
         b36(r.ppCoin), b36(r.skins), b36(r.lvl), r.elite and "1" or "0", r.rare and "1" or "0" }, ":")
@@ -517,19 +548,20 @@ end
 local function onQuery(from, rest)
   local uid, what, base = rest:match("^(%x+)|(%u)|(%w+)$")
   local d = db()
-  if not uid or uid ~= d.uid then return end
+  if not uid then return end
+  if uid ~= d.uid and not (what == "L" and d.authors and d.authors[uid] and d.authors[uid].loot) then return end
   base = n36(base) or 0
   local channel, target = "WHISPER", from
   local g = groupChannel()
   if g and inMyGroup(from) then channel, target = g, nil end
   if S.dumping[what] then return end -- already on its way to the group
   if what ~= "C" and C.ShareData and not C.ShareData() then return end -- data sharing is off
-  local key = (target or channel) .. what .. base
+  local key = (target or channel) .. uid .. what .. base
   local now = GetTime and GetTime() or 0
   if lastReply[key] and now - lastReply[key] < REPLY_COOLDOWN then return end
   -- 0.9.1: one dump of each kind per asker per minute, whatever base they ask from
   -- (varying the base used to get round the cooldown and flood the channel)
-  local who = from .. what
+  local who = from .. uid .. what
   if lastReply[who] and now - lastReply[who] < REPLY_COOLDOWN then return end
   lastReply[key], lastReply[who] = now, now
   if what == "M" then sendMarket(channel, target, uid)
@@ -566,6 +598,19 @@ local function ask(from, uid, what, base)
   requested[key] = now
   enqueue(table.concat({ "Q", uid, what, b36(base) }, "|"), "WHISPER", from)
 end
+local function onDigest(from, me, list, channel)
+  local d = db()
+  if not me or me == d.uid or not (channel ~= "WHISPER" or inMyGroup(from) or S.guildHeard[from]) then return end
+  if C.ShareData and not C.ShareData() then return end
+  local asked = 0
+  for uid, v in list:gmatch("(%x+)%.(%w+)") do
+    v = n36(v) or 0
+    local have = (uid ~= d.uid) and ((d.authors and d.authors[uid] and d.authors[uid].loot and d.authors[uid].loot.ver) or 0) or math.huge
+    -- the author's own Kina (uid == me) answers through its hello; relayed copies here
+    if uid ~= me and v > have and asked < 3 then ask(from, uid, "L", have); asked = asked + 1 end
+  end
+end
+S._onDigest = onDigest
 
 local function onHello(from, rest, channel)
   local f = {}
@@ -575,7 +620,7 @@ local function onHello(from, rest, channel)
   if not (uid and uid:match("^%x+$") and scanT and lootV and vendT) or uid == d.uid or n36(proto) ~= PROTO then return end
   local a = authorOf(uid, true)
   a.name, a.seen = name, C.Now()
-  if channel == "GUILD" then S.guildHeard[from] = true end
+  if channel == "GUILD" then S.guildHeard[from] = true; pcall(S.CourierDeliver, from) end
   if S.syncHeard then S.syncHeard[from] = true end
   if f[15] and f[15]:match("^%-?%d+$") then a.stand = tonumber(f[15]) end
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") then a.ver = f[14] end
@@ -793,7 +838,7 @@ local function onEnd(from, rest)
     a.loot = a.loot or { ver = 0, npcs = {} }
     if b.base > 0 and (a.loot.ver or 0) < b.base then return end -- a gap: next hello fetches all
     if b.base == 0 then a.loot.npcs = {} end
-    for npc, e in pairs(b.npcs) do a.loot.npcs[npc] = e; count = count + 1 end
+    for npc, e in pairs(b.npcs) do e.v = ver; a.loot.npcs[npc] = e; count = count + 1 end
     a.loot.ver = ver
   elseif what == "V" then
     -- vendor payouts are facts about the server: merge, newest observation wins
@@ -947,18 +992,76 @@ function S.LootNPCs()
 end
 C.LootNPCs = S.LootNPCs
 
+------------------------------------------------------------------ couriers (1.0.5)
+-- Taylor: "it can continue to communicate debts and disputes through guild members' Kina".
+-- A request (dispute, plea for time, more time) that can't reach someone is handed to
+-- the guild: every Kina in the guild holds it, and whichever one is online when that
+-- person logs in passes it on. Only requests travel this way: they always ask the person
+-- (a popup), so a forged one can't change any debt by itself. Answers go direct, through
+-- the guild while you're both on, or by mail.
+local COURIER_KINDS = { dsp = true, plea = true, ext = true }
+local function cdb() local d = db(); d.courier = d.courier or {}; return d.courier end
+S._cdb = cdb
+-- my Kina hands a note to the guild
+function S.Courier(p)
+  if not (IsInGuild and IsInGuild()) or not COURIER_KINDS[p.kind or ""] then return false end
+  local msg = table.concat({ "T", db().uid, p.who or "", "crh", tostring(math.floor(p.amt or 0)), clean(myName()) .. "#" .. p.kind .. "#" .. ((tostring(p.ref or "")):gsub("[|#]", "")) }, "|")
+  enqueue(msg, "GUILD", nil, false)
+  p.couriered = C.Now()
+  return true
+end
+-- what a guildmate's Kina does with one: hold it (h), or it's mine to act on (d)
+function S.OnCourier(from, uid, to, action, amt, label, channel)
+  if channel ~= "GUILD" then return end
+  local orig, kind, ref = tostring(label or ""):match("^([^#]*)#(%a+)#(.*)$")
+  local mode = action == "crd" and "d" or "h"
+  if not orig or not uid or uid == db().uid or not COURIER_KINDS[kind] then return end
+  local mine = C.FirstName and C.FirstName(UnitName and UnitName("player"))
+  local forMe = C.FirstName and ((C.FirstName(to) == mine) or (C.IsMyChar and C.IsMyChar(to)))
+  if forMe then
+    if kind == "dsp" and C.OnDispute then C.OnDispute(orig, tonumber(amt), ref)
+    elseif C.OnDebtNote then C.OnDebtNote(kind, orig, tonumber(amt), ref) end
+    return
+  end
+  if mode ~= "h" then return end
+  local c = cdb()
+  local key = orig .. "|" .. to .. "|" .. kind .. "|" .. ref
+  c[key] = { uid = uid, orig = orig, to = to, kind = kind, amt = tonumber(amt) or 0, ref = ref, t = C.Now() }
+  -- keep it small: 60 notes, 14 days
+  local n, oldest, ot = 0
+  for k, q in pairs(c) do
+    if C.Now() - (q.t or 0) > 14 * 86400 then c[k] = nil
+    else n = n + 1; if not ot or q.t < ot then oldest, ot = k, q.t end end
+  end
+  if n > 60 and oldest then c[oldest] = nil end
+end
+-- someone in the guild came online (their Kina said hello): pass on what I hold for them
+function S.CourierDeliver(name)
+  local who = C.FirstName and C.FirstName(name)
+  if not who then return end
+  for k, q in pairs(cdb()) do
+    if C.FirstName(q.to) == who then
+      enqueue(table.concat({ "T", q.uid, q.to, "crd", tostring(q.amt), q.orig .. "#" .. q.kind .. "#" .. q.ref }, "|"), "GUILD", nil, true)
+      cdb()[k] = nil
+    end
+  end
+end
+
 ------------------------------------------------------------------ events
 local frame = CreateFrame("Frame")
 local groupSize = 0
 frame:SetScript("OnEvent", function(_, event, ...)
-  if not C.ready or not db().opts.enabled then return end
+  if not C.ready then return end
+  -- 1.0.5 (Taylor: disputes did nothing): with sharing off, debt notes (T) and couriers
+  -- (K) still get through; everything else waits for sharing to be on
+  if not db().opts.enabled and not (event == "CHAT_MSG_ADDON" and type(select(2, ...)) == "string" and (select(2, ...)):match("^T|")) then return end
   if event == "CHAT_MSG_ADDON" then
     local prefix, text, channel, from = ...
     if prefix ~= PREFIX or type(text) ~= "string" or isMe(from) then return end
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
     if C.Heard then C.Heard(from) end
-    if channel == "GUILD" and not db().opts.guild then return end
+    if channel == "GUILD" and not db().opts.guild and not text:match("^T|") then return end
     local kind, rest = text:match("^(%u)|(.*)$")
     if not kind then return end
     do local u = rest:match("^(%x+)"); local a = u and db().authors and db().authors[u]; if a then a.seen = C.Now() end end
@@ -977,25 +1080,38 @@ frame:SetScript("OnEvent", function(_, event, ...)
       elseif kind == "T" then
         local uid, to, action, amt, label = rest:match("^(%x+)|([^|]*)|(%a+)|(%d+)|(.*)$")
         local mine = C.FirstName and C.FirstName(UnitName and UnitName("player"))
+        -- 1.0.5 (Taylor: Scarlet's dispute never showed up): a debt note is for any of my
+        -- characters, not just the one I'm on (the farm may have been on an alt)
+        local forMe = C.FirstName and ((C.FirstName(to) == mine) or (C.IsMyChar and C.IsMyChar(to)))
         if uid and uid ~= db().uid and action == "req" and C.FirstName and C.FirstName(to) == mine and C.OnSettleRequest then
           C.OnSettleRequest(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "cnf" and C.FirstName and C.FirstName(to) == mine and C.OnSettleConfirm then
           C.OnSettleConfirm(from, tonumber(amt), label)
-        elseif uid and uid ~= db().uid and action == "fgv" and C.FirstName and C.FirstName(to) == mine and C.OnForgiven then
+        elseif uid and uid ~= db().uid and action == "fgv" and forMe and C.OnForgiven then
           C.OnForgiven(from, tonumber(amt), label)
-        elseif uid and uid ~= db().uid and action == "dsp" and C.FirstName and C.FirstName(to) == mine and C.OnDispute then
+        elseif uid and uid ~= db().uid and action == "dsp" and forMe and C.OnDispute then
           C.OnDispute(from, tonumber(amt), label)
-        elseif uid and uid ~= db().uid and action == "dsn" and C.FirstName and C.FirstName(to) == mine and C.OnDisputeDenied then
+        elseif uid and uid ~= db().uid and action == "dsn" and forMe and C.OnDisputeDenied then
           C.OnDisputeDenied(from, label)
-        elseif uid and uid ~= db().uid and action == "dsa" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
+        elseif uid and uid ~= db().uid and action == "dsa" and forMe and C.OnForgiveAck then
           C.OnForgiveAck(from, label, "dsp")
-        elseif uid and uid ~= db().uid and action == "fga" and C.FirstName and C.FirstName(to) == mine and C.OnForgiveAck then
+        elseif uid and uid ~= db().uid and action == "rcv" and forMe and C.OnReceipt then
+          C.OnReceipt(from, label)
+        elseif uid and uid ~= db().uid and action == "fga" and forMe and C.OnForgiveAck then
           C.OnForgiveAck(from, label)
-        elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and C.FirstName and C.FirstName(to) == mine and C.OnDebtNote then
+        elseif uid and uid ~= db().uid and (action == "plea" or action == "ext") and forMe and C.OnDebtNote then
           C.OnDebtNote(action, from, tonumber(amt), label)
+        elseif uid and uid ~= db().uid and action == "rqr" and forMe and C.Record then
+          C.Record.OnRequest(from)
+        elseif uid and uid ~= db().uid and action == "rec" and forMe and C.Record then
+          C.Record.OnRecord(from, label)
+        elseif uid and uid ~= db().uid and (action == "crh" or action == "crd") then
+          S.OnCourier(from, uid, to, action, amt, label, channel)
+        elseif uid and uid ~= db().uid and action == "dgs" then
+          if db().opts.enabled then onDigest(from, uid, label, channel) end
         elseif uid and uid ~= db().uid and (action == "prh" or action == "prs") and C.PriceHold then
           C.PriceHold.OnMessage(from, action, tonumber(amt), label)
-        elseif uid and uid ~= db().uid and action == "clk" and C.FirstName and C.FirstName(to) == mine and C.OnDebtClock then
+        elseif uid and uid ~= db().uid and action == "clk" and forMe and C.OnDebtClock then
           C.OnDebtClock(from, tonumber(amt), label)
         elseif uid and uid ~= db().uid and action == "vch" and C.FirstName and C.FirstName(to) == mine and C.Vouch then
           C.Vouch.OnVouch(from, tonumber(amt), label)
@@ -1075,7 +1191,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if uid and uid ~= db().uid and C.OnPartnerFarm then C.OnPartnerFarm(from, n36(st), n36(sp), n36(inc, 1e11) or 0) end
       end
     end)
-    if not ok and (C.debug or kind == "Z" or kind == "F" or kind == "Y" or kind == "G" or kind == "R" or kind == "S" or kind == "U" or kind == "W" or kind == "X" or kind == "K") then
+    if not ok and (C.debug or kind == "Z" or kind == "F" or kind == "Y" or kind == "G" or kind == "R" or kind == "S" or kind == "U" or kind == "T" or kind == "W" or kind == "X" or kind == "K") then
       C.Print("group farm message (" .. tostring(kind) .. ") from " .. tostring(from) .. " failed: " .. tostring(err) .. ". Tell Claude.")
     end
   elseif event == "GROUP_ROSTER_UPDATE" then
@@ -1208,10 +1324,14 @@ function S.SendSettle(action, to, amt, label)
 end
 -- 1.0.10 forgive: "T|uid|to|fgv|amount|farmref" and its answer "fga" (group channel)
 function S.SendForgive(to, amt, ref, kind)
-  if not db().opts.enabled then return end
+  -- 1.0.5: debt notes are not "data sharing": they go out even with sharing switched off
   local ch = groupChannel()
   local msg = table.concat({ "T", db().uid, to or "", kind or "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
-  if ch then enqueue(msg, ch, nil, true) end -- not grouped: re-sent when you group up again
+  if ch then enqueue(msg, ch, nil, true)
+  -- 1.0.5: not grouped but they're an online guildmate: it goes over the guild's hidden
+  -- addon channel (no chat, nobody sees it; only their Kina acts on it)
+  elseif db().opts.guild and C.GuildOnline and C.GuildOnline(to) then enqueue(msg, "GUILD", nil, true)
+  end -- otherwise: re-sent when you group up again, or by mail
 end
 -- 0.9.0: the post-farm price hold: my answer (1 scanned, 2 skipped) and the leader's
 -- re-priced incomes ("Name=copper,...")
@@ -1295,12 +1415,12 @@ function S.SendVouch(to, kind, ref)
   if ch then enqueue(msg, ch, nil, true) else enqueue(msg, "WHISPER", to) end
 end
 function S.SendForgiveAck(to, ref, kind)
-  if not db().opts.enabled then return end
   local ch = groupChannel()
   -- the answer names what it answers: fga (forgive), pla (plea), exa (extension)
   local ack = ({ plea = "pla", ext = "exa", dsp = "dsa" })[kind or ""] or "fga"
   local msg = table.concat({ "T", db().uid, to or "", ack, "0", ((tostring(ref or "")):gsub("|", "")) }, "|")
-  if ch then enqueue(msg, ch, nil, true) end
+  if ch then enqueue(msg, ch, nil, true)
+  elseif db().opts.guild and C.GuildOnline and C.GuildOnline(to) then enqueue(msg, "GUILD", nil, true) end
 end
 -- a consumable you used during the group farm
 function S.SendUse(id, n)
@@ -1353,6 +1473,17 @@ C.On("INIT", function()
   C.After(15, function() S.Announce(true) end)
   if C_Timer and C_Timer.NewTicker then
     C_Timer.NewTicker(HELLO_EVERY, C.Safe("hello timer", function() S.InvalidateMarket(); S.Announce(false) end))
+    -- 1.0.5: new kills go out every 2 minutes (a fresh hello; guildmates ask for the difference)
+    local lastV
+    C_Timer.NewTicker(120, C.Safe("loot news", function()
+      local v = S.StampLoot()
+      if lastV and v ~= lastV then S.Announce(true) end
+      lastV = v
+    end))
+    -- and every 10 minutes the digest, so data recorded by Kinas that are offline now keeps spreading
+    C_Timer.NewTicker(600, C.Safe("digest", function()
+      if db().opts.guild and IsInGuild and IsInGuild() then S.SendDigest("GUILD") end
+    end))
     C_Timer.NewTicker(120, C.Safe("share timer", function()
       local now = GetTime()
       for key, b in pairs(incoming) do if now - b.time > 600 then incoming[key] = nil end end
@@ -1368,7 +1499,7 @@ function S.Command(rest)
     d.opts.enabled = (cmd == "on"); S.InvalidateMarket()
     C.Print("sharing with other Kina users: " .. (d.opts.enabled and "on" or "off"))
   elseif cmd == "guild" then
-    d.opts.guild = not d.opts.guild
+    d.opts.guild = not d.opts.guild; d.opts.guildOptOut = true
     C.Print("share with guild too: " .. (d.opts.guild and "on" or "off"))
   elseif cmd == "verbose" then
     d.opts.verbose = not d.opts.verbose
@@ -1409,3 +1540,14 @@ function S.Command(rest)
     C.Print("sharing options are on the Settings tab.")
   end
 end
+
+-- 1.0.5: the one-time note about guild sharing being on
+C.On("PLAYER_ENTERING_WORLD", function()
+  local d = db()
+  if d.opts.guildNote and IsInGuild and IsInGuild() then
+    d.opts.guildNote = nil
+    C.After(8, function()
+      C.Print("now sharing AH prices and drop data with Kina users in your guild (never gold or debts). Turn it off in Settings > \"Also share with my guild\" or /kina share guild.")
+    end)
+  end
+end)

@@ -313,7 +313,7 @@ end
 -- 1.1.1: the corner resize grip as an iron knob (A-37), no gold box
 function S.Grip(grip)
   if not S.On() then return false end
-  grip:SetSize(18, 18)
+  grip:SetSize(22, 22)
   -- inside the frame's corner, above the frame (which is drawn over the window's edge)
   local p = grip:GetParent()
   if p then
@@ -325,23 +325,34 @@ function S.Grip(grip)
   t:SetAllPoints(); t:SetTexture(PATH .. "scroll_knob")
   local d = C.SkinData.scroll_knob
   t:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th)
-  t:SetAlpha(0.75)
+  t:SetAlpha(1)
+  -- 1.0.5 (Taylor: make the draggables easier to notice): a soft gold glow on the knob
+  local g = grip:CreateTexture(nil, "OVERLAY")
+  g:SetPoint("CENTER", t, "CENTER"); g:SetSize(34, 34)
+  g:SetTexture(PATH .. "scroll_knob"); g:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th); g:SetBlendMode("ADD"); g:SetVertexColor(1, 0.7, 0.25); g:SetAlpha(0.4)
   grip.kinaKnob = t
-  grip:HookScript("OnEnter", function() t:SetAlpha(1) end)
-  grip:HookScript("OnLeave", function() t:SetAlpha(0.75) end)
+  grip:HookScript("OnEnter", function() g:SetAlpha(1) end)
+  grip:HookScript("OnLeave", function() g:SetAlpha(0.4) end)
   return true
 end
 
 -- 1.1.1: a vertical scrollbar (A-37 track and knob). onScroll(value) gets whole steps.
 function S.Scrollbar(parent, onScroll)
   local sb = CreateFrame("Slider", nil, parent)
-  sb:SetWidth(16)
+  sb:SetWidth(18)
+  -- 1.0.5 (Taylor: dragging still didn't work): above the list rows, which reached under
+  -- it and took the clicks
+  if sb.SetFrameLevel and parent.GetFrameLevel then sb:SetFrameLevel((parent:GetFrameLevel() or 1) + 30) end
+  -- 1.0.5 (Taylor: "this scroll bar doesn't work when you click to drag it"): a slider
+  -- only takes the mouse when it's told to; without this the knob couldn't be dragged
+  sb:EnableMouse(true)
+  if sb.SetHitRectInsets then sb:SetHitRectInsets(-4, -4, 0, 0) end
   if sb.SetOrientation then sb:SetOrientation("VERTICAL") end
   sb:SetMinMaxValues(0, 0); sb:SetValue(0)
   if sb.SetValueStep then sb:SetValueStep(1) end
   if sb.SetObeyStepOnDrag then sb:SetObeyStepOnDrag(true) end
   local thumb = sb:CreateTexture(nil, "OVERLAY")
-  thumb:SetSize(18, 18)
+  thumb:SetSize(22, 26) -- (1.0.5: bigger, easier to see and grab)
   if S.On() then
     sb.track = S.Nine(sb, "scroll_track", 16, { layer = "BACKGROUND" })
     thumb:SetTexture(PATH .. "scroll_knob")
@@ -352,12 +363,54 @@ function S.Scrollbar(parent, onScroll)
     thumb:SetColorTexture(1, 0.63, 0.06, 0.85); thumb:SetSize(12, 24)
   end
   if sb.SetThumbTexture then sb:SetThumbTexture(thumb) end
+  -- 1.0.5: a glow on the knob when the mouse is over the bar or dragging it
+  local glow = sb:CreateTexture(nil, "OVERLAY", nil, 1)
+  glow:SetPoint("CENTER", thumb, "CENTER"); glow:SetSize(34, 38)
+  if S.On() then local d = C.SkinData.scroll_knob; glow:SetTexture(PATH .. "scroll_knob"); glow:SetTexCoord(0, d.w / d.tw, 0, d.h / d.th)
+  else glow:SetColorTexture(1, 0.75, 0.3, 1) end
+  glow:SetBlendMode("ADD"); glow:SetVertexColor(1, 0.7, 0.25); glow:SetAlpha(0.35)
+  sb:SetScript("OnEnter", function() glow:SetAlpha(0.9) end)
+  sb:SetScript("OnLeave", function(self) if not self.kinaDrag then glow:SetAlpha(0.35) end end)
+  -- 1.0.5: Kina drags it itself (click anywhere on the bar and hold): the knob follows the
+  -- mouse whatever the game's slider does, and redraws don't snap it back mid-drag
+  local function follow(self)
+    local top, bottom = self:GetTop(), self:GetBottom()
+    local _, y = GetCursorPosition()
+    if not (top and bottom and y) or top <= bottom then return end
+    y = y / (self:GetEffectiveScale() or 1)
+    local lo, hi = 0, self.kinaMax or 0
+    local half = 13
+    local frac = (top - half - y) / math.max(1, (top - bottom) - half * 2)
+    frac = math.max(0, math.min(1, frac))
+    local v = math.floor(lo + (hi - lo) * frac + 0.5)
+    if v ~= self.kinaLast then
+      self.kinaLast = v
+      self.kinaQuiet = true; self:SetValue(v); self.kinaQuiet = false
+      onScroll(v)
+    end
+  end
+  sb:SetScript("OnMouseDown", function(self, btn)
+    if btn and btn ~= "LeftButton" then return end
+    self.kinaDrag = true; self.kinaLast = nil; glow:SetAlpha(1)
+    follow(self)
+    self:SetScript("OnUpdate", follow)
+  end)
+  sb:SetScript("OnMouseUp", function(self)
+    self.kinaDrag = false; self:SetScript("OnUpdate", nil)
+    glow:SetAlpha(self:IsMouseOver() and 0.9 or 0.35)
+  end)
+  sb:SetScript("OnHide", function(self) self.kinaDrag = false; self:SetScript("OnUpdate", nil) end)
   sb:SetScript("OnValueChanged", function(self, v)
     if self.kinaQuiet then return end
     onScroll(math.floor((v or 0) + 0.5))
   end)
   -- set range and position without calling back
   function sb:KinaSet(maxV, v)
+    if self.kinaDrag then -- (mid-drag: only the range may change)
+      if self.kinaMax ~= math.max(0, maxV) then self.kinaMax = math.max(0, maxV); self.kinaQuiet = true; self:SetMinMaxValues(0, self.kinaMax); self.kinaQuiet = false end
+      return
+    end
+    self.kinaMax = math.max(0, maxV)
     self.kinaQuiet = true
     self:SetMinMaxValues(0, math.max(0, maxV))
     self:SetValue(math.max(0, math.min(maxV, v)))

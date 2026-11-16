@@ -114,16 +114,20 @@ end
 ------------------------------------------------------------------ waypoints
 function C.Waypoint(map, x, y, title)
   if not (map and x and y) then C.Print("no location known."); return false end
+  -- TomTom wants a uiMapID and 0-1 coordinates (the /way line shows them as 0-100)
+  if x > 1 or y > 1 then x, y = x / 100, y / 100 end
+  x, y = math.max(0, math.min(1, x)), math.max(0, math.min(1, y))
   local tt = rawget(_G, "TomTom")
   if type(tt) == "table" and type(tt.AddWaypoint) == "function" then
-    tt:AddWaypoint(map, x, y, { title = title or "Kina", source = "Kina", persistent = false, crazy = true })
+    tt:AddWaypoint(map, x, y, { title = title or "Kina", from = "Kina", persistent = false,
+      minimap = true, world = true, crazy = true })
   elseif C_Map and C_Map.SetUserWaypoint and UiMapPoint then
     C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(map, x, y))
     if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
   else
     C.Print("no waypoint system available."); return false
   end
-  C.Print(string.format("waypoint: %s, %s %.1f, %.1f", title or "?", C.MapName(map) or "?", x * 100, y * 100))
+  C.Print(string.format("waypoint: /way %s %.1f %.1f %s", C.MapName(map) or "?", x * 100, y * 100, title or ""))
   return true
 end
 

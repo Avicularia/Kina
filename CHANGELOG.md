@@ -1,3 +1,23 @@
+# Kina 1.0.5
+
+- New: Hot Farms tab: the mobs worth the most per kill near your level, with a waypoint to their thickest spawn.
+- New: hot mobs burn on their nameplates (grey until Kina users have 30 kills).
+- New: a "hot mob nearby" line under your quest tracker while you quest (off switch in Settings).
+- New: profiles show a player's record and Kina high score.
+- New: Help > Season 1 Cosmetics, with your progress toward each unlock.
+- New: a short "What's new" tour after big updates.
+- Disputes pop up as Confirm / Decline on the other player's Kina, on any of their characters.
+- Undelivered disputes travel through guildmates' Kinas or your mailbox.
+- Guild data sharing updates every 2 minutes and catches up at login.
+- Pages scale with the window size.
+- Fix: disputes did nothing when the other player had sharing off.
+- Fix: mailing a player with a surname failed.
+- Fix: scrollbars and the text-size slider can be dragged.
+- Fix: TomTom waypoints now pin on the minimap and world map.
+- Fix: profile Record line no longer says "asking their Kina..." forever.
+- The Kina level and standing bars no longer have frames.
+- The end-of-farm song ends at its first fade-out.
+
 # Kina 1.0.4 (hotfix)
 
 - Fix: "Kina has been blocked from an action only available to the Blizzard UI" when pressing Escape, opening Kina or closing other windows. Kina's questions now use its own dialog box instead of the game's popup.
