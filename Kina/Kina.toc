@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 1.0.5
+## Version: 1.0.6
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -19,6 +19,7 @@ Dialog.lua
 Data.lua
 DropData.lua
 HotSpawns.lua
+HotList.lua
 CampData.lua
 FarmSeeds.lua
 NPCData.lua
@@ -49,6 +50,9 @@ ClassFarms.lua
 HotMobs.lua
 HotNudge.lua
 WhatsNew.lua
+Net.lua
+Feedback.lua
+FeedbackDrafts.lua
 Record.lua
 SeasonGuide.lua
 Brain.lua
@@ -77,3 +81,4 @@ Widget.lua
 Minimap.lua
 Layers.lua
 Commands.lua
+Gamepad.lua

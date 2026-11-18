@@ -113,6 +113,8 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "pardon" then if C.Rules then C.Rules.OfferPardon() end
   elseif cmd == "share" then if C.Mentor then C.Mentor.Share(); C.Mentor.CopyBox() end
   elseif cmd == "link" then if C.Mentor then C.Mentor.CopyBox() end
+  elseif cmd == "feedback" then C.Toggle("Help"); if C.ShowHelpTopic then C.ShowHelpTopic("Feedback") end
+  elseif cmd == "pad" or cmd == "controller" then if C.Pad then C.Pad.Report() end
   elseif cmd == "blocked" then
     local b = C.db.blocked or {}
     if #b == 0 then C.Print("no blocked actions recorded.") end

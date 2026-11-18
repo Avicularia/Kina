@@ -196,12 +196,155 @@ function H.List()
     local zoneOK = (r.zoneN or 0) >= 4
     if zoneOK and r.rank == 1 and r.xMed >= H.HOT_MED and r.xTop >= H.HOT_TOP then r.tier = "hot"
     elseif zoneOK and r.rank <= 3 and r.xMed >= H.KOS_MED and r.xTop >= H.KOS_TOP then r.tier = "kos" end
+  end
+  -- 1.0.6 (Taylor): the hot list that ships with Kina decides which mobs are hot (it's made
+  -- from Taylor's scans, refreshed as often as we can). A listed mob shows the grey logo
+  -- until YOU have killed it 30 times; then it lights up for you, a collectible. Its gold
+  -- per kill stays hidden until then, and after that comes only from your own kills and
+  -- loot, so it keeps changing as you farm. A mob taken off the list loses its logo.
+  local HL = C.Data and C.Data.hotList
+  if HL and HL.mobs and next(HL.mobs) and not H.ignoreList then
+    -- 1.0.6: remember every listed mob, so one taken off the list goes to your archive
+    C.db.hotSeen = type(C.db.hotSeen) == "table" and C.db.hotSeen or {}
+    local hs = C.db.hotSeen
+    for npc, e in pairs(HL.mobs) do
+      local s = hs[npc] or {}
+      s.nm, s.lvl, s.area, s.tier, s.elite, s.type = e.nm, e.lvl, e.area, e.tier, e.elite, e.type
+      if not s.first then
+        -- kills from before Kina knew it was hot count (it was hot then too)
+        local own = C.db.loot and C.db.loot[npc]
+        s.first, s.hk = C.Now(), type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
+      end
+      s.removed, s.frozenG = nil, nil -- (back on the list: its card grows again)
+      hs[npc] = s
+    end
+    for npc, s in pairs(hs) do
+      if not HL.mobs[npc] and not s.removed then
+        -- off the list: its card freezes where it is
+        s.removed = C.Now()
+        s.frozenG = H.HotGold(npc, s)
+      end
+    end
+    local have = {}
+    for _, r in ipairs(rows) do
+      local e = HL.mobs[r.npc]
+      have[r.npc] = true
+      r.tier, r.listed = e and e.tier or nil, e and true or nil
+    end
+    for npc, e in pairs(HL.mobs) do
+      if not have[npc] then
+        local area = e.area
+        rows[#rows + 1] = { npc = npc, name = e.nm or ("mob " .. npc), lvl = e.lvl or 1, elite = e.elite and true or false, type = e.type,
+          area = area, zone = (area and H.ZoneName(area)) or "?", value = 0, det = {}, loots = 0, source = "you",
+          tier = e.tier, listed = true }
+      end
+    end
+    for _, r in ipairs(rows) do
+      if r.listed then
+        local own = C.db.loot and C.db.loot[r.npc]
+        local mine = type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
+        r.kinaKills, r.mine = mine, mine
+        if mine >= H.KINA_KILLS then
+          local m = crowdMob(r.npc, own)
+          local total, det = evaluate(r.npc, m)
+          -- coin: what you actually looted per kill
+          local coin = (own.coin or 0) / math.max(own.looted or 0, 1)
+          total = total - ((det[1] and det[1].kind == "coin") and det[1].value or 0) + coin
+          for _, d in ipairs(det) do if d.kind == "coin" then d.value, d.how = coin, "your kills" end end
+          r.value, r.det, r.loots, r.source, r.hideValue = total, det, own.looted or 0, "you", nil
+        else
+          r.value, r.det, r.hideValue = 0, {}, true
+        end
+      end
+    end
+  end
+  for _, r in ipairs(rows) do
     r.grey = r.tier and r.kinaKills < H.KINA_KILLS or false
   end
   cache, cacheAt = rows, C.Now()
   H.byNpc = {}
   for _, r in ipairs(rows) do H.byNpc[r.npc] = r end
   return rows
+end
+
+-- 1.0.6: card tiers by your kills (the card cosmetics read this when they arrive)
+H.CARDS = { { key = "diamond", name = "Diamond", at = 5000 }, { key = "platinum", name = "Platinum", at = 1500 },
+  { key = "gold", name = "Gold", at = 500 }, { key = "silver", name = "Silver", at = 100 },
+  { key = "copper", name = "Copper", at = 15 }, { key = "base", name = "Base", at = 1 } }
+function H.CardTier(kills)
+  for _, c in ipairs(H.CARDS) do if (kills or 0) >= c.at then return c.key, c.name end end
+  return nil
+end
+
+-- 1.0.6 (Taylor): a card only grows while its mob is hot. Kills while hot set the frame and
+-- background; gold from it while hot sets the glow and animation. Off the list, it freezes.
+H.GLOWS = { { key = "aura", at = 5000 * 10000 }, { key = "flames", at = 1000 * 10000 }, { key = "shimmer", at = 250 * 10000 },
+  { key = "glow", at = 50 * 10000 }, { key = "faint", at = 10 * 10000 } } -- (copper; proposed, waiting on Taylor)
+function H.GlowTier(gold)
+  for _, g in ipairs(H.GLOWS) do if (gold or 0) >= g.at then return g.key end end
+  return nil
+end
+-- a kill of yours: counts toward its card only while the mob is on the hot list
+function H.CountKill(npc)
+  local HL = C.Data and C.Data.hotList
+  local s = C.db.hotSeen and C.db.hotSeen[npc]
+  if s and not s.removed and HL and HL.mobs and HL.mobs[npc] then s.hk = (s.hk or 0) + 1 end
+end
+-- gold from it while hot: your total from it, in proportion to the kills made while hot
+function H.HotGold(npc, s)
+  s = s or (C.db.hotSeen and C.db.hotSeen[npc])
+  if not s then return 0 end
+  if s.removed and s.frozenG then return s.frozenG end
+  local m = H.Mine(npc)
+  if (m.kills or 0) <= 0 then return 0 end
+  return m.total * math.min(1, (s.hk or 0) / m.kills)
+end
+-- a mob's card: { kills, gold, frame, frameName, glow, frozen } or nil if you have none
+function H.Card(npc)
+  local s = C.db.hotSeen and C.db.hotSeen[npc]
+  if not s then return nil end
+  local k = s.hk or 0
+  local frame, frameName = H.CardTier(k)
+  if not frame then return nil end
+  local g = H.HotGold(npc, s)
+  return { kills = k, gold = g, frame = frame, frameName = frameName, glow = H.GlowTier(g), frozen = s.removed and true or false }
+end
+
+-- what one mob has given you: kills, gold per kill (once you've lit it), total gold
+-- (coin plus every drop at today's price), card
+function H.Mine(npc)
+  local own = C.db.loot and C.db.loot[npc]
+  if type(own) ~= "table" then return { kills = 0, total = 0 } end
+  local kills = math.max(own.kills or 0, own.looted or 0)
+  local total = own.coin or 0
+  for id, c in pairs(own.items or {}) do total = total + c * (H.ItemValue(id) or 0) end
+  local per
+  if kills >= H.KINA_KILLS then
+    local total1, det = evaluate(npc, crowdMob(npc, own))
+    local coin = (own.coin or 0) / math.max(own.looted or 0, 1)
+    per = total1 - ((det[1] and det[1].kind == "coin") and det[1].value or 0) + coin
+  end
+  local card, cardName = H.CardTier(kills)
+  return { kills = kills, per = per, total = total, card = card, cardName = cardName }
+end
+
+-- hot mobs taken off the list that you killed: newest removal first
+function H.Archive()
+  H.List()
+  local out = {}
+  for npc, s in pairs(C.db.hotSeen or {}) do
+    if s.removed then
+      local m = H.Mine(npc)
+      if m.kills > 0 then
+        local cd = H.Card(npc)
+        out[#out + 1] = { npc = npc, name = s.nm or ("mob " .. npc), lvl = s.lvl or 1, zone = (s.area and H.ZoneName(s.area)) or "?",
+          tier = s.tier, removed = s.removed, kills = m.kills, per = m.per, total = m.total,
+          card = cd and cd.frame, cardName = cd and cd.frameName, glow = cd and cd.glow }
+      end
+    end
+  end
+  table.sort(out, function(a, b) return a.removed > b.removed end)
+  return out
 end
 
 function H.ZoneName(area)
@@ -303,6 +446,9 @@ local function acquire()
   f.logo:SetTexture(LOGO); f.logo:SetAllPoints()
   -- the logo sits at the base of the flames (as in the approved mock)
   f.fire:SetPoint("CENTER", f.logo, "CENTER", 0, 58 * (0.725 - 0.5))
+  -- 1.0.6: your gold per kill under the logo once you've lit it (30 of your kills)
+  f.val = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  f.val:SetPoint("TOP", f.logo, "BOTTOM", 0, -1)
   return f
 end
 local function release(unit)
@@ -345,6 +491,9 @@ local function show(unit)
   f.fire:SetDesaturated(grey and true or false)
   f.fire:SetAlpha(grey and 0.45 or 1)
   f.fire:SetShown(tier == "hot")
+  local r = H.byNpc and H.byNpc[npc]
+  if not grey and r and not r.hideValue and (r.value or 0) > 0 then f.val:SetText(C.Money(math.floor(r.value + 0.5))); f.val:Show()
+  else f.val:SetText(""); f.val:Hide() end
   f:Show()
   active[unit] = f
   driver:Show()

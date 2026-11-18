@@ -78,6 +78,21 @@ local TOPICS = {
 
   -- 1.0.5: the season's cosmetics, drawn (SeasonGuide.lua builds the page)
   { "Season 1 Cosmetics", "", guide = true },
+  -- 1.0.6: write to the developer (Feedback.lua builds the page)
+  { "Feedback", "", feedback = true },
+
+  -- 1.0.6
+  { "Controller",
+    "Turn on gamepad mode in the game's options and Kina's windows work with the controller too.\n\n"
+    .. H("In a Kina window") .. "D-pad: move between buttons (lists and long pages scroll along).   A: press.   B: back / close.\n"
+    .. "X: show what pointing the mouse at it would show.   Y: the right-click action.   LB / RB: previous / next tab.\n"
+    .. "On a slider, D-pad left / right changes it.\n\n"
+    .. H("Outside Kina") .. "Kina only takes the controller while one of its windows is open and you're out of combat. "
+    .. "A fight starting hands every button straight back to the game.\n\n"
+    .. H("Key bindings") .. "Options > Key Bindings > Kina: open / close Kina, Start / stop farm, Scan the auction house, "
+    .. "Open Hot Farms, and a waypoint to the nearest hot mob. Put them on controller buttons.\n\n"
+    .. H("Window size") .. "Settings has Window size buttons, so you never have to drag the corner. "
+    .. "Turn the controller part off in Settings if you use another controller addon." },
 
   { "Kina level",
     "Kina level goes from I to XX. It comes from XP, and XP never goes down.\n\n"
@@ -165,7 +180,13 @@ C.RegisterPanel("help", function(p)
     title:SetText(TOPICS[i][1])
     local w = math.max(300, (page:GetWidth() or 560) - 60)
     child:SetWidth(w); body:SetWidth(w)
-    if TOPICS[i].guide and C.SeasonGuide then
+    if not TOPICS[i].feedback and C.Feedback then C.Feedback.Hide() end
+    if TOPICS[i].feedback and C.Feedback then
+      if C.SeasonGuide then C.SeasonGuide.Hide() end
+      body:SetText(""); body:Hide()
+      local ok, h = pcall(C.Feedback.Show, child, w)
+      child:SetHeight((ok and h or 300) + 20)
+    elseif TOPICS[i].guide and C.SeasonGuide then
       body:SetText(""); body:Hide()
       local ok, h = pcall(C.SeasonGuide.Show, child, w)
       child:SetHeight((ok and h or 300) + 20)
@@ -181,6 +202,7 @@ C.RegisterPanel("help", function(p)
     b:SetSize(162, 22); b:SetPoint("TOPLEFT", 14, -40 - (i - 1) * 26); b:SetText(t[1])
     b:SetScript("OnClick", function() show(i) end)
     btns[i] = b
+    if t.feedback then p.fbBtn = b end
   end
   local tour = CreateFrame("Button", nil, nav, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(tour) end
   tour:SetSize(162, 26); tour:SetPoint("BOTTOMLEFT", 14, 14); tour:SetText("Replay the tour")
@@ -190,6 +212,12 @@ C.RegisterPanel("help", function(p)
   wn:SetSize(162, 26); wn:SetPoint("BOTTOMLEFT", tour, "TOPLEFT", 0, 6); wn:SetText("What's new")
   wn:SetScript("OnClick", function() if C.WhatsNew then C.WhatsNew.Show() end end)
   p.refresh = function()
+    -- 1.0.6: the Feedback button says when the developer is online, or that an answer waits
+    if p.fbBtn and C.Net and C.Feedback then
+      local unread = C.Feedback.Unread()
+      p.fbBtn:SetText(unread > 0 and ("|cffff4040*|r Feedback (" .. unread .. ")")
+        or (C.Net.DevOnline() and not C.Net.IAmDeveloper() and "Feedback |cff3fd03f(dev online)|r" or "Feedback"))
+    end
     if C.helpWant then
       for i, t in ipairs(TOPICS) do if t[1] == C.helpWant then sel = i end end
       C.helpWant = nil

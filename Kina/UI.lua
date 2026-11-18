@@ -55,6 +55,7 @@ if C.PUBLIC then tabOrder = { "Hot Farms", "Session", "Ledger", "You", "Settings
 local HOME = C.PUBLIC and "Session" or "Hot"
 local TAB_OK = {}
 for _, t in ipairs(tabOrder) do TAB_OK[t] = true end
+function C.TabOrder() return tabOrder end -- (1.0.6: the controller's LB / RB)
 TAB_OK.Profile = C.PUBLIC and true or nil
 
 tabs.Bags = function()
@@ -170,6 +171,22 @@ end
 tabs["Hot Farms"] = function()
   local H = C.Hot
   if not H then return "Hot mobs are not loaded.", {}, {}, {} end
+  -- 1.0.6: the archive: hot mobs taken off the list, with what they gave you
+  if ui.hotArchive then
+    local out = {}
+    local q = ui.search["Hot Farms"]
+    for _, r in ipairs(H.Archive()) do
+      if not (q and q:find("%S")) or C.LooseMatch(q, r.name) or C.LooseMatch(q, r.zone or "") then
+        local was = r.tier == "hot" and "|cff9d9d9dwas HOT|r" or "|cff9d9d9dwas kill|r"
+        out[#out + 1] = { npc = r.npc, hot = true, cols = { was, r.name, r.zone, tostring(r.kills),
+          r.per and C.Money(math.floor(r.per + 0.5)) or "|cff9d9d9d?|r", C.Money(math.floor(r.total + 0.5)), r.cardName or "-" },
+          sort = { r.removed, r.name, r.zone, r.kills, r.per or 0, r.total, r.kills } }
+      end
+    end
+    local head = #out == 0 and "No archived hot mobs yet. When a hot mob you've killed comes off the list, it's kept here with what it gave you."
+      or "Hot mobs taken off the list, with what they gave you. Gold per kill shows once you had 30 kills."
+    return head, { "", "Mob", "Zone", "Your kills", "Per kill", "Total gold", "Card" }, { 0, 70, 280, 430, 520, 610, 720 }, out
+  end
   local all = ui.hotAll
   local list = H.Farms(not all and 4 or nil)
   local q = ui.search["Hot Farms"]
@@ -186,7 +203,9 @@ tabs["Hot Farms"] = function()
     local icon = r.tier == "hot" and (r.grey and "|cff9d9d9dHOT|r" or "|cffff7a1aHOT|r") or (r.grey and "|cff9d9d9dkill|r" or "|cffffc54akill|r")
     local name = (r.grey and "|cff9d9d9d" or "|cffffffff") .. r.name .. "|r" .. (r.elite and " |cffffc54a(elite)|r" or "")
     if not (q and q:find("%S")) or C.LooseMatch(q, r.name) or C.LooseMatch(q, r.zone or "") then
-      out[#out + 1] = { npc = r.npc, hot = true, cols = { icon, name, r.zone or "?", tostring(r.lvl), C.Money(math.floor(r.value + 0.5)), why },
+      local per = r.hideValue and "|cff9d9d9d?|r" or C.Money(math.floor(r.value + 0.5))
+      if r.hideValue then why = string.format("|cff9d9d9dyour kills: %d / %d|r", math.min(r.kinaKills or 0, C.Hot.KINA_KILLS), C.Hot.KINA_KILLS) end
+      out[#out + 1] = { npc = r.npc, hot = true, cols = { icon, name, r.zone or "?", tostring(r.lvl), per, why },
         sort = { r.tier == "hot" and 2 or 1, r.name, r.zone or "", r.lvl, r.value, why } }
     end
     if not all and #out >= 10 then break end
@@ -1952,15 +1971,17 @@ function C.ShowHotMob(npc)
   placeDetail()
   local tierText = r.tier == "hot" and "|cffff7a1aHOT|r: never skip it, worth stopping to farm"
     or (r.tier == "kos" and "|cffffc54aKill on sight|r: well above other mobs your level" or "Not hot right now")
+  local hidden = r.hideValue
   local lines = {
     (r.grey and "|cff9d9d9d" or "|cffffffff") .. r.name .. "|r" .. (r.elite and "  |cffffc54aElite|r" or ""),
     string.format("Level %d   %s   %s", r.lvl, H.TYPE_NAME[r.type] or "?", r.zone or "?"),
     tierText,
-    string.format("|cffffc54aPer kill: %s|r   %.1fx the usual mob of its level, %.1fx the top 10%%   #%d of %d in %s",
+    hidden and string.format("|cffffc54aPer kill: ?|r   |cff9d9d9dKill it %d times to light it up and see what it pays you (%d so far).|r", H.KINA_KILLS, r.kinaKills or 0)
+      or string.format("|cffffc54aPer kill: %s|r   %.1fx the usual mob of its level, %.1fx the top 10%%   #%d of %d in %s",
       C.Money(math.floor(r.value + 0.5)), r.xMed or 0, r.xTop or 0, r.rank or 0, r.zoneN or 0, r.zone or "its zone"),
   }
-  lines[#lines + 1] = "Where the gold comes from:"
-  for i, d in ipairs(r.det) do
+  if not hidden then lines[#lines + 1] = "Where the gold comes from:" end
+  for i, d in ipairs(hidden and {} or r.det) do
     if i > 6 then break end
     if d.kind == "coin" then
       if d.value > 0 then lines[#lines + 1] = string.format("   coin %s (%s)", C.Money(math.floor(d.value + 0.5)), d.how) end
@@ -1985,9 +2006,13 @@ function C.ShowHotMob(npc)
     lines[#lines + 1] = "   no spawn points known yet: once Kina users kill it, it shows where"
   end
   lines[#lines + 1] = ""
-  lines[#lines + 1] = string.format("Kina data: %d kills recorded by Kina users%s", r.kinaKills or 0,
+  lines[#lines + 1] = r.listed and string.format("Your kills: %d%s", r.kinaKills or 0, r.grey and string.format(" |cff9d9d9d(the logo lights up for you at %d)|r", H.KINA_KILLS) or "  |cff7CFC00lit|r")
+    or string.format("Kina data: %d kills recorded by Kina users%s", r.kinaKills or 0,
     r.grey and string.format(" |cff9d9d9d(the logo stays grey until %d)|r", H.KINA_KILLS) or "")
-  lines[#lines + 1] = string.format("|cff9d9d9dDrop rates from %s (%d loots). Prices from your AH scans.|r", r.source == "Kina" and "Kina users' kills" or "Wowhead Forever", r.loots or 0)
+  if not hidden then
+    lines[#lines + 1] = string.format("|cff9d9d9dDrop rates from %s (%d loots). Prices from your AH scans.|r",
+      r.source == "you" and "your own kills" or (r.source == "Kina" and "Kina users' kills" or "Wowhead Forever"), r.loots or 0)
+  end
   setLines(lines)
   detail.graph:Hide()
   setButtons({
@@ -2761,6 +2786,10 @@ local function buildSettings(f)
   toggle("Show the minimap button", function() return not st.minimapHide end, function(v) C.ShowMinimapButton(v) end)
   toggle("Point out hot mobs near me", function() return not st.hotNudgeOff end, function(v) st.hotNudgeOff = not v end,
     "A small line under your quest tracker when a hot mob is close (never in combat, dungeons or cities).")
+  toggle("Kina network", function() return not st.netOff end, function(v) st.netOff = not v; if v and C.Net then C.Net.Join() end end,
+    "Lets you write to the developer (Help > Feedback) and see when they're online. Invisible: nothing shows in chat.")
+  toggle("Controller in Kina's windows", function() return not st.padOff end, function(v) st.padOff = not v end,
+    "With gamepad mode on: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs.")
   if not C.PUBLIC then
   toggle("HOT alerts in chat after a scan", function() return st.hotAlerts ~= false end, function(v) st.hotAlerts = v end,
     "A chat line when a craft spikes to 2x+ its week price and is worth 1g+/hour, or something you own spiked.")
@@ -2844,6 +2873,10 @@ local function buildSettings(f)
     sl:SetScript("OnLeave", function() GameTooltip:Hide() end)
     y = y + ROWH
     action("Text size: back to 100%", function() sl:SetValue(1); C.ApplyTextScale(1) end)
+    -- 1.0.6: window sizes without dragging the corner (controllers)
+    action("Window size: default", function() C.SetWindowSize(880, 660) end)
+    action("Window size: large", function() C.SetWindowSize(1280, 860) end)
+    action("Window size: largest", function() C.SetWindowSize(99999, 99999) end)
   end
   action("Put every Kina window back", function() C.ResetWindows() end)
   toggle("Debug messages", function() return C.debug end, function(v) C.debug = v end)
@@ -3261,6 +3294,10 @@ local function build()
     ui.hotAll = not ui.hotAll; self:SetText(ui.hotAll and "Near my level" or "All levels"); ui.tab = "Hot Farms"; C.Refresh() end)
   hotB:SetPoint("BOTTOMLEFT", 16, 10); hotB:Hide()
   ui.hotButton = hotB
+  local arcB = button(f, "Archive", 90, function(self)
+    ui.hotArchive = not ui.hotArchive; self:SetText(ui.hotArchive and "Hot list" or "Archive"); ui.tab = "Hot Farms"; C.Refresh() end)
+  arcB:SetPoint("LEFT", hotB, "RIGHT", 6, 0); arcB:Hide()
+  ui.hotArcButton = arcB
   ui.ledgerDaysButton = days
   ui.scanBar = buildScanBar(f)
   -- Public Kina: no scan button, scan bar or farm-advice buttons (those tabs are hidden);
@@ -3806,7 +3843,8 @@ function C.Refresh()
   ui.head:SetText(head)
   ui.headClick = opts.headClick
   -- public Ledger: the period button (7 days / 30 days / all time) only on the Ledger list
-  if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms") end
+  if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms" and not ui.hotArchive) end
+  if ui.hotArcButton then ui.hotArcButton:SetShown(tab == "Hot Farms") end
   if C.PUBLIC and ui.ledgerDaysButton then
     if tab == "Ledger" and not ui.bookOf then ui.ledgerDaysButton:Show() else ui.ledgerDaysButton:Hide() end
     if ui.roiBar and ui.roiBar.held then ui.roiBar.held:Hide() end
@@ -3939,6 +3977,16 @@ function C.Toggle(tab)
     ui.frame:Show(); if C.RaiseKina then C.RaiseKina() end; C.Refresh()
     if ui.tab == "Ledger" and C.Toast and C.Toast.ThemeOnLedger then pcall(C.Toast.ThemeOnLedger) end
   end
+end
+
+-- 1.0.6: set the window size (fits the screen); the pages scale with it
+function C.SetWindowSize(w, h)
+  if not ui.frame then build() end
+  local sw, sh = (UIParent:GetWidth() or 1900) - 20, (UIParent:GetHeight() or 1200) - 20
+  ui.w, ui.h = math.max(math.min(880, sw), math.min(sw, w)), math.max(math.min(660, sh), math.min(sh, h))
+  ui.frame:SetSize(ui.w, ui.h)
+  C.settings.pos.mainSize = { ui.w, ui.h }
+  C.Refresh()
 end
 
 -- 1.1.1: open one farm's Ledger details (from the widget's Pay / Ask button)

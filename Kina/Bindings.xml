@@ -1,0 +1,7 @@
+<Bindings>
+  <Binding name="KINA_TOGGLE" header="KINA">KinaBindings_Run("toggle")</Binding>
+  <Binding name="KINA_FARM">KinaBindings_Run("farm")</Binding>
+  <Binding name="KINA_SCAN">KinaBindings_Run("scan")</Binding>
+  <Binding name="KINA_HOTFARMS">KinaBindings_Run("hotfarms")</Binding>
+  <Binding name="KINA_HOTWAY">KinaBindings_Run("hotway")</Binding>
+</Bindings>

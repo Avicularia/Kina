@@ -1,0 +1,230 @@
+-- Kina network (1.0.6). Kina users anywhere in the realm, not only the guild or group:
+--  * a hidden chat channel every Kina joins. Only invisible addon messages go over it;
+--    nothing is ever said in it, and it's taken out of every chat window
+--  * invisible addon messages straight to one character (never a chat whisper), only to
+--    someone Kina has just heard from, so the game never answers "No player named..."
+--  * the developer: Kina knows the developer's characters (Forever names are unique across
+--    the region), and only trusts those names for what only the developer may say
+-- Built for feedback first; the LFG system will ride on the same network.
+local _, C = ...
+local N = {}
+C.Net = N
+N.PREFIX = "KinaNet"
+N.CHANNEL = "KinaNetwork"
+N.ONLINE_HOLD = 20 * 60   -- the developer counts as online this long after their last "online"
+N.ANNOUNCE_EVERY = 15 * 60
+
+-- the developer's characters (full names, as the game shows them)
+N.DEVELOPERS = {
+  "Deputize Deez",
+  "Avic Hybana",
+}
+
+local function short(name)
+  if type(name) ~= "string" then return "" end
+  if Ambiguate then local ok, s = pcall(Ambiguate, name, "short"); if ok and s then name = s end end
+  return (name:gsub("%-.*$", ""))
+end
+N.Short = short
+-- the full name ("First Surname") must match; a bare first name (if the game ever gives
+-- one without the surname) matches only that exact first name
+function N.IsDeveloper(name)
+  local s = short(name):lower()
+  if s == "" then return false end
+  for _, d in ipairs(N.DEVELOPERS) do
+    d = d:lower()
+    if d == s then return true end
+    if not s:find(" ", 1, true) and d:match("^(%S+)") == s then return true end
+  end
+  return false
+end
+function N.Me() return (UnitName and UnitName("player")) or "?" end
+function N.IAmDeveloper() return N.IsDeveloper(N.Me()) end
+function N.Enabled() return not (C.settings and C.settings.netOff) end
+
+------------------------------------------------------------------ the channel
+local function channelId()
+  if not GetChannelName then return nil end
+  local id = GetChannelName(N.CHANNEL)
+  if type(id) == "number" and id > 0 then return id end
+  return nil
+end
+N.ChannelId = channelId
+-- keep the channel out of every chat window (it never carries chat anyway)
+local function hideFromChat()
+  if not (ChatFrame_RemoveChannel and NUM_CHAT_WINDOWS) then return end
+  for i = 1, NUM_CHAT_WINDOWS do
+    local cf = rawget(_G, "ChatFrame" .. i)
+    if cf then pcall(ChatFrame_RemoveChannel, cf, N.CHANNEL) end
+  end
+end
+function N.Join()
+  if not N.Enabled() then return end
+  if channelId() then hideFromChat(); return end
+  local join = JoinTemporaryChannel or JoinChannelByName
+  if join then pcall(join, N.CHANNEL) end
+  if C.After then C.After(2, hideFromChat) end
+end
+
+------------------------------------------------------------------ sending (paced)
+local queue, busy = {}, false
+local GAP = 0.35
+local function pump()
+  local item = table.remove(queue, 1)
+  if not item then busy = false; return end
+  local ok = false
+  if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+    if item.kind == "CHANNEL" then
+      local id = channelId()
+      if id then ok = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "CHANNEL", tostring(id)) end
+    else
+      ok = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", item.to)
+    end
+  end
+  if C.After then C.After(GAP, pump) else busy = false end
+end
+local function push(item)
+  if #queue > 200 then table.remove(queue, 1) end
+  queue[#queue + 1] = item
+  if not busy then busy = true; pump() end
+end
+function N.Broadcast(msg) if N.Enabled() then push({ kind = "CHANNEL", msg = msg }) end end
+-- to one character: only someone heard from in the last few minutes (never "No player named")
+local heard = {}
+N.heard = heard
+function N.Heard(name) local t = heard[short(name):lower()]; return t and (C.Now() - t) < 5 * 60 end
+function N.Tell(to, msg)
+  if not (N.Enabled() and to and N.Heard(to)) then return false end
+  push({ kind = "WHISPER", to = to, msg = msg })
+  return true
+end
+
+------------------------------------------------------------------ receiving
+local handlers = {}
+-- N.On("F", function(from, fields, raw, how) ... end)
+function N.On(kind, fn) handlers[kind] = handlers[kind] or {}; table.insert(handlers[kind], fn) end
+local function split(msg)
+  local out = {}
+  for f in (msg .. "|"):gmatch("([^|]*)|") do out[#out + 1] = f end
+  return out
+end
+N.Split = split
+C.On("CHAT_MSG_ADDON", function(_, prefix, msg, how, sender)
+  if prefix ~= N.PREFIX or type(msg) ~= "string" then return end
+  if how == "CHANNEL" and not N.Enabled() then return end
+  local from = short(sender)
+  if from:lower() == N.Me():lower() then return end
+  heard[from:lower()] = C.Now()
+  local kind = msg:match("^([^|]+)")
+  for _, fn in ipairs(handlers[kind or ""] or {}) do
+    local ok, err = pcall(fn, from, split(msg), msg, how)
+    if not ok and C.LogError then C.LogError("net " .. tostring(kind), err) end
+  end
+end)
+
+------------------------------------------------------------------ the developer online
+N.devSeen = nil      -- when the developer was last heard online
+N.devName = nil      -- which of their characters
+N.devShown = false   -- the chat line: once a session, never repeated (Taylor)
+N.devLook = nil      -- their earned cosmetics: { standing, level, recruits, bond, class }
+function N.DevOnline()
+  if N.IAmDeveloper() then return true, N.Me() end
+  return N.devSeen ~= nil and (C.Now() - N.devSeen) < N.ONLINE_HOLD, N.devName
+end
+N.On("O", function(from, f)
+  if not N.IsDeveloper(from) then return end -- only the developer may say this
+  N.devSeen, N.devName = C.Now(), from
+  -- O|version|standing|level|recruits|bond|class
+  N.devLook = { ver = f[2], standing = f[3] ~= "" and f[3] or "Unproven", level = tonumber(f[4]) or 1, recruits = tonumber(f[5]) or 0,
+    bond = tonumber(f[6]), class = f[7] ~= "" and f[7] or nil }
+  if not N.devShown then
+    N.devShown = true
+    C.Print("|cffffc54aKina (from the developer):|r I'm online now. Send me your bugs, ideas and requests: Help > Feedback, or /kina feedback.", true)
+  end
+  if C.Feedback and C.Feedback.OnDevOnline then C.Feedback.OnDevOnline(from) end
+  if C.Refresh then C.Refresh() end
+end)
+-- what the developer's badge shows: their own earned cosmetics
+function N.MyLook()
+  local m = C.Rep and C.Rep.Mine and C.Rep.Mine() or {}
+  local partner = C.Pair and C.Pair.PartnerName and C.Pair.PartnerName()
+  local bond = partner and C.Cos and C.Cos.BondFor and C.Cos.BondFor(partner)
+  local _, cls = UnitClass and UnitClass("player")
+  return { standing = m.standing or "Unproven", level = m.level or 1, recruits = C.Mentor and C.Mentor.Count and C.Mentor.Count() or 0,
+    bond = bond, class = cls, founder = true }
+end
+-- (silent: the heartbeat keeps players' "online" right; the chat line shows once)
+local function announce()
+  if not (N.IAmDeveloper() and N.Enabled()) then return end
+  local l = N.MyLook()
+  N.Broadcast(string.format("O|%s|%s|%d|%d|%s|%s", tostring(C.version), l.standing, l.level, l.recruits,
+    l.bond and tostring(math.floor(l.bond)) or "", l.class or ""))
+end
+N.Announce = announce
+
+------------------------------------------------------------------ start
+C.On("PLAYER_LOGIN", function()
+  if not C.After then return end
+  C.After(6, function() N.Join() end)
+  C.After(12, announce)
+end)
+if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(N.ANNOUNCE_EVERY, function() pcall(announce) end) end
+C.On("CHANNEL_UI_UPDATE", function() if channelId() then hideFromChat() end end)
+
+------------------------------------------------------------------ the developer's badge
+-- Up top beside the Kina nameplate: the developer's portrait with their earned cosmetics
+-- (standing ring, Kina level, mentor stars, bond crest) and a green blip while they're
+-- online. Click: Help > Feedback. Hidden while they're offline.
+local badge
+local function buildBadge()
+  local u = C.ui
+  if not (u and u.frame and u.nameplate) then return nil end
+  local b = CreateFrame("Button", nil, u.frame)
+  b:SetSize(52, 52); b:SetPoint("RIGHT", u.nameplate, "LEFT", -6, 4)
+  b:SetFrameLevel((u.frame:GetFrameLevel() or 1) + 50)
+  b.box = CreateFrame("Frame", nil, b); b.box:SetAllPoints()
+  b.portrait = b.box:CreateTexture(nil, "ARTWORK")
+  if C.Cos and C.Cos.Portrait then
+    local ok, o = pcall(C.Cos.Portrait, b.box, b.portrait, {})
+    if ok then b.cos = o end
+  end
+  b.blip = b:CreateTexture(nil, "OVERLAY", nil, 7); b.blip:SetSize(12, 12); b.blip:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+  b.blip:SetTexture("Interface\\COMMON\\Indicator-Green")
+  b.ring = b:CreateTexture(nil, "OVERLAY", nil, 6); b.ring:SetSize(16, 16); b.ring:SetPoint("CENTER", b.blip, "CENTER")
+  b.ring:SetColorTexture(0, 0, 0, 0)
+  b.label = b:CreateFontString(nil, "OVERLAY"); b.label:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE"); b.label:SetPoint("TOP", b, "BOTTOM", 0, 2)
+  b.label:SetText("|cff3fd03fdev online|r")
+  b:SetScript("OnClick", function()
+    if C.Feedback and C.Feedback.OpenPopup then C.Feedback.OpenPopup() end
+  end)
+  b:SetScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    local _, name = N.DevOnline()
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("|cff3fd03fKina developer online|r")
+    GameTooltip:AddLine(name or "", 1, 0.82, 0.3)
+    GameTooltip:AddLine("Click to send bugs, ideas and requests (Help > Feedback).", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  b:Hide()
+  return b
+end
+function N.UpdateBadge()
+  local on = N.DevOnline()
+  if not on or not N.Enabled() then if badge then badge:Hide() end; return end
+  badge = badge or buildBadge()
+  if not badge then return end
+  local look = N.IAmDeveloper() and N.MyLook() or N.devLook or {}
+  if badge.cos and C.Cos.UpdatePortrait then
+    pcall(C.Cos.UpdatePortrait, badge.cos, look.standing or "Unproven", look.level or 1, look.recruits or 0)
+    if C.Cos.SetBond then pcall(C.Cos.SetBond, badge.cos, look.bond) end
+    if C.Cos.SetFounder then pcall(C.Cos.SetFounder, badge.cos, true) end -- (Taylor: with the founder's ring)
+  end
+  -- their class crest (an unmasked texture over the round portrait, as profiles do)
+  if look.class and C.Profile and C.Profile.ClassIcon then pcall(C.Profile.ClassIcon, badge.portrait, look.class)
+  else badge.portrait:SetTexture("Interface\\AddOns\\Kina\\Media\\KinaLogo") end
+  badge:Show()
+end
+function N.badgeShown() return badge ~= nil and badge:IsShown() end
+if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(3, function() pcall(N.UpdateBadge) end) end

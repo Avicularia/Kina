@@ -1,3 +1,15 @@
+# Kina 1.0.6
+
+- New: hot mobs for everyone: a grey logo that lights up for you at 30 of your kills.
+- A lit hot mob shows your own gold per kill on its nameplate.
+- New: Hot Farms > Archive keeps hot mobs taken off the list, with what they gave you.
+- New: a "developer online" badge; click it to send feedback and get a notice when answered.
+- New: Help > Feedback (or /kina feedback).
+- New: controller support in Kina's windows (D-pad, A, B, X, Y, LB / RB).
+- New: key bindings for Kina, Start / stop farm, Scan AH, Hot Farms and a hot mob waypoint.
+- New: Window size buttons in Settings.
+- New: /kina pad checks controller support.
+
 # Kina 1.0.5
 
 - New: Hot Farms tab: the mobs worth the most per kill near your level, with a waypoint to their thickest spawn.

@@ -18,6 +18,12 @@ W.MAJOR = {
     { "Season 1 Cosmetics", "Help > Season 1 Cosmetics: every ring, star and crest you can earn this season, what each takes, and how close you are. Each progress bar has Details with the exact rules.", help = "Season 1 Cosmetics" },
     { "A window that fits", "Make the Kina window bigger and its pages grow with it; smaller and they shrink to fit. Scrollbars can be dragged again." },
   } },
+  { ver = "1.0.6", pages = {
+    { "Hot mobs for everyone", "Hot mobs now show for every Kina user: a grey logo on their nameplates. Kill one 30 times and it lights up for you, with what it pays you per kill. Mobs that come off the hot list wait in Hot Farms > Archive with what they gave you.", tab = "Hot Farms" },
+    { "Talk to the developer", "When the developer is online, their badge shows beside the Kina nameplate. Click it to send a bug, idea or request; you get a notice when they answer. If they're offline, it waits and sends when they're back." },
+    { "Play Kina with a controller", "With gamepad mode on, Kina's windows work with the controller: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs. Kina only takes the controller while its window is open and you're out of combat.", help = "Controller" },
+    { "Key bindings", "Options > Key Bindings > Kina: open Kina, Start / stop farm, Scan the AH, Hot Farms and a waypoint to the nearest hot mob. Settings also has Window size buttons, so there's no corner to drag." },
+  } },
 }
 
 local function verNum(v) local a, b, c = tostring(v or ""):match("^(%d+)%.(%d+)%.?(%d*)"); return a and (tonumber(a) * 10000 + tonumber(b) * 100 + (tonumber(c) or 0)) or 0 end

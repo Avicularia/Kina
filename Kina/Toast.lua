@@ -421,6 +421,12 @@ do
   function T.ThemeOnLedger() end -- kept for older callers
 end
 
+-- 1.0.6: a plain notice (feedback answered, new feedback)
+function T.Notice(head, sub)
+  show({ head = head, sub = sub or "", gains = "" })
+  if C.PlayCue then C.PlayCue("standing") end
+end
+
 -- 1.5.0: someone vouched for you
 function T.Vouched(from, kindName, rep, bad)
   if bad then -- 1.5.2: a bad commendation

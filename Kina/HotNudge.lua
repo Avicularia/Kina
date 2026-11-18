@@ -33,12 +33,12 @@ function N.NoteKill(npc)
   local H = C.Hot
   if not (H and npc) then return end
   local r = H.Info(npc)
-  local v = r and r.value
+  local v = r and not r.hideValue and r.value
   if not v then return end
   local d = db()
   table.insert(d.recent, math.floor(v + 0.5))
   while #d.recent > N.RECENT do table.remove(d.recent, 1) end
-  if r.tier then d.kills = (d.kills or 0) + 1; d.gold = (d.gold or 0) + v end
+  if r.tier and not r.hideValue then d.kills = (d.kills or 0) + 1; d.gold = (d.gold or 0) + v end
 end
 function N.RecentAverage()
   local d = db()
@@ -166,7 +166,9 @@ function N.Update()
   f.npc = npc
   local tag = n.row.tier == "hot" and (ORANGE .. "Hot nearby|r") or (GOLD .. "Worth a kill nearby|r")
   f.l1:SetText(string.format("%s: |cffffffff%s|r", tag, n.row.name))
-  f.l2:SetText(string.format("%s%s/kill|r  %s·  %d yd %s|r", GOLD, C.Money(math.floor(n.row.value + 0.5)), GREY, math.floor(n.yd / 5 + 0.5) * 5, n.dir))
+  local per = n.row.hideValue and string.format("your kills %d/%d", math.min(n.row.kinaKills or 0, C.Hot.KINA_KILLS), C.Hot.KINA_KILLS)
+    or (C.Money(math.floor(n.row.value + 0.5)) .. "/kill")
+  f.l2:SetText(string.format("%s%s|r  %s·  %d yd %s|r", GOLD, per, GREY, math.floor(n.yd / 5 + 0.5) * 5, n.dir))
   local avg = N.RecentAverage()
   local today = N.TodayText()
   f.l3:SetText(avg and string.format("Your last %d kills: %s each", #db().recent, C.Money(math.floor(avg + 0.5))) or (today or ""))
