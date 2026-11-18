@@ -227,7 +227,12 @@ function F.Accept(sid, leader, label, camp)
     -- a young farm your group's start command opened is replaced, not saved as its own farm
     if s.byParty and not s.sync and C.Now() - (s.start or 0) < 180 then
       C.session = nil; C.db.activeSession = nil
+    elseif s.sync then
+      -- 1.0.8: you're joining a new group farm: the old shared one closes on your side now,
+      -- with the shared numbers (waiting on its leader could keep you out of the new one)
+      C.StopSession(nil, "joined another farm", nil, true)
     else C.StopSession() end
+    if C.session then C.session = nil; C.db.activeSession = nil end
   end
   C.StartSession(label ~= "" and label or nil, true, camp ~= "" and camp or nil)
   local n = F.Node()
@@ -350,7 +355,7 @@ end
 local function buildRoster()
   local f = CreateFrame("Frame", "KinaFarmRoster", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   f:SetSize(300, 140); f:SetPoint("CENTER", UIParent, "CENTER", 0, 180)
-  f:SetFrameStrata("DIALOG"); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
+  f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(120); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
   f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
   if f.SetBackdrop then
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
@@ -395,6 +400,11 @@ function F.RefreshRoster()
   end
   for i = #list + 1, #roster.rows do roster.rows[i]:Hide() end
   roster:SetHeight(54 + #list * 24 + 64)
+  -- 1.0.8 (Taylor: "why is there End farm for all while waiting for her reply"): until
+  -- someone else is in, it's your farm alone, so the button just cancels it
+  local others = 0
+  for _, e in ipairs(list) do if e.state == "yes" and e.name ~= me() then others = others + 1 end end
+  if roster.stop then roster.stop:SetText(others > 0 and "End farm for all" or "Cancel farm") end
 end
 function F.ShowRoster()
   roster = roster or buildRoster()

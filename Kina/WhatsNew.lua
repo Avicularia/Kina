@@ -30,6 +30,10 @@ W.MAJOR = {
     { "Feedback, front and center", "A Feedback button now sits on the bottom bar of every tab, and the Kina button pulses green when an answer is waiting." },
     { "Updates and scans", "When a newer Kina is out, the widget shows Update available. The scan bar now says whose AH scan is coming in, how far along it is and about how long is left." },
   } },
+  { ver = "1.0.8", pages = {
+    { "Dungeon farms fixed", "Walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts, and your partners get into the new one." },
+    { "See the Kina network", "Settings > Network log (or /kina net) shows what Kina sends and receives, who it's talking to and which AH scans came in." },
+  } },
 }
 
 local function verNum(v) local a, b, c = tostring(v or ""):match("^(%d+)%.(%d+)%.?(%d*)"); return a and (tonumber(a) * 10000 + tonumber(b) * 100 + (tonumber(c) or 0)) or 0 end
@@ -63,7 +67,7 @@ end
 local function build()
   if f then return f end
   f = CreateFrame("Frame", "KinaWhatsNew", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  f:SetSize(440, 230); f:SetFrameStrata("DIALOG"); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
+  f:SetSize(440, 230); f:SetFrameStrata("FULLSCREEN_DIALOG"); if f.SetToplevel then f:SetToplevel(true) end; f:SetFrameLevel(120); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
   f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
   if C.Skin and C.Skin.Panel then C.Skin.Panel(f) elseif f.SetBackdrop then
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })

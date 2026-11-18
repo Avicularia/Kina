@@ -1,3 +1,18 @@
+# Kina 1.0.8
+
+- Fix: walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts.
+- Fix: your partner gets into the new dungeon farm.
+- New: Network log (/kina net or Settings): what Kina sends and receives, and who it's talking to.
+- Fix: What's new, Feedback and other windows open on top of Kina, not behind it.
+- Fix: the progress bars on Season 1 Cosmetics fill.
+- Fix: buttons no longer overlap the scan bar or each other.
+- Help: new Hot mobs and AH prices topics; What Kina is rewritten.
+- Fix: "you were in different zones" only counts the people in the farm, not the whole group.
+- AH scans shared by any Kina on the realm count toward "no new scan needed".
+- The farm roster says "Cancel farm" until someone else has joined.
+- Settings cleaned up: sharing switches together, fewer redundant buttons.
+- Season 1 Cosmetics: a glowing menu button, a new Legendary crest glow, clearer crest levels.
+
 # Kina 1.0.7
 
 - New: AH prices from every Kina on the realm, not just your guild.

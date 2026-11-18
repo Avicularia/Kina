@@ -191,6 +191,7 @@ function NP.SendScan()
   Net().Broadcast(string.format("PZB|%s|%s|%s", tt, b36(#parts), myStanding()))
   for k, p in ipairs(parts) do Net().BroadcastBulk("PZ|" .. tt .. "|" .. p) end
   Net().BroadcastBulk("PZE|" .. tt .. "|" .. b36(#parts))
+  if C.NetNote then pcall(C.NetNote, string.format("sent your AH scan to every Kina: %d items in %d messages (about %d s)", #selling + #rest, #parts + 2, #parts + 2)) end
   return true
 end
 local answered = {}
@@ -247,6 +248,7 @@ local function onFinish(from, f)
   for i = NP.MAX_SOURCES + 1, #list do s[list[i].k] = nil end
   NP.Invalidate()
   if C.Share and C.Share.InvalidateMarket then C.Share.InvalidateMarket() end
+  if C.NetNote then pcall(C.NetNote, string.format("got an AH scan from %s on the Kina network: %d items", from, count)) end
   C.Print(string.format("got AH prices from the Kina network (%d items from %s). They count where several Kinas agree.", count, from))
 end
 

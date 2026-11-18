@@ -335,7 +335,7 @@ function M.ShowPicker()
   if not f then
     f = CreateFrame("Frame", "KinaWelcomePick", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
     M.picker = f
-    f:SetSize(440, 340); f:SetPoint("CENTER", 0, 80); f:SetFrameStrata("DIALOG"); f:EnableMouse(true)
+    f:SetSize(440, 340); f:SetPoint("CENTER", 0, 80); f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(120); f:EnableMouse(true)
     f:SetMovable(true); f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
     if C.Skin and C.Skin.On and C.Skin.On() and C.Skin.Panel then C.Skin.Panel(f, 8)
     else local bg = f:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.06, 0.05, 0.95) end

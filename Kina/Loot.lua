@@ -684,7 +684,18 @@ function C.StartSession(label, fromParty, campKey)
   -- 1.0.2: the group already has a shared farm running: join it, don't start a second one
   if not fromParty and not C.session and C.FarmSync and C.FarmSync.JoinRunning and C.FarmSync.JoinRunning() then return end
   if C.Rules and C.Rules.Decay then pcall(C.Rules.Decay) end -- 1.5.4: idle weeks
-  if C.session then C.StopSession() end
+  if C.session then
+    C.StopSession()
+    -- 1.0.8 (a dungeon farm started over a shared farm that was still ending: no split, no
+    -- commendations, and the partner never got into the new farm): a shared farm takes a
+    -- few seconds to end (or waits on "split anyway?"), so the new farm starts once it has
+    if C.session then
+      C.pendingStart = { label = label, fromParty = fromParty, camp = campKey, t = C.Now() }
+      C.Print("the current farm is ending first; " .. (label or "the new farm") .. " starts when it has.")
+      return
+    end
+  end
+  C.pendingStart = nil
   lastMoney = GetMoney()
   local now = C.Now()
   C.session = { start = now, last = now, label = label or (GetZoneText and GetZoneText()) or "session",
@@ -994,6 +1005,12 @@ function C.StopSession(at, why, silent, fromParty)
   C.session = nil
   C.db.activeSession = nil
   if C.FarmEnded then pcall(C.FarmEnded, s) end
+  -- 1.0.8: a farm waiting for this one to end starts now (within 10 minutes of asking)
+  local ps = C.pendingStart
+  if ps and C.Now() - (ps.t or 0) < 600 then
+    C.pendingStart = nil
+    C.After(1, function() if not C.session then C.StartSession(ps.label, ps.fromParty, ps.camp) end end)
+  else C.pendingStart = nil end
   if C.FarmEndAd and not silent then pcall(C.FarmEndAd, s) end -- 1.0.2b
   if not silent and not (C.Toast and C.Toast.ThemeAtFarmEnd and C.Toast.ThemeAtFarmEnd()) then C.PlayCue("stop") end
   -- 1.5.0: a qualifying group farm just ended: remind about vouching
@@ -1032,9 +1049,20 @@ function C.TrackLevels(s)
   if IsInGroup and IsInGroup() and GetRaidRosterInfo and not s.paused then
     local mine = GetRealZoneText and GetRealZoneText() or (GetZoneText and GetZoneText())
     local apart = false
+    -- 1.0.8 (Taylor: "Scàrlet and I were in the same zone the entire farm"): only the farm's
+    -- own members count, not group members who never joined it (or don't run Kina)
+    local members
+    if s.sync and s.sync.chain then
+      members = {}
+      for _, ev in ipairs(s.sync.chain) do
+        if ev.kind == "J" and ev.origin then members[(ev.origin:match("^([^%-]+)") or ev.origin):lower()] = true end
+      end
+    end
     for i = 1, n do
       local ok, name, _, _, _, _, _, zone, online = pcall(GetRaidRosterInfo, i)
-      if ok and name and zone and online ~= false and mine and zone ~= "" and zone ~= mine then apart = true end
+      local short = ok and type(name) == "string" and ((name:match("^([^%-]+)") or name):lower()) or nil
+      local counts = short and (not members or members[short])
+      if counts and zone and online ~= false and mine and zone ~= "" and zone ~= mine then apart = true end
     end
     if apart then s.apartTicks = (s.apartTicks or 0) + 1 else s.togetherTicks = (s.togetherTicks or 0) + 1 end
   end
@@ -1494,8 +1522,7 @@ do
     text = "%s", button1 = "Start farm", button2 = "Not now",
     OnAccept = function(_, data)
       if not data then return end
-      if C.session and C.StopSession then C.StopSession(nil, "stopped") end
-      if C.StartSession then C.StartSession(data) end
+      if C.StartSession then C.StartSession(data) end -- ends the running farm first (1.0.8)
     end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   } end

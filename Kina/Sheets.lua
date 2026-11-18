@@ -40,12 +40,19 @@ local function bar(parent, r, g, b, plain)
     edge[#edge + 1] = t
   end
   f.label = text(f, "GameFontHighlightSmall", "CENTER"); f.label:SetPoint("CENTER", 0, 0)
+  -- 1.0.8 (Taylor: the bars on the cosmetics page stayed empty): a bar anchored at both
+  -- ends has no width until the page is laid out, so the fill is redone when it gets one
+  local function paint(self)
+    local frac = self.frac or 0
+    local w = (self:GetWidth() or 0) - 4
+    if frac <= 0.001 or w <= 0 then fill:Hide() else fill:Show(); fill:SetWidth(math.max(1, w * frac)) end
+  end
   function f:Set(frac, label)
-    frac = math.max(0, math.min(1, frac or 0))
-    local w = (self:GetWidth() or 100) - 4
-    if frac <= 0.001 then fill:Hide() else fill:Show(); fill:SetWidth(math.max(1, w * frac)) end
+    self.frac = math.max(0, math.min(1, frac or 0))
+    paint(self)
     self.label:SetText(label or "")
   end
+  f:SetScript("OnSizeChanged", paint)
   return f
 end
 

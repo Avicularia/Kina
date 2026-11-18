@@ -176,7 +176,7 @@ function REC.Show(name)
   local f = REC.panel
   if not f then
     f = CreateFrame("Frame", "KinaRecordPanel", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    f:SetSize(640, 360); f:SetFrameStrata("DIALOG"); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
+    f:SetSize(640, 360); f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(120); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
     f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
     if C.Skin and C.Skin.Panel then C.Skin.Panel(f) elseif f.SetBackdrop then
       f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })

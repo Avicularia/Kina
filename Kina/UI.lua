@@ -2727,24 +2727,23 @@ local function buildSettings(f)
 
   if C.PUBLIC then
   column(0)
-  header("Kina level")
-  for i = 1, 4 do note(function() return (C.RepDetail and C.RepDetail() or {})[i] or "" end) end
-  y = y + 4
   -- 0.9.20 (Taylor): just the farm tracker
   header("Groups")
   toggle("Tracker only (no splits, debts or Kina XP)", function() return C.TrackOnly() end, function(v) C.SetTrackOnly(v) end,
     "Kina keeps tracking your farms (gold per hour, loot, kills), but you're not part of group farms, loot splits or debts, and you earn no Kina XP or standing. Every Kina in your group is told, and anything you loot stays yours. Debts you already have still need settling.")
-  note(function() return C.TrackOnly() and "|cffffc54aon: just the tracker, no splits or debts|r" or "off: group farms split fairly and earn Kina XP" end)
   y = y + 4
-  header("Data sharing")
+  -- 1.0.8 (Taylor: clean up Settings): every sharing switch in one place, with the log
+  header("Network and sharing")
+  toggle("Kina network", function() return not st.netOff end, function(v) st.netOff = not v; if v and C.Net then C.Net.Join() end end,
+    "Kina's hidden channel: realm-wide AH prices, feedback to the developer, update notices. Invisible: nothing shows in chat.")
+  toggle("Share AH prices with every Kina", function() return not st.netPricesOff end, function(v) st.netPricesOff = not v; if C.NetPrices then C.NetPrices.Invalidate() end; if C.Share and C.Share.InvalidateMarket then C.Share.InvalidateMarket() end end,
+    "Your scans help every Kina on the realm, and theirs keep your prices fresh. A price only counts where several Kinas agree.")
   toggle("Share drop data and auction prices", function() return C.ShareData() end, function(v) C.SetShareData(v) end,
     "Kina collects which mobs drop what and the auction prices you see, and shares them with other Kina users. You don't see this data yet: it builds the farm and price features of a future Kina. Your Kina level only grows while this is on. Nothing about you, your chat or other players is collected.")
   note(function() return C.ShareData() and "on: your Kina level can grow" or "|cffff8040off: your Kina level is paused|r" end)
   toggle("Also share with my guild", function() return C.Share.DB().opts.guild end, function(v) C.Share.DB().opts.guild = v; C.Share.DB().opts.guildOptOut = true end,
     "Guild members who run Kina also see your Kina level and get your shared data.")
-  -- 1.2.6: a visible Sync button; progress shows on the scan bar, answers in chat
-  action("Sync prices with my group now", function() if C.Share and C.Share.Command then C.Share.Command("now") end end)
-  note(function() return C.ScanSourceText and C.ScanSourceText() or "" end)
+  action("Network log", function() if C.NetLogUI then C.NetLogUI.Toggle() end end)
   y = y + 4
   header("Check Kina")
   action("Run self-test", function() if C.SelfTest then C.SelfTest.Run() end end)
@@ -2753,10 +2752,6 @@ local function buildSettings(f)
     "For the Kina team: the code unlocks the Try preview buttons. Anything else locks them again.")
   if adminBox and adminBox.SetPassword then pcall(adminBox.SetPassword, adminBox, true) end
   note(function() return "checks Kina works on this client (results in chat)" end)
-  -- 0.9.2 (Taylor): add-ons can't reach the internet, so Kina asks the other Kina users
-  -- it can reach (group, guild) which version they run, and links where to download
-  action("Check for updates", function() if C.Share and C.Share.CheckUpdates then C.Share.CheckUpdates() end end)
-  note(function() return C.Share and C.Share.UpdateText and C.Share.UpdateText() or "" end)
   else
   -------------------------------------------------- column 1: auction house and money
   column(0)
@@ -2814,21 +2809,11 @@ local function buildSettings(f)
   toggle("Show the minimap button", function() return not st.minimapHide end, function(v) C.ShowMinimapButton(v) end)
   toggle("Point out hot mobs near me", function() return not st.hotNudgeOff end, function(v) st.hotNudgeOff = not v end,
     "A small line under your quest tracker when a hot mob is close (never in combat, dungeons or cities).")
-  toggle("Kina network", function() return not st.netOff end, function(v) st.netOff = not v; if v and C.Net then C.Net.Join() end end,
-    "Lets you write to the developer (Help > Feedback) and see when they're online. Invisible: nothing shows in chat.")
-  toggle("Share AH prices with every Kina", function() return not st.netPricesOff end, function(v) st.netPricesOff = not v; if C.NetPrices then C.NetPrices.Invalidate() end; if C.Share and C.Share.InvalidateMarket then C.Share.InvalidateMarket() end end,
-    "Your scans help every Kina on the realm, and theirs keep your prices fresh. A price only counts where several Kinas agree.")
-  toggle("Controller in Kina's windows", function() return not st.padOff end, function(v) st.padOff = not v end,
-    "With gamepad mode on: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs.")
   if not C.PUBLIC then
   toggle("HOT alerts in chat after a scan", function() return st.hotAlerts ~= false end, function(v) st.hotAlerts = v end,
     "A chat line when a craft spikes to 2x+ its week price and is worth 1g+/hour, or something you own spiked.")
   end
-  toggle("Count kills from nameplates", function() return st.plateKills ~= false end, function(v) st.plateKills = v end,
-    "Counts mobs that died near you without being your target (AoE, pets) so drop rates are not too good. In a group they count for the farm only. Needs the dead mob's nameplate to be visible.")
-  toggle("Kina iron look (after /reload)", function() return st.look ~= "classic" end, function(v) st.look = (not v) and "classic" or nil
-    C.Print("the " .. (v and "iron" or "classic") .. " look applies after a /reload.") end,
-    "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
+  st.plateKills = nil -- 1.0.8: always on (no switch)
   toggle("Ask for an AH scan when a farm ends", function() return st.askScan ~= false end, function(v) st.askScan = v end,
     "Debts wait until every Kina user in the farm has scanned the auction house or skipped, so the split uses fresh prices.")
   toggle("Split the loot in group farms", function() return st.farmNoSplit ~= true end, function(v) st.farmNoSplit = not v; if C.RefreshWidget then C.RefreshWidget() end end,
@@ -2849,7 +2834,6 @@ local function buildSettings(f)
   toggle("Count skinning even if I don't have it", function() return st.assumeSkinning end, function(v) st.assumeSkinning = v end,
     "Shows what beast farms would pay if you (or your partner) skinned them.")
   end
-  action("Start / stop a farm", function() if C.session then C.StopSession() else C.StartSession() end end)
   y = y + 4
   if not C.PUBLIC then
   header("Stockpile target")
@@ -2909,7 +2893,12 @@ local function buildSettings(f)
     action("Window size: largest", function() C.SetWindowSize(99999, 99999) end)
   end
   action("Put every Kina window back", function() C.ResetWindows() end)
-  toggle("Debug messages", function() return C.debug end, function(v) C.debug = v end)
+  toggle("Controller in Kina's windows", function() return not st.padOff end, function(v) st.padOff = not v end,
+    "With gamepad mode on: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs.")
+  toggle("Kina iron look (after /reload)", function() return st.look ~= "classic" end, function(v) st.look = (not v) and "classic" or nil
+    C.Print("the " .. (v and "iron" or "classic") .. " look applies after a /reload.") end,
+    "The forged iron frames, buttons and tiles. Off: Kina's plain classic look.")
+  if C.Net and C.Net.IAmDeveloper and C.Net.IAmDeveloper() then toggle("Debug messages", function() return C.debug end, function(v) C.debug = v end) end -- 1.0.8: the developer only
   if C.PUBLIC then
   -- 1.5.5: a third column: sound and item tooltips
   column(2)
@@ -3521,7 +3510,7 @@ local function build()
       prev = b; vb.btns[v] = b
     end
     vb:SetFrameLevel(f:GetFrameLevel() + 12)
-    vb:Hide(); ui.viewBar = vb
+    vb:Hide(); ui.viewBar = vb; vb.first = prev
   end
   -- 1.5.2: the You tab's pages
   do
@@ -3876,7 +3865,7 @@ function C.Refresh()
     else ui.youBar:Hide() end
   end
   -- the header line leaves room for the view buttons on the Ledger
-  if ui.head then ui.head:SetWidth(math.max(200, ui.w - ((tab == "Ledger" and ui.viewBar) and 470 or 28))) end
+  if ui.head then ui.head:SetWidth(math.max(200, ui.w - ((tab == "Ledger" and ui.viewBar) and (C.PUBLIC and 600 or 470) or 28))) end
   layout(colX, opts.top or 0)
   ui.head:ClearAllPoints(); ui.head:SetPoint("TOPLEFT", 14, -56 - (ui.baseTop or 0))
   if ui.headButton then ui.headButton:ClearAllPoints(); ui.headButton:SetPoint("TOPLEFT", 12, -54 - (ui.baseTop or 0)) end
@@ -3885,8 +3874,22 @@ function C.Refresh()
   -- public Ledger: the period button (7 days / 30 days / all time) only on the Ledger list
   if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms" and not ui.hotArchive) end
   if ui.hotArcButton then ui.hotArcButton:SetShown(tab == "Hot Farms") end
+  -- 1.0.8 (Taylor: they sat on top of the scan bar): the Hot Farms buttons go up in the
+  -- header row, at the right, like the Ledger's
+  if ui.hotButton and ui.hotArcButton and tab == "Hot Farms" then
+    ui.hotArcButton:ClearAllPoints(); ui.hotArcButton:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (ui.baseTop or 0))
+    ui.hotButton:ClearAllPoints(); ui.hotButton:SetPoint("RIGHT", ui.hotArcButton, "LEFT", -8, 0)
+    ui.hotButton:SetHeight(24); ui.hotArcButton:SetHeight(24)
+    if ui.head then ui.head:SetWidth(math.max(200, ui.w - 260)) end
+  end
   if C.PUBLIC and ui.ledgerDaysButton then
     if tab == "Ledger" and not ui.bookOf then ui.ledgerDaysButton:Show() else ui.ledgerDaysButton:Hide() end
+    -- 1.0.8 (Taylor: it overlapped the Feedback/Inbox button): the period button sits up in
+    -- the Ledger's own row, left of Farms / Debts / Collections
+    if ui.viewBar and ui.viewBar:IsShown() then
+      ui.ledgerDaysButton:ClearAllPoints(); ui.ledgerDaysButton:SetPoint("RIGHT", ui.viewBar.first or ui.viewBar, "LEFT", -12, 0)
+      ui.ledgerDaysButton:SetHeight(24); ui.ledgerDaysButton:SetFrameLevel(ui.viewBar:GetFrameLevel())
+    end
     if ui.roiBar and ui.roiBar.held then ui.roiBar.held:Hide() end
   end
   if ui.headButton then if opts.headClick then ui.headButton:Show() else ui.headButton:Hide() end end

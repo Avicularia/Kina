@@ -44,7 +44,7 @@ local win
 local function build()
   win = CreateFrame("Frame", "KinaUpdateWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   win:SetSize(420, 210); win:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
-  win:SetFrameStrata("DIALOG"); win:SetClampedToScreen(true); win:EnableMouse(true); win:SetMovable(true)
+  win:SetFrameStrata("FULLSCREEN_DIALOG"); win:SetFrameLevel(120); win:SetClampedToScreen(true); win:EnableMouse(true); win:SetMovable(true)
   win:RegisterForDrag("LeftButton"); win:SetScript("OnDragStart", win.StartMoving); win:SetScript("OnDragStop", win.StopMovingOrSizing)
   if C.Skin and C.Skin.On and C.Skin.On() and C.Skin.Frame then C.Skin.Frame(win, 20) elseif win.SetBackdrop then
     win:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })

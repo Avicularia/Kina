@@ -86,6 +86,7 @@ local function sendOne(item)
     ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", item.to)
   end
   if ok and THROTTLED and res == THROTTLED then return false end
+  if ok and C.NetLog then pcall(C.NetLog, "out", item.kind == "CHANNEL" and "CHANNEL" or "WHISPER", item.to, item.msg, true) end
   return true
 end
 sender:SetScript("OnUpdate", function(self, el)
@@ -141,6 +142,7 @@ C.On("CHAT_MSG_ADDON", function(_, prefix, msg, how, sender)
   local from = short(sender)
   if from:lower() == N.Me():lower() then return end
   heard[from:lower()] = C.Now()
+  if C.NetLog then pcall(C.NetLog, "in", how, from, msg, true) end
   local kind = msg:match("^([^|]+)")
   for _, fn in ipairs(handlers[kind or ""] or {}) do
     local ok, err = pcall(fn, from, split(msg), msg, how)

@@ -185,11 +185,15 @@ local function build(parent, w)
     local col = (i - 1) % ccols
     local c = CreateFrame("Frame", nil, f); c:SetSize(ccw, 170); c:SetPoint("TOPLEFT", col * ccw, y - math.floor((i - 1) / ccols) * 170)
     local S = 96
-    if i == 4 then
-      local glow = c:CreateTexture(nil, "BACKGROUND"); glow:SetTexture(P .. "fx_halo"); glow:SetBlendMode("ADD")
-      glow:SetVertexColor(1, 0.6, 0.2, 0.55); glow:SetSize(S * 1.5, S * 1.5); glow:SetPoint("TOP", 0, -4 + S * 0.25)
-    end
     local sh = c:CreateTexture(nil, "ARTWORK"); sh:SetTexture(P .. "bond_shield_" .. i); sh:SetSize(S, S); sh:SetPoint("TOP", 0, -4)
+    if i == 4 then
+      -- 1.0.8 (Taylor: the square glow looked terrible): a glow in the shield's own shape,
+      -- breathing slowly like the Exalted ring
+      local glow = c:CreateTexture(nil, "BACKGROUND"); glow:SetTexture(P .. "bond_shield_glow"); glow:SetBlendMode("ADD")
+      glow:SetVertexColor(1, 0.59, 0.16, 0.85); glow:SetSize(S * 2, S * 2); glow:SetPoint("CENTER", sh, "CENTER", 0, 0)
+      local tk = 0
+      c:SetScript("OnUpdate", function(_, el) tk = tk + el; glow:SetAlpha(0.7 + 0.3 * math.sin(tk * 2 * math.pi / 2.4)) end)
+    end
     local Hs = S / 1.2; local gs = Hs * 0.8085 * 0.25 * (64 / 44)
     for _, gp in ipairs(GEMPOS) do
       local g = c:CreateTexture(nil, "OVERLAY"); g:SetTexture(P .. "bond_gem_" .. i); g:SetSize(gs, gs)
@@ -197,13 +201,15 @@ local function build(parent, w)
     end
     local lo, hi = (i - 1) * 5 + 1, i * 5
     local nm = fs(c, 13, "GameFontNormal"); nm:SetPoint("TOP", sh, "BOTTOM", 0, -4)
-    nm:SetText((lvl >= hi and t[3] or RED) .. t[1] .. "|r")
+    nm:SetText(((lvl >= lo) and t[3] or RED) .. t[1] .. "|r")
     local b = K.bar(c, t[2][1], t[2][2], t[2][3]); b:SetSize(math.min(150, ccw - 20), 12); b:SetPoint("TOP", nm, "BOTTOM", 0, -4)
     b:Set(math.max(0, math.min(1, (lvl - (lo - 1)) / 5)), "")
     local st = fs(c, 10); st:SetPoint("TOP", b, "BOTTOM", 0, -3); st:SetWidth(ccw - 6)
+    -- 1.0.8 (Taylor: "level 2 of 1-5 sounds off"): the tier you're on says how far along it is
+    -- and what's left; the others say where they're earned
     if lvl >= hi then st:SetText(GREEN .. "Earned|r")
-    elseif lvl >= lo then st:SetText(PALE .. "level " .. lvl .. " of " .. lo .. "-" .. hi .. "|r " .. RED .. "(" .. (hi - lvl) .. " levels until unlock)|r")
-    else st:SetText(PALE .. "levels " .. lo .. "-" .. hi .. "|r " .. RED .. "(" .. (lo - lvl) .. " levels until unlock)|r") end
+    elseif lvl >= lo then st:SetText(PALE .. "Level " .. lvl .. " of " .. hi .. "|r\n" .. GOLD .. (hi - lvl) .. " more to earn it|r")
+    else st:SetText(GREY .. "Levels " .. lo .. " to " .. hi .. "\nEarned at level " .. hi .. "|r") end
   end
   y = y - math.ceil(#TIERS / ccols) * 170 - 6
   -- your progress

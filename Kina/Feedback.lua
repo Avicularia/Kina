@@ -466,7 +466,7 @@ end
 local function buildPop()
   local f = CreateFrame("Frame", "KinaFeedbackPop", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   f:SetSize(500, 560); f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
-  f:SetFrameStrata("DIALOG"); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
+  f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(120); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true)
   f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
   if C.Skin and C.Skin.On and C.Skin.On() and C.Skin.Frame then C.Skin.Frame(f, 20) elseif f.SetBackdrop then
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })

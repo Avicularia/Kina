@@ -177,7 +177,8 @@ C.GuardScript(sender, "OnUpdate", "Share:145", function(self, dt)
   if it.channel == "WHISPER" and not (C.CanWhisper and C.CanWhisper(it.target)) then S.dropped = (S.dropped or 0) + 1; return end
   C.lastSend = { k = it.msg:sub(1, 1) .. (it.msg:match("^S|[^|]*|[^|]*|(%u)") or ""), t = GetTime and GetTime() or 0 }
   local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, it.msg, it.channel, it.target)
-  if ok and THROTTLED and result == THROTTLED then table.insert(queue, 1, it); tokens = 0 end
+  if ok and THROTTLED and result == THROTTLED then table.insert(queue, 1, it); tokens = 0
+  elseif ok and C.NetLog then pcall(C.NetLog, "out", it.channel, it.target, it.msg) end
 end)
 
 -- Pack "head" + items separated by sep into as few messages as fit.
@@ -876,6 +877,10 @@ local function onEnd(from, rest)
   local rec = received[uid] or { name = a.name }
   received[uid] = rec
   rec[what] = (rec[what] or 0) + count
+  if count > 0 and C.NetNote then
+    local lbl = (what == "M" and "an AH scan") or (what == "L" and "mob loot records") or (what == "O" and "merchant prices") or (what == "C" and "community mob records") or "vendor prices"
+    pcall(C.NetNote, string.format("got %s from %s: %d %s (group/guild)", lbl, short(a.name or from), count, what == "M" and "items" or "records"))
+  end
   if count > 0 and db().opts.verbose then
     local label = (what == "M" and "AH prices") or (what == "L" and "mob loot records") or (what == "O" and "merchant prices") or (what == "C" and "community mob records") or "vendor prices"
     C.Print(string.format("share: %d %s from %s.", count, label, short(a.name or from)))
@@ -1072,6 +1077,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
     if C.Heard then C.Heard(from) end
+    if C.NetLog then pcall(C.NetLog, "in", channel, from, text) end
     if channel == "GUILD" and not db().opts.guild and not text:match("^T|") then return end
     local kind, rest = text:match("^(%u)|(.*)$")
     if not kind then return end

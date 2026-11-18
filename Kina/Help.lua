@@ -1,4 +1,4 @@
-local _, C = ...
+local ADDON, C = ...
 -- Kina: the Help tab, "How Kina works" (0.9.1). Topics down the left, the words on the
 -- right. Plain data: edit TOPICS to change, add or remove a topic. The numbers match
 -- Rep.lua / Payout.lua / Vouch.lua / Rules.lua: change them here too if a rule changes.
@@ -7,15 +7,37 @@ local function H(s) return "\n" .. G .. s .. "|r\n" end
 
 local TOPICS = {
   { "What Kina is",
-    "Kina is a farming partner for WoW Forever. When Kina users farm together, every Kina keeps the same record of "
-    .. "the loot, splits it evenly, and keeps track of who owes whom until it's paid.\n\n"
-    .. "Your " .. G .. "Kina level|r (I to XX) shows how much you've farmed and settled with Kina. Your " .. G .. "standing|r "
-    .. "shows what kind of partner you are. Both are on your profile, for the people you farm with to see.\n\n"
+    "Kina is a gold companion for WoW Forever. It does four things:\n\n"
+    .. G .. "Hot mobs.|r The Hot Farms tab lists the mobs worth far more per kill than anything else at their level. "
+    .. "They carry a grey logo on their nameplates that lights up for you at 30 kills, with what they pay you.\n\n"
+    .. G .. "Your gold per hour.|r Press Start and the widget tracks gold, loot, kills and XP per hour, "
+    .. "every item at its best price, with AH prices shared by every Kina on the realm.\n\n"
+    .. G .. "Farming with friends.|r Kina users who join a farm share one log, split it evenly, "
+    .. "and keep track of who owes whom until it's paid.\n\n"
+    .. G .. "Your name.|r Your " .. G .. "Kina level|r (I to XX) shows how much you've farmed and settled; your " .. G .. "standing|r "
+    .. "shows what kind of partner you are. Both are on your profile, with the cosmetics you've earned.\n\n"
     .. GR .. "Kina is free. It never asks for money and never sells anything.|r" },
 
+  { "Hot mobs",
+    H("The list") .. "Hot mobs are chosen by the Kina team and change as often as the market does. Hot Farms shows "
+    .. "where each spawns; click one for a waypoint to the thickest spot.\n"
+    .. H("Lighting one up") .. "A hot mob's logo stays grey until you've killed it " .. G .. "30 times|r. Then it lights up, "
+    .. "with your own gold per kill on its nameplate.\n"
+    .. H("The archive") .. "Mobs that come off the list wait in Hot Farms > Archive with your kills, gold per kill, "
+    .. "total gold and card. Cards only level up while the mob is hot." },
+
+  { "AH prices",
+    "Kina prices every item from auction house scans: yours, your group's and guild's, and every Kina on the realm.\n\n"
+    .. "- A realm-wide price only counts when " .. G .. "several Kinas agree|r, so one bad scan can't move it.\n"
+    .. "- Scan by opening the AH and clicking the bar at the bottom of Kina. The game allows one scan every 15 minutes.\n"
+    .. "- Hover the bar to see whose scans Kina has and what's syncing.\n"
+    .. "- Turn off sharing in Settings: \"Share AH prices with every Kina\"." },
+
   { "Farming together",
-    H("Starting") .. "Press Start on the widget. Kina users in your group get an invite; everyone who joins shares one farm log, "
-    .. "so every widget shows the same numbers. Stop ends the farm for everyone.\n"
+    H("Starting") .. "Press Start on the widget. Kina users in your group get an invite: Join or No thanks. Nobody is put in a farm "
+    .. "without clicking Join. A roster shows who's in, who said no and who hasn't answered. Everyone who joins shares one "
+    .. "farm log, so every widget shows the same numbers. Anyone in the farm can end it for everyone.\n"
+    .. "- Said no? Your widget doesn't track the group's farm, and you can't start your own until it ends.\n"
     .. H("What counts") .. "- A farm counts for Kina level and standing after " .. G .. "15 minutes|r. Paused time doesn't count.\n"
     .. "- If anyone in the farm is " .. R .. "under level 10|r at any point, the farm gives no progression. The split still works.\n"
     .. "- A solo farm runs until you press Stop (time logged off doesn't count). A group farm stops itself "
@@ -129,9 +151,11 @@ local TOPICS = {
     .. "wiped or swapped, and their profile says so.|r" },
 
   { "Staying up to date",
-    "When someone in your group runs a newer Kina, yours stops earning (and losing) XP and standing until you update "
+    "When a newer Kina is out, the widget shows " .. G .. "Update available|r. Click it for the link.\n\n"
+    .. "When someone in your group runs a newer Kina, yours stops earning (and losing) XP and standing until you update "
     .. "and /reload. It never happens in the middle of a farm.\n\n"
-    .. "To update: download the new Kina, replace the Kina folder in Interface\\AddOns, and /reload." },
+    .. "To update: update Kina in the CurseForge app (or download it from CurseForge and replace the Kina folder in "
+    .. "Interface\\AddOns), then /reload." },
 
   { "Fair play",
     "Kina only believes what it can check:\n"
@@ -202,6 +226,20 @@ C.RegisterPanel("help", function(p)
     b:SetSize(162, 22); b:SetPoint("TOPLEFT", 14, -40 - (i - 1) * 26); b:SetText(t[1])
     b:SetScript("OnClick", function() show(i) end)
     btns[i] = b
+    if t.guide then
+      -- 1.0.8 (Taylor: the same glow the Exalted ring has): a warm gold halo that breathes
+      local P = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Cos\\"
+      local h1 = nav:CreateTexture(nil, "BACKGROUND"); h1:SetTexture(P .. "fx_halo"); h1:SetBlendMode("ADD")
+      h1:SetVertexColor(1, 0.76, 0.30, 0.75); h1:SetPoint("CENTER", b, "CENTER"); h1:SetSize(162 * 1.35, 22 * 2.6)
+      local h2 = nav:CreateTexture(nil, "BACKGROUND"); h2:SetTexture(P .. "fx_halo2"); h2:SetBlendMode("ADD")
+      h2:SetVertexColor(1, 0.95, 0.78, 0.5); h2:SetPoint("CENTER", b, "CENTER"); h2:SetSize(162 * 1.15, 22 * 1.7)
+      local tk = 0
+      b:HookScript("OnUpdate", function(_, el)
+        tk = tk + el
+        local a = 0.75 + 0.25 * math.sin(tk * 2 * math.pi / 2.4)
+        h1:SetAlpha(a); h2:SetAlpha(a)
+      end)
+    end
     if t.feedback then p.fbBtn = b end
   end
   local tour = CreateFrame("Button", nil, nav, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(tour) end

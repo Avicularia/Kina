@@ -114,6 +114,8 @@ function H.Begin(s)
   -- 1.0.2b (Taylor): an AH scan from the last 15 minutes (yours or one a groupmate shared)
   -- already priced this split: no need to ask anyone to scan again
   local last = math.max((C.market and C.market.scanTime) or 0, (C.Share and C.Share.NewestScan and C.Share.NewestScan()) or 0)
+  -- 1.0.8: a scan another Kina on the realm shared counts too
+  if C.NetPrices and C.NetPrices.NewestHave then local ok, t = pcall(C.NetPrices.NewestHave); if ok and type(t) == "number" then last = math.max(last, t) end end
   if last > 0 and C.Now() - last <= 900 then
     C.Print(string.format("this farm is priced from the AH scan %d min ago: no new scan needed.", math.floor((C.Now() - last) / 60)))
     return
