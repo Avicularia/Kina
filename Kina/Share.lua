@@ -134,7 +134,12 @@ function S.Progress()
     if b.what == "M" and now - (b.last or b.time or 0) < 60 then
       local n = 0; for _ in pairs(b.rows or {}) do n = n + 1 end
       local exp = (b.expect and b.expect > 0) and b.expect or nil
-      best = { dir = "in", who = b.from, pct = exp and math.min(99, math.floor(n * 100 / exp)) or nil, n = n }
+      -- 1.0.7 (Taylor: "hard to tell how long it will take"): items so far, of how many, and
+      -- an estimate from the rate they've been arriving at
+      if exp and n >= exp then exp = false end -- all in: not "coming in" any more
+      local took = now - (b.time or now)
+      local eta = (exp and n > 0 and took > 2) and math.max(1, math.floor((exp - n) * took / n + 0.5)) or nil
+      if exp ~= false then best = { dir = "in", who = b.from, pct = exp and math.min(99, math.floor(n * 100 / exp)) or nil, n = n, total = exp, eta = eta } end
     end
   end
   if best then return best end
@@ -142,7 +147,8 @@ function S.Progress()
   if q == 0 then peakQ = 0; return nil end
   if S.dumping and S.dumping.M then
     if q > peakQ then peakQ = q end
-    return { dir = "out", pct = peakQ > 0 and math.floor((peakQ - q) * 100 / peakQ) or 0 }
+    -- about one message a second goes out (the game's limit)
+    return { dir = "out", pct = peakQ > 0 and math.floor((peakQ - q) * 100 / peakQ) or 0, eta = q }
   end
 end
 
@@ -895,6 +901,11 @@ local function buildSnapshots()
       list[#list + 1] = { t = m.t, items = m.items, name = a.name }
     end
   end
+  -- 1.0.7: prices the Kina network agrees on (NetPrices.lua)
+  if C.NetPrices and C.NetPrices.Snapshot then
+    local ok, cs = pcall(C.NetPrices.Snapshot)
+    if ok and cs then list[#list + 1] = cs end
+  end
   table.sort(list, function(x, y) return x.t > y.t end)
   list.ownT = C.market.scanTime
   snapshots = list
@@ -1127,7 +1138,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
           local mine = C.FarmSync.First(UnitName and UnitName("player"))
           if to == "" or to == mine then C.FarmSync.Receive(from, payload) end
         end
-      elseif kind == "Z" and C.session and C.session.sync then
+      elseif kind == "Z" and C.session and C.session.sync and not rest:match("^%x+|decline|") then
         -- an older Kina's farm command: can't join a shared farm
         if not S.warnedOld then S.warnedOld = true; C.Print(tostring(from) .. " runs an older Kina: group farms need Kina 0.15 or newer on both sides.") end
       elseif kind == "Z" then
@@ -1135,7 +1146,11 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if uid and uid ~= db().uid and ((C.TrackOnly and C.TrackOnly()) or (C.IsTrackerAuthor and C.IsTrackerAuthor(db().authors[uid]))) then
           -- 0.9.20: tracker only (mine or theirs): group farm commands don't apply
         elseif uid and uid ~= db().uid and C.InGroupName and C.InGroupName(from) then
-          if cmd == "start" and not C.session then C.StartSession(label ~= "" and label or nil, true, campKey ~= "" and campKey or nil)
+          -- 1.0.7 (Taylor): nobody is put in a farm without saying yes
+          if cmd == "start" and not C.session then
+            if C.FarmSync and C.FarmSync.AskSolo then C.FarmSync.AskSolo(from, label, campKey) end
+          elseif cmd == "decline" then
+            if C.FarmSync and C.FarmSync.OnDecline then C.FarmSync.OnDecline(from, label) end
           elseif cmd == "stop" and C.session then C.StopSession(nil, "group stopped", false, true)
           elseif cmd == "pause" then C.PauseSession(true, true)
           elseif cmd == "resume" then C.PauseSession(true, false) end

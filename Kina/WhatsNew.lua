@@ -24,6 +24,12 @@ W.MAJOR = {
     { "Play Kina with a controller", "With gamepad mode on, Kina's windows work with the controller: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs. Kina only takes the controller while its window is open and you're out of combat.", help = "Controller" },
     { "Key bindings", "Options > Key Bindings > Kina: open Kina, Start / stop farm, Scan the AH, Hot Farms and a waypoint to the nearest hot mob. Settings also has Window size buttons, so there's no corner to drag." },
   } },
+  { ver = "1.0.7", pages = {
+    { "AH prices from every Kina", "Kina now shares AH prices with every Kina user on the realm, not just your group or guild. A price only counts when several Kinas agree, so one bad scan can't move it. Turn it off in Settings." },
+    { "Group farms ask first", "Nobody is put in a farm without clicking Join. Start shows everyone's answer: a green check, a red X or a yellow question mark. Said no? You can't start your own farm until the group's ends. Anyone in the farm can end it for everyone." },
+    { "Feedback, front and center", "A Feedback button now sits on the bottom bar of every tab, and the Kina button pulses green when an answer is waiting." },
+    { "Updates and scans", "When a newer Kina is out, the widget shows Update available. The scan bar now says whose AH scan is coming in, how far along it is and about how long is left." },
+  } },
 }
 
 local function verNum(v) local a, b, c = tostring(v or ""):match("^(%d+)%.(%d+)%.?(%d*)"); return a and (tonumber(a) * 10000 + tonumber(b) * 100 + (tonumber(c) or 0)) or 0 end

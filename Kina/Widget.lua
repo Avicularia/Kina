@@ -610,7 +610,12 @@ local function build()
   local runs = smallButton(w, "Log", ironLook and 60 or 56, function() if C.OpenFarmLog then C.OpenFarmLog() else C.Toggle("Session") end end, 26)
   runs:SetPoint("LEFT", w.pause, "RIGHT", 4, 0)
   tip(runs, "Farm log", "Every kill, drop and coin this farm counted, newest first. Right-click a line to leave it out.")
-  local hide = smallButton(w, "Kina", ironLook and 68 or 64, function() C.Toggle() end, 26)
+  local hide = smallButton(w, "Kina", ironLook and 68 or 64, function()
+    -- 1.0.7 (Taylor): a feedback message waiting: the Kina button opens it first
+    if C.Feedback and C.Feedback.Unread and C.Feedback.Unread() > 0 and C.Feedback.OpenPopup then C.Feedback.OpenPopup(); return end
+    C.Toggle()
+  end, 26)
+  w.kinaBtn = hide
   hide:SetPoint("LEFT", runs, "RIGHT", 4, 0)
   tip(hide, "Kina", "Opens the main Kina window: dungeons, farms, Hot and skill-up plans.")
   -- pay what the split says you owe: opens the trade and puts the money in

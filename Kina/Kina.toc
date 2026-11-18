@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 1.0.6
+## Version: 1.0.7
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -53,6 +53,8 @@ WhatsNew.lua
 Net.lua
 Feedback.lua
 FeedbackDrafts.lua
+NetPrices.lua
+Update.lua
 Record.lua
 SeasonGuide.lua
 Brain.lua

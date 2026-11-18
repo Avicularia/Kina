@@ -2445,6 +2445,12 @@ local PHASE_TEXT = { request = "Asking the auction house for a full scan", read 
   stopped = "Scan stopped: auction house closed" }
 
 -- "prices: Vellaura's scan 3m ago (yours 14m)": the newest scan in use, live
+function C.ScanEta(secs)
+  secs = math.floor(secs or 0)
+  if secs < 60 then return secs .. "s" end
+  return math.floor(secs / 60) .. "m " .. string.format("%02ds", secs % 60)
+end
+
 function C.ScanSourceText()
   local list = C.Share and C.Share.Sources and C.Share.Sources() or {}
   if not list[1] then return "no scan yet" end
@@ -2453,9 +2459,14 @@ function C.ScanSourceText()
   -- 1.2.6: a scan on its way in or out shows first
   local pr = C.Share and C.Share.Progress and C.Share.Progress()
   if pr then
-    local pct = pr.pct and (" " .. pr.pct .. "%") or ""
-    if pr.dir == "in" then return "getting " .. (C.Books and C.Books.Name and C.Books.Name(pr.who or "?") or "?") .. "'s scan" .. pct .. (pr.pct and "" or (" (" .. pr.n .. " prices)")) end
-    return "sending your scan to the group" .. pct
+    local pct = pr.pct and ("  " .. pr.pct .. "%") or ""
+    local eta = pr.eta and ("  ~" .. C.ScanEta(pr.eta) .. " left") or ""
+    if pr.dir == "in" then
+      local who = Ambiguate and pr.who and Ambiguate(pr.who, "short") or pr.who or "?"
+      local of = pr.total and (" " .. pr.n .. "/" .. pr.total) or (" " .. pr.n .. " items")
+      return "getting " .. who .. "'s AH scan" .. of .. pct .. eta
+    end
+    return "sending your AH scan to the group" .. pct .. eta
   end
   local text = "prices: " .. (top.name and ((Ambiguate and Ambiguate(top.name, "short") or top.name) .. "'s") or "your") .. " scan " .. ago(top.t)
   if top.name then
@@ -2488,6 +2499,21 @@ local function buildScanBar(f)
     C.TipOwner(self)
     GameTooltip:AddLine("Auction house scan", 1, 0.82, 0)
     GameTooltip:AddLine("Click to scan. Kina then scans again every 15 minutes (the game's limit) while the auction house stays open. Closing the AH stops it.", 1, 1, 1, true)
+    -- 1.0.7: whose scans Kina has, how old, and what's moving right now
+    local function ago(t) local m = math.floor((C.Now() - (t or 0)) / 60); return m < 1 and "just now" or (m < 60 and (m .. " min ago") or (math.floor(m / 60) .. " h ago")) end
+    local list = C.Share and C.Share.Sources and C.Share.Sources() or {}
+    if list[1] then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine("Scans Kina has (newest is used first)", 1, 0.82, 0)
+      for _, s in ipairs(list) do
+        local who = s.name and ((Ambiguate and Ambiguate(s.name, "short") or s.name) .. "'s scan") or "Your scan"
+        GameTooltip:AddDoubleLine(who, ago(s.t) .. ", " .. (s.items or 0) .. " items", 1, 1, 1, 0.8, 0.8, 0.8)
+      end
+      GameTooltip:AddLine("A group member's scan is fetched when it's newer than the one Kina already has from them.", 0.7, 0.7, 0.7, true)
+    end
+    local sync = C.Share and C.Share.SyncStatus and C.Share.SyncStatus() or ""
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(sync ~= "" and ("Syncing: " .. sync) or "Nothing syncing right now", 0.7, 0.9, 1, true)
     GameTooltip:Show()
   end)
   bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2526,16 +2552,18 @@ local function buildScanBar(f)
       -- idle: the bar fills as the 15-minute limit runs out
       local left = C.ScanCooldown and C.ScanCooldown() or 0
       local ageText = C.ScanSourceText and C.ScanSourceText() or "no scan yet"
-      local sync = C.Share and C.Share.SyncStatus and C.Share.SyncStatus() or ""
-      if sync ~= "" then ageText = ageText .. "  |  syncing: " .. sync end
+      -- 1.0.7: small network chatter ("sending 2 messages") isn't a scan; it's in the tooltip.
+      -- A partner's scan coming in fills the bar blue with its own progress.
+      local pr = C.Share and C.Share.Progress and C.Share.Progress()
       self:SetStatusBarColor(0.45, 0.45, 0.5); self:SetValue(1 - left / 900)
+      if pr then self:SetStatusBarColor(0.3, 0.76, 0.97); self:SetValue((pr.pct or 0) / 100) end
       local loop = C.scanLoop and C.ahOpen
       if left > 0 then
-        self.text:SetText(string.format("%s  |  %s %d:%02d", ageText, loop and "auto-scan in" or "scan allowed in", math.floor(left / 60), left % 60))
+        self.text:SetText(string.format("%s  |  %s %d:%02d", ageText, loop and "next scan" or "scan in", math.floor(left / 60), left % 60))
       elseif C.ahOpen then
-        self.text:SetText(ageText .. "  |  " .. (loop and "auto-scan: scanning..." or "click to scan (then every 15 min)"))
+        self.text:SetText(ageText .. "  |  " .. (loop and "scanning..." or "click to scan"))
       else
-        self.text:SetText(ageText .. "  |  open the AH, then click to scan")
+        self.text:SetText(ageText .. "  |  open the AH to scan")
       end
     end
   end)
@@ -2788,6 +2816,8 @@ local function buildSettings(f)
     "A small line under your quest tracker when a hot mob is close (never in combat, dungeons or cities).")
   toggle("Kina network", function() return not st.netOff end, function(v) st.netOff = not v; if v and C.Net then C.Net.Join() end end,
     "Lets you write to the developer (Help > Feedback) and see when they're online. Invisible: nothing shows in chat.")
+  toggle("Share AH prices with every Kina", function() return not st.netPricesOff end, function(v) st.netPricesOff = not v; if C.NetPrices then C.NetPrices.Invalidate() end; if C.Share and C.Share.InvalidateMarket then C.Share.InvalidateMarket() end end,
+    "Your scans help every Kina on the realm, and theirs keep your prices fresh. A price only counts where several Kinas agree.")
   toggle("Controller in Kina's windows", function() return not st.padOff end, function(v) st.padOff = not v end,
     "With gamepad mode on: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs.")
   if not C.PUBLIC then
@@ -3307,6 +3337,16 @@ local function build()
     for _, b in ipairs({ kindB, nextB, prevB }) do b:Hide() end
     sess:ClearAllPoints(); sess:SetPoint("RIGHT", scan, "LEFT", -6, 0)
   end
+  -- 1.0.7 (Taylor: feedback was buried in Help): a Feedback button on the bottom bar, on
+  -- every tab. Players: the feedback window. The developer: the inbox. It shows unread
+  -- answers, and a green dot while the developer is online.
+  local fbB = button(f, "Feedback", 110, function()
+    if C.Feedback and C.Feedback.OpenPopup then C.Feedback.OpenPopup() end
+  end)
+  fbB:SetPoint("RIGHT", sess, "LEFT", -6, 0)
+  fbB.dot = fbB:CreateTexture(nil, "OVERLAY"); fbB.dot:SetSize(10, 10); fbB.dot:SetPoint("LEFT", fbB, "LEFT", 7, 0)
+  fbB.dot:SetTexture("Interface\\COMMON\\Indicator-Green"); fbB.dot:Hide()
+  ui.feedbackButton = fbB
   buildSettings(f)
   -- ROI filter row (every tab): rows below the typed ROI %, and with the switch on,
   -- rows that don't pay for your time, are hidden. They are still calculated.

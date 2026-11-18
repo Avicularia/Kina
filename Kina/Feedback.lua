@@ -94,6 +94,7 @@ function FB.Write(text, t)
   text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
   if text == "" then return nil, "write something first" end
   if #text > FB.MAX then text = text:sub(1, FB.MAX) end
+  if not N().IAmDeveloper() and FB.MyMute and FB.MyMute() then return nil, "you're " .. FB.MuteText(FB.MyMute()) .. "." end
   if not t then
     if N().IAmDeveloper() then return nil, "pick a thread to answer" end
     t = thread(newId(), nil)
@@ -101,6 +102,48 @@ function FB.Write(text, t)
   table.insert(t.msgs, { mine = true, t = C.Now(), text = text })
   FB.Flush()
   return t
+end
+
+------------------------------------------------------------------ muting
+-- 1.0.7 (Taylor): the developer can mute someone misusing feedback for 7 or 30 days, or
+-- ban them. The developer's Kina drops their messages (and tells their Kina, so it stops
+-- trying and their window says so). The developer's Kina is what enforces it.
+function FB.MuteOf(name)
+  local m = db().mutes and db().mutes[tostring(name):lower()]
+  if not m then return nil end
+  if m.untilT and m.untilT > 0 and C.Now() >= m.untilT then db().mutes[tostring(name):lower()] = nil; return nil end
+  return m
+end
+local function muteText(untilT)
+  if not untilT or untilT == 0 then return "banned from sending feedback" end
+  return "muted until " .. (date and date("%b %d", untilT) or tostring(untilT))
+end
+FB.MuteText = muteText
+local function tellMuted(name)
+  local m = FB.MuteOf(name)
+  if m then N().Tell(name, string.format("M|%d", m.untilT or 0)) end
+end
+function FB.Mute(name, days)
+  if not (name and N().IAmDeveloper()) then return end
+  local d = db(); d.mutes = d.mutes or {}
+  d.mutes[name:lower()] = { untilT = days and (C.Now() + days * 86400) or 0, at = C.Now(), name = name }
+  tellMuted(name)
+  C.Print(name .. " is " .. muteText(d.mutes[name:lower()].untilT) .. ".")
+  if C.Refresh then C.Refresh() end
+end
+function FB.Unmute(name)
+  local d = db()
+  if d.mutes then d.mutes[tostring(name):lower()] = nil end
+  if N().Heard(name) then N().Tell(name, "M|-1") end
+  C.Print(tostring(name) .. " can send feedback again.")
+  if C.Refresh then C.Refresh() end
+end
+-- you (a player): muted by the developer?
+function FB.MyMute()
+  local u = db().mutedUntil
+  if u == nil then return nil end
+  if u > 0 and C.Now() >= u then db().mutedUntil = nil; return nil end
+  return u
 end
 
 ------------------------------------------------------------------ receiving
@@ -126,6 +169,11 @@ local function receive(from, f, kind)
   local t
   if kind == "F" then
     if not Nt.IAmDeveloper() then return end
+    if FB.MuteOf(from) then
+      -- muted or banned: dropped; their Kina is told, and stops sending it
+      Nt.Tell(from, string.format("K|%s|%d|%s", tid, seq, kind)); tellMuted(from)
+      return
+    end
     t = thread(tid, from)
   else
     if not Nt.IsDeveloper(from) then return end -- only the developer answers
@@ -196,6 +244,14 @@ C.After(0, function()
   Nt.On("R", function(from, f) receive(from, f, "R") end)
   Nt.On("K", got)
   Nt.On("H", hello)
+  Nt.On("M", function(from, f)
+    if not Nt.IsDeveloper(from) then return end -- only the developer mutes
+    local u = tonumber(f[2])
+    if not u then return end
+    db().mutedUntil = (u >= 0) and u or nil
+    C.Print(u < 0 and "you can send feedback again." or ("|cffff5050you're " .. muteText(u) .. ".|r"))
+    if C.Refresh then C.Refresh() end
+  end)
 end)
 if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(60, function() pcall(FB.Flush) end) end
 
@@ -244,6 +300,19 @@ local function build(parent)
   page.done:SetSize(110, 24); page.done:SetPoint("RIGHT", page.send, "LEFT", -6, 0)
   page.done:SetScript("OnClick", function() if sel then sel.done = not sel.done; FB.Draw() end end)
   page.count = C.Text(page, "OVERLAY", "GameFontDisableSmall"); page.count:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 190, 14)
+  -- 1.0.7: mute / ban the player in this thread
+  page.mute = {}
+  local opts = { { "Mute 7 days", 7 }, { "Mute 30 days", 30 }, { "Ban", false }, { "Unmute", "un" } }
+  for i, o in ipairs(opts) do
+    local b = CreateFrame("Button", nil, page, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(b) end
+    b:SetSize(96, 20); b:SetPoint("TOPRIGHT", page, "TOPRIGHT", -6 - (4 - i) * 100, 0); b:SetText(o[1])
+    b:SetScript("OnClick", function()
+      if not (sel and sel.with) then return end
+      if o[2] == "un" then FB.Unmute(sel.with) elseif o[2] == false then FB.Mute(sel.with, nil) else FB.Mute(sel.with, o[2]) end
+      FB.Draw()
+    end)
+    page.mute[i] = b
+  end
   eb:SetScript("OnTextChanged", function(self) page.count:SetText(#(self:GetText() or "") .. " / " .. FB.MAX) end)
 end
 function FB.Draw()
@@ -292,6 +361,12 @@ function FB.Draw()
   page.draftNote:SetText(page.fromDraft and "|cff78beffDraft from Claude: edit it, then Reply.|r" or "")
   page.discard:SetShown(page.fromDraft and true or false)
   page.edit:SetShown(not (dev and not sel)); page.send:SetShown(not (dev and not sel))
+  local muted = dev and sel and sel.with and FB.MuteOf(sel.with)
+  for i, b in ipairs(page.mute) do
+    b:SetShown(dev and sel and sel.with and ((i == 4) == (muted and true or false)) and true or false)
+  end
+  if muted then page.status:SetText("|cffff5050" .. sel.with .. " is " .. muteText(muted.untilT) .. ".|r Their messages are dropped.") end
+  if not dev and FB.MyMute() then page.status:SetText("|cffff5050You're " .. muteText(FB.MyMute()) .. ".|r") end
 end
 -- Help shows it as a page (returns the height it uses)
 function FB.Show(child, w)
@@ -317,6 +392,33 @@ local function badge()
   local n = FB.Unread()
   dot.n:SetText(n > 9 and "9+" or tostring(n))
   dot:SetShown(n > 0)
+  -- 1.0.7 (Taylor): the widget's Kina button pulses green while a message waits
+  local w = rawget(_G, "KinaWidget")
+  local kb = w and w.kinaBtn
+  if kb then
+    if not kb.fbGlow then
+      local g = kb:CreateTexture(nil, "OVERLAY", nil, 6)
+      g:SetPoint("TOPLEFT", -6, 6); g:SetPoint("BOTTOMRIGHT", 6, -6)
+      g:SetTexture("Interface\\AddOns\\Kina\\Media\\Cos\\fx_round"); g:SetBlendMode("ADD"); g:SetVertexColor(0.3, 1, 0.4)
+      if g.CreateAnimationGroup then
+        local ag = g:CreateAnimationGroup(); ag:SetLooping("BOUNCE")
+        local a = ag:CreateAnimation("Alpha"); a:SetFromAlpha(0.15); a:SetToAlpha(0.9); a:SetDuration(0.8)
+        kb.fbAnim = ag
+      end
+      kb.fbGlow = g
+    end
+    kb.fbGlow:SetShown(n > 0)
+    if kb.fbAnim then if n > 0 then if not kb.fbAnim:IsPlaying() then kb.fbAnim:Play() end else kb.fbAnim:Stop() end end
+  end
+  -- 1.0.7: the bottom-bar Feedback button
+  local fb = u.feedbackButton
+  if fb then
+    local dev = C.Net and C.Net.IAmDeveloper()
+    local label = dev and "Inbox" or "Feedback"
+    if n > 0 then label = label .. " |cffff4040(" .. n .. ")|r" end
+    fb:SetText(label)
+    fb.dot:SetShown((not dev) and C.Net and C.Net.DevOnline() and true or false)
+  end
 end
 FB.Badge = badge
 if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(2, function() pcall(badge); pcall(FB.Draw); pcall(FB.DrawPop) end) end
@@ -486,11 +588,17 @@ function FB.DrawPop()
   for _, t in pairs(db().threads) do if not t.with then unread = unread + (t.unread or 0); t.unread = 0 end end
   pop.sub:SetText(#msgs > 0 and (MUTED .. #msgs .. " message" .. (#msgs == 1 and "" or "s") .. "|r") or "")
   pop.note:SetText(on and (GREEN .. "They're online: it goes straight to them.|r") or "If they're offline, it waits on your PC and sends when they're back.")
+  local mm = FB.MyMute()
+  if mm then pop.note:SetText("|cffff5050You're " .. muteText(mm) .. ".|r") end
+  pop.send:SetEnabled(not mm)
   if pop.sf.SetVerticalScroll and pop.sf.GetVerticalScrollRange then pop.sf:SetVerticalScroll(pop.sf:GetVerticalScrollRange() or 0) end
 end
 function FB.OpenPopup()
   if N().IAmDeveloper() then
     C.Toggle("Help"); if C.ShowHelpTopic then C.ShowHelpTopic("Feedback") end
+    -- a message waiting: open that thread
+    for _, t in ipairs(FB.Threads()) do if (t.unread or 0) > 0 then sel = t; FB.MarkRead(t); break end end
+    pcall(FB.Draw)
     return
   end
   pop = pop or buildPop()

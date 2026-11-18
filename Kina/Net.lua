@@ -67,35 +67,61 @@ function N.Join()
 end
 
 ------------------------------------------------------------------ sending (paced)
-local queue, busy = {}, false
-local GAP = 0.35
-local function pump()
-  local item = table.remove(queue, 1)
-  if not item then busy = false; return end
-  local ok = false
-  if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-    if item.kind == "CHANNEL" then
-      local id = channelId()
-      if id then ok = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "CHANNEL", tostring(id)) end
-    else
-      ok = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", item.to)
-    end
+-- The game allows each addon about one message a second (a burst of a few, then one a
+-- second); more are dropped. Kina keeps under it: a bucket of 6 that refills one a
+-- second, and a message the game turns away goes back to the front of the line.
+local queue = {}
+local tokens, acc = 6, 0
+local THROTTLED = Enum and Enum.SendAddonMessageResult and Enum.SendAddonMessageResult.AddonMessageThrottle
+local sender = CreateFrame("Frame")
+sender:Hide()
+local function sendOne(item)
+  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return true end
+  local ok, res
+  if item.kind == "CHANNEL" then
+    local id = channelId()
+    if not id then return true end
+    ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "CHANNEL", tostring(id))
+  else
+    ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", item.to)
   end
-  if C.After then C.After(GAP, pump) else busy = false end
+  if ok and THROTTLED and res == THROTTLED then return false end
+  return true
 end
+sender:SetScript("OnUpdate", function(self, el)
+  acc = acc + el
+  if acc >= 1 then acc = acc - 1; tokens = math.min(6, tokens + 1) end
+  if #queue == 0 then self:Hide(); return end
+  -- big transfers wait out fights in dungeons and raids
+  if InCombatLockdown and InCombatLockdown() and IsInInstance and IsInInstance() then return end
+  while tokens >= 1 and queue[1] do
+    local item = table.remove(queue, 1)
+    tokens = tokens - 1
+    if not sendOne(item) then table.insert(queue, 1, item); tokens = 0; break end
+  end
+end)
+N.Queued = function() return #queue end
 local function push(item)
-  if #queue > 200 then table.remove(queue, 1) end
-  queue[#queue + 1] = item
-  if not busy then busy = true; pump() end
+  if #queue > 3000 then return end
+  -- small notes go before big transfers
+  if item.urgent then
+    local pos = 1
+    while queue[pos] and queue[pos].urgent do pos = pos + 1 end
+    table.insert(queue, pos, item)
+  else queue[#queue + 1] = item end
+  sender:Show()
 end
-function N.Broadcast(msg) if N.Enabled() then push({ kind = "CHANNEL", msg = msg }) end end
+function N.Broadcast(msg) if N.Enabled() then push({ kind = "CHANNEL", msg = msg, urgent = true }) end end
+-- big transfers (a price scan): behind the small notes
+function N.BroadcastBulk(msg) if N.Enabled() and #msg <= 255 then push({ kind = "CHANNEL", msg = msg }) end end
 -- to one character: only someone heard from in the last few minutes (never "No player named")
 local heard = {}
 N.heard = heard
 function N.Heard(name) local t = heard[short(name):lower()]; return t and (C.Now() - t) < 5 * 60 end
-function N.Tell(to, msg)
+function N.Tell(to, msg, bulk)
   if not (N.Enabled() and to and N.Heard(to)) then return false end
-  push({ kind = "WHISPER", to = to, msg = msg })
+  if #msg > 255 then return false end
+  push({ kind = "WHISPER", to = to, msg = msg, urgent = not bulk })
   return true
 end
 

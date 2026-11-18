@@ -59,7 +59,7 @@ end
 
 ------------------------------------------------------------------ which window
 -- Kina's windows, topmost first (dialogs over pages over the main window)
-local WINDOWS = { "KinaFeedbackPop", "KinaDialog1", "KinaDialog2", "KinaDialog3", "KinaDialog4", "KinaTourCard", "KinaWhatsNew", "KinaWelcomePick",
+local WINDOWS = { "KinaUpdateWindow", "KinaFeedbackPop", "KinaDialog1", "KinaDialog2", "KinaDialog3", "KinaDialog4", "KinaTourCard", "KinaWhatsNew", "KinaWelcomePick",
   "KinaCommend", "KinaSettle", "KinaPriceHold", "KinaRules", "KinaGuideFlyout", "KinaRecordPanel", "KinaProfile",
   "KinaMenu", "KinaHotOptions", "KinaDetail" }
 function P.Window()

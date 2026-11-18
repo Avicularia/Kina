@@ -1,3 +1,18 @@
+# Kina 1.0.7
+
+- New: AH prices from every Kina on the realm, not just your guild.
+- A network price only counts where several Kinas agree; one bad scan can't move it.
+- New: Settings switch "Share AH prices with every Kina".
+- Network prices are packed small and sent once to everyone: a full scan in about 2 minutes.
+- New: "Update available" on the widget (or a window) when a newer Kina is out.
+- New: a Feedback button on the bottom bar of every tab, with a green dot when the developer is online.
+- The Kina button pulses green when a feedback answer is waiting.
+- Group farms: nobody is put in a farm without clicking Join.
+- New: a farm roster shows who's in, who said no and who hasn't answered.
+- Said no to the group's farm? You can't start your own until it ends.
+- Anyone in the farm can end it for everyone.
+- Scan bar: shows whose scan is coming in, how far along, and about how long is left.
+
 # Kina 1.0.6
 
 - New: hot mobs for everyone: a grey logo that lights up for you at 30 of your kills.
