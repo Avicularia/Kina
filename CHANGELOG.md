@@ -1,3 +1,13 @@
+# Kina 1.0.9
+
+- Kina network fixed: scans now reach every Kina, on every realm and layer.
+- Kinas say hello every 5 minutes, so a newer scan reaches people who logged in later.
+- Your scan plus one other Kina is enough for a shared price.
+- Kina keeps trying to join the network until it's in, and holds messages until then.
+- The scan bar shows when prices come from the Kina network.
+- Network log: full names, versions and who's online, with correct labels.
+- Debts are gone: splits now just show each player's fair share. Nobody owes anybody.
+
 # Kina 1.0.8
 
 - Fix: walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts.

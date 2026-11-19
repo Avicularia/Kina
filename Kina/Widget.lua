@@ -400,29 +400,9 @@ function C.RefreshWidget()
     if last and last.hold and not last.hold.done then
       w.status:SetText("|cffffc54awaiting for the auction house scan|r")
     elseif tr and tr[1] then
-      -- what's still open between you and the group on that farm (part payments count)
-      local r = C.Books and C.Books.Farm(last)
-      local open = {}
-      for _, d in ipairs(r and r.debts or {}) do if d.amt - d.done >= 1 then open[#open + 1] = d end end
-      -- name the same person the Pay / Ask button does
-      local tgt = C.PayDue and C.PayDue(); tgt = tgt and tgt.to or (C.ReceiveDue and C.ReceiveDue() or {}).from
-      local d = open[1]
-      for _, o in ipairs(open) do if tgt and C.Books.Name(o.who) == C.Books.Name(tgt) then d = o; break end end
-      local tot = C.PayDue and C.PayDue()
-      if not tot then tot = C.ReceiveDue and C.ReceiveDue(); if tot then tot.to = tot.from end end
-      if tot and tot.n and tot.n > 1 then
-        -- 1.2.6: the total with that person across every open farm, same as the button
-        local nm = C.Books.Name(tot.to)
-        local farms = string.format(" |cff9d9d9d(%d farms)|r", tot.n)
-        w.status:SetText(C.PayDue() and ("|cffff8040you owe " .. nm .. " " .. C.Money(tot.amt) .. "|r" .. farms)
-          or ("|cffffc54a" .. nm .. " owes you " .. C.Money(tot.amt) .. "|r" .. farms))
-      elseif d then
-        local left = C.Money(math.floor(d.amt - d.done))
-        local more = #open > 1 and string.format(" |cff9d9d9d(+%d more)|r", #open - 1) or ""
-        w.status:SetText(d.dir == "owe" and ("|cffff8040you owe " .. C.Books.Name(d.who) .. " " .. left .. "|r" .. more)
-          or ("|cffffc54a" .. C.Books.Name(d.who) .. " owes you " .. left .. "|r" .. more))
-      elseif r and #r.debts > 0 then w.status:SetText("|cff7CFC00split settled|r")
-      else w.status:SetText("|cff7CFC00" .. tr[1].from .. " pays " .. tr[1].to .. " " .. C.Money(tr[1].amt) .. "|r") end
+      -- 1.1.0: no debts; the split is information (fair share in the farm's log)
+      local each = last.split and last.split.each
+      w.status:SetText("|cff7CFC00split: " .. (each and ("each gets " .. C.Money(math.floor(each))) or "fair share in the Ledger") .. "|r")
     elseif last and last.g and not last.settled and last.gview then w.status:SetText("|cffffc54asplit: waiting for the leader's numbers|r")
     else w.status:SetText("") end
     w.go:SetText(run and "|cff7CFC00Join|r" or "|cff7CFC00Start|r")
@@ -646,7 +626,7 @@ local function build()
   end)
   w.scan:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   w.pay:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  tip(w.pay, "Settle up", "Pay: opens a trade with your partner and puts in the exact amount the split says. Ask: sends them a Pay request. Stand close to each other.\n\nRight-click: the Debts page (Pay, more time, Forgive).")
+  tip(w.pay, "Settle up", "")
 
   -- 1.2.1 iron look: a clean layout with fixed, chosen text sizes. Scaling the game's
   -- small fonts up made text sit on the tile borders and crowd the header; the whole

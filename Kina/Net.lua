@@ -58,13 +58,29 @@ local function hideFromChat()
     if cf then pcall(ChatFrame_RemoveChannel, cf, N.CHANNEL) end
   end
 end
+-- 1.0.9 (Taylor: "I don't think it's working"): joining at login can fail silently (chat
+-- not ready yet, or too many channels); Kina now keeps trying every 30 seconds and says so
+-- in the network log
+N.joinTries = 0
 function N.Join()
   if not N.Enabled() then return end
-  if channelId() then hideFromChat(); return end
+  if channelId() then hideFromChat(); return true end
   local join = JoinTemporaryChannel or JoinChannelByName
+  N.joinTries = N.joinTries + 1
   if join then pcall(join, N.CHANNEL) end
-  if C.After then C.After(2, hideFromChat) end
+  if C.After then C.After(2, function()
+    hideFromChat()
+    local id = channelId()
+    if id and not N.joinedNoted then
+      N.joinedNoted = true
+      if C.NetNote then pcall(C.NetNote, "joined the Kina network (channel " .. id .. ")") end
+      if N.Presence then N.Presence() end
+    elseif not id and N.joinTries == 3 and C.NetNote then
+      pcall(C.NetNote, "can't join the Kina network yet (you may be in the most chat channels the game allows); still trying")
+    end
+  end) end
 end
+function N.Joined() return channelId() ~= nil end
 
 ------------------------------------------------------------------ sending (paced)
 -- The game allows each addon about one message a second (a burst of a few, then one a
@@ -80,10 +96,16 @@ local function sendOne(item)
   local ok, res
   if item.kind == "CHANNEL" then
     local id = channelId()
-    if not id then return true end
+    if not id then
+      -- 1.0.9: not joined (yet): keep it for up to 10 minutes instead of dropping it
+      item.t0 = item.t0 or C.Now()
+      if C.Now() - item.t0 > 600 then return true end
+      N.Join()
+      return "wait"
+    end
     ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "CHANNEL", tostring(id))
   else
-    ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", item.to)
+    ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", N.WhisperName(item.to))
   end
   if ok and THROTTLED and res == THROTTLED then return false end
   if ok and C.NetLog then pcall(C.NetLog, "out", item.kind == "CHANNEL" and "CHANNEL" or "WHISPER", item.to, item.msg, true) end
@@ -98,7 +120,9 @@ sender:SetScript("OnUpdate", function(self, el)
   while tokens >= 1 and queue[1] do
     local item = table.remove(queue, 1)
     tokens = tokens - 1
-    if not sendOne(item) then table.insert(queue, 1, item); tokens = 0; break end
+    local r = sendOne(item)
+    if r == "wait" then table.insert(queue, 1, item); tokens = 0; break end
+    if not r then table.insert(queue, 1, item); tokens = 0; break end
   end
 end)
 N.Queued = function() return #queue end
@@ -118,6 +142,17 @@ function N.BroadcastBulk(msg) if N.Enabled() and #msg <= 255 then push({ kind = 
 -- to one character: only someone heard from in the last few minutes (never "No player named")
 local heard = {}
 N.heard = heard
+-- 1.0.9 (the scans never arrived): Forever shows "First Surname", but a message to one
+-- character goes to the character's name alone (plus its realm if it has one)
+N.whisperAs = {}
+function N.WhisperName(to)
+  if type(to) ~= "string" then return to end
+  local known = N.whisperAs[short(to):lower()]
+  if known then return known end
+  local name, realm = to:match("^([^%-]+)%-?(.*)$")
+  name = (name or to):match("^(%S+)") or name
+  return (realm and realm ~= "") and (name .. "-" .. realm) or name
+end
 function N.Heard(name) local t = heard[short(name):lower()]; return t and (C.Now() - t) < 5 * 60 end
 function N.Tell(to, msg, bulk)
   if not (N.Enabled() and to and N.Heard(to)) then return false end
@@ -142,6 +177,11 @@ C.On("CHAT_MSG_ADDON", function(_, prefix, msg, how, sender)
   local from = short(sender)
   if from:lower() == N.Me():lower() then return end
   heard[from:lower()] = C.Now()
+  do -- how to reach them directly: their character name (and realm, if the game gave one)
+    local nm, realm = tostring(sender):match("^([^%-]+)%-?(.*)$")
+    nm = nm and nm:match("^(%S+)") or nm
+    if nm then N.whisperAs[from:lower()] = (realm and realm ~= "") and (nm .. "-" .. realm) or nm end
+  end
   if C.NetLog then pcall(C.NetLog, "in", how, from, msg, true) end
   local kind = msg:match("^([^|]+)")
   for _, fn in ipairs(handlers[kind or ""] or {}) do
@@ -190,12 +230,32 @@ local function announce()
 end
 N.Announce = announce
 
+------------------------------------------------------------------ presence
+-- 1.0.9: every Kina on the network says it's here every 5 minutes (P|version), so Kinas
+-- know who's online and newer scans get offered to people who logged in after them
+N.PRESENCE_EVERY = 5 * 60
+function N.Presence()
+  if not (N.Enabled() and channelId()) then return end
+  N.Broadcast("P|" .. tostring(C.version))
+  if C.NetPrices and C.NetPrices.Announce then pcall(C.NetPrices.Announce) end
+end
+N.On("P", function() end) -- (heard: counted by the log)
+local function keepJoined()
+  if N.Enabled() and not channelId() then N.Join() end
+end
+
 ------------------------------------------------------------------ start
 C.On("PLAYER_LOGIN", function()
   if not C.After then return end
   C.After(6, function() N.Join() end)
   C.After(12, announce)
+  C.After(20, function() N.Presence() end)
 end)
+C.On("PLAYER_ENTERING_WORLD", function() if C.After then C.After(8, keepJoined) end end)
+if C_Timer and C_Timer.NewTicker then
+  C_Timer.NewTicker(30, function() pcall(keepJoined) end)
+  C_Timer.NewTicker(N.PRESENCE_EVERY, function() pcall(N.Presence) end)
+end
 if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(N.ANNOUNCE_EVERY, function() pcall(announce) end) end
 C.On("CHANNEL_UI_UPDATE", function() if channelId() then hideFromChat() end end)
 

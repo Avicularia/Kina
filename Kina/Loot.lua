@@ -88,6 +88,7 @@ local function countKill(guid, fromParty)
   end
   if tagged[key] then return end
   tagged[key] = true
+  if C.Progress then pcall(C.Progress.NoteKill, id) end -- 1.1.0: activity + the group's card-mob kills
   if C.session and C.session.sync then
     -- 0.9.5: a kill keeps the farm alive (shared farms used to skip this, so they all
     -- stopped themselves an hour after they started, in the middle of farming)

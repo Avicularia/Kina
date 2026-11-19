@@ -13,11 +13,14 @@ L.totals = totals
 L.lines = lines
 
 -- what a message is, from its first field (group/guild prefix and the Kina network's)
-local GROUP = { H = "hello (who's here, scan ages)", M = "AH prices (part of a scan)", B = "start of a data transfer",
-  E = "end of a data transfer", Q = "asks for data", L = "mob loot records", V = "vendor prices", O = "merchant prices",
-  C = "community drops", K = "a kill", S = "farm log", Z = "farm start/stop", W = "farm numbers", X = "farm note",
-  U = "item used", G = "farm split", R = "farm record", T = "debt / payment note", P = "price hold", N = "news" }
-local NET = { O = "developer online", V = "version", F = "feedback", R = "feedback answer", K = "feedback receipt",
+-- (1.0.8 fix: every label read from what Share.lua actually does with each type)
+local GROUP = { H = "hello (version, scan ages)", Q = "asks for data", B = "start of a data transfer", M = "AH prices (part of a scan)",
+  L = "mob loot records", I = "item info", P = "places", V = "vendor prices", O = "merchant offers", E = "end of a data transfer",
+  C = "community drops", T = "note (commendation, record, price hold, data digest)", S = "shared farm log", Z = "farm invite / start / stop",
+  X = "farm edit", W = "live farm numbers", K = "a kill in the farm", U = "item used in the farm", Y = "farm split",
+  G = "live split numbers", R = "asks for the farm split", F = "Kina Partner farm", N = "recruit credit", A = "recruit thanks",
+  J = "recruit claim", D = "Kina Partner request" }
+local NET = { P = "here (version)", O = "developer online", V = "version", F = "feedback", R = "feedback answer", K = "feedback receipt",
   H = "feedback hello", M = "feedback mute", PS = "has an AH scan to share", PQ = "asks for that scan",
   PZB = "AH scan: start", PZ = "AH scan: part", PZE = "AH scan: done" }
 local function describe(net, msg)
@@ -31,6 +34,34 @@ end
 L.describe = describe
 
 local function now() return GetTime and GetTime() or 0 end
+-- every other Kina heard on any channel: full name (Forever names have a surname), when, how
+L.peers = {}
+local function mine(name)
+  local me = UnitName and UnitName("player") or ""
+  local first = (name:match("^([^%s%-]+)") or name):lower()
+  if first == me:lower() then return true end
+  return C.IsMyChar and C.IsMyChar(first) or false
+end
+local function notePeer(who, where, msg)
+  if type(who) ~= "string" or who == "" then return end
+  local disp = who:gsub("%-.*$", "")
+  if mine(disp) then return end
+  local key = (disp:match("^(%S+)") or disp):lower()
+  local p = L.peers[key] or {}
+  p.name = (#disp > #(p.name or "")) and disp or p.name
+  p.t = time and time() or 0
+  p.via = where
+  local ver
+  if type(msg) == "string" then
+    if msg:sub(1, 2) == "H|" then
+      local f = {}
+      for v in (msg:sub(3) .. "|"):gmatch("([^|]*)|") do f[#f + 1] = v end
+      if f[14] and f[14]:match("^%d+%.%d+%.%d+$") then ver = f[14] end -- the hello's version field
+    else ver = msg:match("^V|(%d+%.%d+%.%d+)") end
+  end
+  if ver then p.ver = ver end
+  L.peers[key] = p
+end
 local function push(dir, where, who, what, bytes)
   table.insert(lines, 1, { t = time and time() or 0, dir = dir, where = where or "", who = who or "", what = what or "" })
   if #lines > MAX then table.remove(lines) end
@@ -44,7 +75,9 @@ function C.NetLog(dir, channel, who, msg, net)
   if type(msg) ~= "string" then return end
   local what = describe(net, msg)
   local where = net and (channel == "WHISPER" and "network, to one Kina" or "Kina network") or ((channel or ""):lower())
-  push(dir, where, who and (Ambiguate and Ambiguate(who, "short") or who) or "", what, #msg)
+  local disp = who and (tostring(who):gsub("%-.*$", "")) or ""
+  if dir == "in" then notePeer(disp, where, msg) end
+  push(dir, where, disp, what, #msg)
 end
 -- a plain-words line for something bigger (a whole scan sent or received)
 function C.NetNote(text)
@@ -54,20 +87,27 @@ function C.NetNote(text)
 end
 
 ------------------------------------------------------------------ the window
-local ROWS = 22
+local ROWS = 21
 local GOLD, GREY, GREEN, BLUE, WHITE = "|cffffc54a", "|cff9d9d9d", "|cff40ff40", "|cff6fb4ff", "|cffffffff"
 local function summary()
   local N = C.Net
   local on = N and N.Enabled and N.Enabled()
   local out = {}
-  out[#out + 1] = GOLD .. "Kina network:|r " .. (on and (GREEN .. "on|r") or ("|cffff6a50off|r (Settings > Kina network)"))
-  local who = {}
-  if N and N.heard then
-    local t = C.Now()
-    for name, at in pairs(N.heard) do if t - at < 300 then who[#who + 1] = name end end
+  local joined = N and N.Joined and N.Joined()
+  out[#out + 1] = GOLD .. "Kina network:|r " .. (not on and ("|cffff6a50off|r (Settings > Kina network)") or (joined and (GREEN .. "on, joined|r") or ("|cffff6a50on, but not joined yet|r" .. GREY .. " (retrying every 30 s)|r")))
+  -- 1.0.8 (Taylor: "showing 1 person online but there's definitely more"): every other Kina
+  -- heard on any channel in the last 30 minutes (it used to count only the network, and you)
+  local list, t = {}, time and time() or 0
+  for _, p in pairs(L.peers) do if t - (p.t or 0) < 1800 then list[#list + 1] = p end end
+  table.sort(list, function(a, b) return (a.t or 0) > (b.t or 0) end)
+  local parts, onNet = {}, 0
+  for _, p in ipairs(list) do
+    if p.via:find("network") then onNet = onNet + 1 end
+    local ago = math.floor((t - p.t) / 60)
+    parts[#parts + 1] = WHITE .. p.name .. "|r" .. GREY .. " (" .. (p.ver and ("v" .. p.ver .. ", ") or "") .. p.via .. ", " .. (ago < 1 and "now" or (ago .. "m")) .. ")|r"
   end
-  table.sort(who)
-  out[#out + 1] = GOLD .. "Kinas heard on the network (last 5 min):|r " .. (#who > 0 and (WHITE .. #who .. "|r  " .. GREY .. table.concat(who, ", "):sub(1, 140) .. "|r") or (GREY .. "none yet|r"))
+  out[#out + 1] = GOLD .. "Other Kinas heard (last 30 min):|r " .. (#list > 0 and (WHITE .. #list .. "|r  " .. table.concat(parts, ", ")) or (GREY .. "none yet|r"))
+  out[#out + 1] = GREY .. "On the Kina network: " .. onNet .. ". Only Kina 1.0.7 and newer join it (realm-wide prices); older Kinas talk over group and guild only.|r"
   out[#out + 1] = string.format("%sThis session:|r sent %d messages (%.1f KB), received %d (%.1f KB).  AH scans sent %d, received %d.",
     GOLD, totals.outN, totals.outB / 1024, totals.inN, totals.inB / 1024, totals.scansOut, totals.scansIn)
   local sync = C.Share and C.Share.SyncStatus and C.Share.SyncStatus() or ""
@@ -93,11 +133,11 @@ local function build()
   f.sum = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); f.sum:SetPoint("TOPLEFT", 14, -36)
   f.sum:SetWidth(650); f.sum:SetJustifyH("LEFT"); f.sum:SetSpacing(3)
   local rule = f:CreateTexture(nil, "ARTWORK"); rule:SetColorTexture(0.52, 0.35, 0.11, 0.9); rule:SetHeight(1)
-  rule:SetPoint("TOPLEFT", 12, -104); rule:SetPoint("TOPRIGHT", -12, -104)
+  rule:SetPoint("TOPLEFT", 12, -124); rule:SetPoint("TOPRIGHT", -12, -124)
   f.rows = {}
   for i = 1, ROWS do
     local r = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    r:SetPoint("TOPLEFT", 14, -110 - (i - 1) * 15); r:SetWidth(650); r:SetJustifyH("LEFT")
+    r:SetPoint("TOPLEFT", 14, -130 - (i - 1) * 15); r:SetWidth(650); r:SetJustifyH("LEFT")
     if r.SetWordWrap then r:SetWordWrap(false) end
     f.rows[i] = r
   end

@@ -147,6 +147,7 @@ end
 -- line and button agree and one payment settles them all (payments spread over the debts)
 local function firstOf(n) return n and (n:match("^([^%-]+)") or n) end
 function C.PayDue()
+  do return nil end -- 1.1.0: no debts
   local due
   for _, d in ipairs(C.Debts()) do
     if d.dir == "owe" and d.amt >= 1 then
@@ -263,6 +264,7 @@ C.AskAcceptTrade = popupAccept
 
 -- money you are owed (oldest first), not yet received
 function C.ReceiveDue()
+  do return nil end -- 1.1.0: no debts
   if C.session then return nil end
   local due
   for _, d in ipairs(C.Debts()) do
@@ -429,6 +431,7 @@ local function left(map, key, amt)
   return math.max(0, amt - (tonumber(v) or 0))
 end
 function C.Debts()
+  do return {} end -- 1.1.0 (Taylor): no debts. Splits stay as information only.
   local me = first(UnitName("player"))
   local out = {}
   for _, s in ipairs(C.db.sessions or {}) do
@@ -762,6 +765,7 @@ function C.DueText(d)
 end
 -- run the clocks (every 30 s from Toast's debt check)
 function C.TickDebtClocks()
+  do return end -- 1.1.0: no debts
   local now = C.Now()
   for _, d in ipairs(C.Debts()) do
     if d.s and not d.topup and d.amt >= 1 then

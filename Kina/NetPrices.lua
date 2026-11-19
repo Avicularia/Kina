@@ -16,7 +16,7 @@ C.NetPrices = NP
 NP.MAX_AGE = 3 * 86400      -- network scans older than this aren't used
 NP.MAX_SOURCES = 8          -- the newest few players' scans are kept
 NP.AGREE = 0.35             -- within 35% of the middle price
-NP.NEED_WEIGHT = 2          -- two Vouched players (or four Unproven) must agree
+NP.NEED_WEIGHT = 2          -- two different Kinas must agree (yours counts)
 NP.ASK_EVERY = 20 * 60      -- ask someone for prices at most this often
 NP.ANSWER_MAX = 3           -- answer at most this many askers...
 NP.ANSWER_WINDOW = 10 * 60  -- ...per 10 minutes
@@ -30,13 +30,9 @@ local function store()
   C.db.netPrices = type(C.db.netPrices) == "table" and C.db.netPrices or {}
   return C.db.netPrices
 end
-local WEIGHT = { Delinquent = 0, Disgraced = 0, Oathbreaker = 0, Blacklisted = 0, Unproven = 0.5 }
-function NP.Weight(standing)
-  if not standing or standing == "" then return 0.5 end
-  local w = WEIGHT[standing]
-  if w == nil then return 1 end
-  return w
-end
+-- 1.0.9: standing is gone with debts, so every Kina counts the same; the protection is
+-- that at least two different Kinas (your own scan included) must agree within 35%
+function NP.Weight(standing) return 1 end
 
 ------------------------------------------------------------------ announcing your scan
 local function myStanding()
@@ -81,7 +77,9 @@ local function onScanOffer(from, f)
   for i = #asks, 1, -1 do if now - asks[i] > NP.ASK_EVERY then table.remove(asks, i) end end
   if #asks >= 3 then return end
   asks[#asks + 1] = now
-  Net().Tell(from, "PQ|" .. b36(t))
+  -- 1.0.9: asked on the channel, addressed by name (a direct message can't reach someone on
+  -- a connected realm when the game doesn't say which realm they're on)
+  Net().Broadcast("PQ|" .. b36(t) .. "|" .. ((from:match("^(%S+)") or from):lower()))
 end
 NP._offer = onScanOffer
 
@@ -199,6 +197,12 @@ local function onAsk(from, f)
   if not NP.Enabled() then return end
   local m = C.market
   local t = n36(f[2])
+  -- an ask on the channel names who it's for (first name); a direct ask (older Kinas) doesn't
+  local to = f[3]
+  if to and to ~= "" then
+    local me = ((UnitName and UnitName("player") or ""):match("^(%S+)") or ""):lower()
+    if to ~= me then return end
+  end
   if not (m and m.scanTime and t == m.scanTime) then return end
   local now = C.Now()
   for i = #answered, 1, -1 do if now - answered[i] >= NP.ANSWER_WINDOW then table.remove(answered, i) end end
@@ -263,6 +267,16 @@ function NP.Snapshot()
   local now, mk = C.Now(), C.MarketKey and C.MarketKey()
   local by = {}
   local newest = 0
+  -- 1.0.9: your own scan is one of the voices (with one other Kina, two can agree)
+  local m = C.market
+  if m and m.items and m.scanTime and now - m.scanTime < NP.MAX_AGE then
+    for id, mi in pairs(m.items) do
+      if mi.m and mi.m > 0 then
+        by[id] = by[id] or {}
+        table.insert(by[id], { m = mi.m, row = mi, w = 1, t = m.scanTime, who = "(you)" })
+      end
+    end
+  end
   for _, s in pairs(store()) do
     if s.items and now - (s.t or 0) < NP.MAX_AGE and (not mk or not s.mkey or s.mkey == mk) then
       local w = NP.Weight(s.st)
@@ -314,4 +328,13 @@ if C.After then
     N.On("PZ", onPart)
     N.On("PZE", onFinish)
   end)
+end
+
+-- for the scan bar: when the network's agreed prices are the freshest
+function NP.Freshest()
+  local c = NP.Snapshot()
+  if not (c and c.t) then return nil end
+  local who = {}
+  for _, st in pairs(store()) do if st.t and C.Now() - st.t < NP.MAX_AGE then who[#who + 1] = st end end
+  return c.t, #who
 end

@@ -1020,6 +1020,7 @@ local function cdb() local d = db(); d.courier = d.courier or {}; return d.couri
 S._cdb = cdb
 -- my Kina hands a note to the guild
 function S.Courier(p)
+  do return false end -- 1.1.0: no debts, so nothing to carry
   if not (IsInGuild and IsInGuild()) or not COURIER_KINDS[p.kind or ""] then return false end
   local msg = table.concat({ "T", db().uid, p.who or "", "crh", tostring(math.floor(p.amt or 0)), clean(myName()) .. "#" .. p.kind .. "#" .. ((tostring(p.ref or "")):gsub("[|#]", "")) }, "|")
   enqueue(msg, "GUILD", nil, false)
@@ -1053,6 +1054,7 @@ function S.OnCourier(from, uid, to, action, amt, label, channel)
 end
 -- someone in the guild came online (their Kina said hello): pass on what I hold for them
 function S.CourierDeliver(name)
+  do local c = db().courier; if c and next(c) then db().courier = {} end; return end -- 1.1.0
   local who = C.FirstName and C.FirstName(name)
   if not who then return end
   for k, q in pairs(cdb()) do
@@ -1075,9 +1077,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     local prefix, text, channel, from = ...
     if prefix ~= PREFIX or type(text) ~= "string" or isMe(from) then return end
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
+    if C.NetLog then pcall(C.NetLog, "in", channel, from, text) end -- (the full "First Surname" for the log)
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
     if C.Heard then C.Heard(from) end
-    if C.NetLog then pcall(C.NetLog, "in", channel, from, text) end
     if channel == "GUILD" and not db().opts.guild and not text:match("^T|") then return end
     local kind, rest = text:match("^(%u)|(.*)$")
     if not kind then return end
@@ -1096,6 +1098,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
       elseif kind == "C" then S._onComm(from, rest)
       elseif kind == "T" then
         local uid, to, action, amt, label = rest:match("^(%x+)|([^|]*)|(%a+)|(%d+)|(.*)$")
+        if action and S.DEBT_ACTIONS[action] then return end -- 1.1.0: debt notes do nothing
         local mine = C.FirstName and C.FirstName(UnitName and UnitName("player"))
         -- 1.0.5 (Taylor: Scarlet's dispute never showed up): a debt note is for any of my
         -- characters, not just the one I'm on (the farm may have been on an alt)
@@ -1337,14 +1340,21 @@ function S.SendSync(payload, to)
   if not ch or not db().opts.enabled then return end
   enqueue(table.concat({ "S", db().uid, to or "", payload }, "|"), ch, nil, true)
 end
+-- 1.1.0 (Taylor: "remove all debts and all functionality for debts"): debt notes are never
+-- sent or acted on. Commendations (vch), records (rqr/rec), price holds (prh/prs), data
+-- digests (dgs) and tamper notes (tmp) still travel as T.
+S.DEBT_ACTIONS = { req = true, cnf = true, fgv = true, fga = true, dsp = true, dsn = true, dsa = true, rcv = true,
+  plea = true, ext = true, pla = true, exa = true, crh = true, crd = true, clk = true }
 -- settle request: "T|uid|to|action|amount|label"
 function S.SendSettle(action, to, amt, label)
+  if S.DEBT_ACTIONS[action or ""] then return end
   local ch = groupChannel()
   if not ch or not db().opts.enabled then return end
   enqueue(table.concat({ "T", db().uid, to or "", action, tostring(math.floor(amt or 0)), ((tostring(label or "")):gsub("|", "")) }, "|"), ch, nil, true)
 end
 -- 1.0.10 forgive: "T|uid|to|fgv|amount|farmref" and its answer "fga" (group channel)
 function S.SendForgive(to, amt, ref, kind)
+  if S.DEBT_ACTIONS[kind or "fgv"] then return end -- 1.1.0: no debts (profile records still go)
   -- 1.0.5: debt notes are not "data sharing": they go out even with sharing switched off
   local ch = groupChannel()
   local msg = table.concat({ "T", db().uid, to or "", kind or "fgv", tostring(math.floor(amt or 0)), ((tostring(ref or "")):gsub("|", "")) }, "|")
@@ -1423,6 +1433,7 @@ function S.SendTamper(label)
 end
 -- 1.5.4: how long my Kina has counted on our debt (the play-time clock)
 function S.SendClock(to, secs, ref)
+  do return end -- 1.1.0: no debts
   if not db().opts.enabled then return end
   local ch = groupChannel()
   if not ch then return end
@@ -1436,6 +1447,7 @@ function S.SendVouch(to, kind, ref)
   if ch then enqueue(msg, ch, nil, true) else enqueue(msg, "WHISPER", to) end
 end
 function S.SendForgiveAck(to, ref, kind)
+  do return end -- 1.1.0: no debts
   local ch = groupChannel()
   -- the answer names what it answers: fga (forgive), pla (plea), exa (extension)
   local ack = ({ plea = "pla", ext = "exa", dsp = "dsa" })[kind or ""] or "fga"

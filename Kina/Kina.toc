@@ -5,7 +5,7 @@
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 1.0.8
+## Version: 1.0.9
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -65,6 +65,8 @@ FarmSync.lua
 Payout.lua
 Toast.lua
 Vouch.lua
+Season.lua
+Progress.lua
 Profile.lua
 Rules.lua
 PriceHold.lua

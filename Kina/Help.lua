@@ -46,28 +46,9 @@ local TOPICS = {
     .. "(it then counts at its vendor price for everyone; disputes are logged). You can't leave out your own loot: a partner can." },
 
   { "The split",
-    "When a group farm ends, Kina adds up what each player looted and works out who pays whom so everyone ends with the same share. "
-    .. "Coin isn't part of it: the game already splits coin.\n\n"
-    .. "Each item counts at its best price: auction house, vendor or disenchant. Gear that could be disenchanted counts at its "
-    .. "auction or vendor value, never a disenchant guess.\n"
-    .. H("Price the loot") .. "If the farm has debts, Kina first asks every Kina user to scan the auction house.\n"
-    .. "- If anyone scans, the farm leader re-prices the loot and everyone gets the same new split.\n"
-    .. "- If everyone skips, the split stands as it was. After a day it goes ahead anyway.\n"
-    .. "- Turn the question off in Settings > Farming.\n"
-    .. H("Don't split") .. "A farm started as \"don't split\" shares its numbers but nobody owes anything. Once loot is in, "
-    .. "only the players who'd be paid can call the split off." },
-
-  { "Debts",
-    H("Paying") .. "Stand next to the person you owe and press Pay on the widget: Kina opens a trade with the exact amount. "
-    .. "Or pay by mail from the Debts page (Ledger). Both Kinas confirm the money moved.\n"
-    .. H("Time to pay") .. "- " .. G .. "2 hours of play time|r: the clock only runs while one of you is online, and the person owed keeps it.\n"
-    .. "- Ask once for more time: the person owed can give 2 more hours, 4 at most.\n"
-    .. "- The person owed can forgive a debt at any time.\n"
-    .. H("When it runs out") .. "- The debt " .. R .. "lapses: -50 standing|r. It moves to Collections, where you can still pay it late "
-    .. "(up to 60 days) for 80% of the XP and standing, instead of losing all of it.\n"
-    .. "- If you offered the full amount in a trade and they didn't take it, the debt can't count against you. "
-    .. "If it then runs out, the person who turned it down loses the standing instead (-50; -100 if again within 30 days).\n"
-    .. "- After a turned-down offer there are 5 minutes in which it can still be paid with nobody losing standing." },
+    "When a group farm ends, Kina shows each player's fair share of what the group looted, so you can split it however "
+    .. "you like. Nobody owes anybody: Kina no longer keeps debts (1.0.9).\n\n"
+    .. "Each item counts at its best price: auction house, vendor or disenchant. Coin isn't part of it: the game already splits coin." },
 
   { "Commendations",
     "At the end of a qualifying farm a window asks how your partners did. It stays until you press Done; then that farm's "

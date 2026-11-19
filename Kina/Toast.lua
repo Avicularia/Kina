@@ -421,6 +421,8 @@ do
   function T.ThemeOnLedger() end -- kept for older callers
 end
 
+-- 1.1.0: any toast (the farm recap's level-up flyout)
+function T.Show(p) show(p) end
 -- 1.0.6: a plain notice (feedback answered, new feedback)
 function T.Notice(head, sub)
   show({ head = head, sub = sub or "", gains = "" })

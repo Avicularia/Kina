@@ -1050,7 +1050,7 @@ if C.PUBLIC then
   local function money(v) return (v and v ~= 0) and C.Money(math.floor(v + 0.5)) or (GREY .. "-|r") end
   local function day(t) return t and date("%m/%d", t) or "" end
   local function period() return ui.ledgerDays and (ui.ledgerDays .. " days") or "all time" end
-  local VIEWS = { "farms", "debts", "collections", "flow", "xp" }
+  local VIEWS = { "farms", "flow", "xp" } -- 1.1.0: no debts or collections
   local VIEWNAME = { farms = "Farms", debts = "Debts", collections = "Collections", flow = "Gold flow", xp = "XP" }
   ui.LEDGER_VIEWS, ui.LEDGER_VIEWNAME = VIEWS, VIEWNAME
   C.LedgerViewName = function() return VIEWNAME[ui.ledgerView or "farms"] end
@@ -2468,6 +2468,14 @@ function C.ScanSourceText()
     end
     return "sending your AH scan to the group" .. pct .. eta
   end
+  -- 1.0.9: the Kina network's agreed prices, when they're the freshest
+  local nt, nk = nil, 0
+  if C.NetPrices and C.NetPrices.Freshest then local ok, t, k = pcall(C.NetPrices.Freshest); if ok then nt, nk = t, k or 0 end end
+  if nt and nt > (top.t or 0) then
+    local yours
+    for _, s in ipairs(list) do if not s.name then yours = s.t; break end end
+    return "prices: Kina network (" .. nk .. " Kina" .. (nk == 1 and "" or "s") .. ") " .. ago(nt) .. (yours and (" (yours " .. ago(yours) .. ")") or "")
+  end
   local text = "prices: " .. (top.name and ((Ambiguate and Ambiguate(top.name, "short") or top.name) .. "'s") or "your") .. " scan " .. ago(top.t)
   if top.name then
     for _, s in ipairs(list) do if not s.name then text = text .. " (yours " .. ago(s.t) .. ")"; break end end
@@ -2729,8 +2737,8 @@ local function buildSettings(f)
   column(0)
   -- 0.9.20 (Taylor): just the farm tracker
   header("Groups")
-  toggle("Tracker only (no splits, debts or Kina XP)", function() return C.TrackOnly() end, function(v) C.SetTrackOnly(v) end,
-    "Kina keeps tracking your farms (gold per hour, loot, kills), but you're not part of group farms, loot splits or debts, and you earn no Kina XP or standing. Every Kina in your group is told, and anything you loot stays yours. Debts you already have still need settling.")
+  toggle("Tracker only (stay out of group farms)", function() return C.TrackOnly() end, function(v) C.SetTrackOnly(v) end,
+    "Kina keeps tracking your own farms (gold per hour, loot, kills), but you don't join group farms, so you earn no Renown or Kina XP. Every Kina in your group is told.")
   y = y + 4
   -- 1.0.8 (Taylor: clean up Settings): every sharing switch in one place, with the log
   header("Network and sharing")
@@ -3647,7 +3655,7 @@ local function build()
         end
       elseif d.debtWho then
         C.debtsWant = d.debtWho
-        ui.bookOf = nil; ui.ledgerView = "debts"; ui.offset = 0; C.Refresh()
+        ui.bookOf = nil; ui.ledgerView = "farms"; ui.offset = 0; C.Refresh()
       elseif d.slog then
         if d.toSession then ui.tab = "Session" end
         ui.logOf = d.slog; ui.offset = 0; ui.sort.Session = nil; C.Refresh()
@@ -4036,7 +4044,7 @@ end
 function C.OpenLedgerFarm(s)
   if not ui.frame then build() end
   -- 1.2.0: debts are handled on the Debts page (its buttons), not in the farm details
-  ui.bookOf = nil; ui.ledgerView = "debts"; ui.offset = 0
+  ui.bookOf = nil; ui.ledgerView = "farms"; ui.offset = 0
   C.Toggle("Ledger")
 end
 

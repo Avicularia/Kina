@@ -30,6 +30,10 @@ W.MAJOR = {
     { "Feedback, front and center", "A Feedback button now sits on the bottom bar of every tab, and the Kina button pulses green when an answer is waiting." },
     { "Updates and scans", "When a newer Kina is out, the widget shows Update available. The scan bar now says whose AH scan is coming in, how far along it is and about how long is left." },
   } },
+  { ver = "1.0.9", pages = {
+    { "The Kina network works", "AH scans now reach every Kina on the realm, on every layer, including people who log in later. Your scan plus one other Kina is enough for a shared price. See it live: /kina net." },
+    { "No more debts", "Splits now just show each player's fair share of what the group looted. Nobody owes anybody, and there's nothing to pay or chase." },
+  } },
   { ver = "1.0.8", pages = {
     { "Dungeon farms fixed", "Walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts, and your partners get into the new one." },
     { "See the Kina network", "Settings > Network log (or /kina net) shows what Kina sends and receives, who it's talking to and which AH scans came in." },

@@ -71,8 +71,8 @@ function B.Farm(s, gains, bySid)
       r.farmed, r.share = r.lootSplit, r.lootShare -- an old farm saved without the group's totals
     end
     r.open = false
-    
-    for _, t in ipairs(sp.transfers) do
+    -- 1.0.9 (Taylor: no debts): the split is information; nobody owes or collects
+    for _, t in ipairs({}) do
       if t.amt and t.amt > 0 then
         if isMe(t.from) then
           local d = done(sp.paid, t.to, t.amt)
