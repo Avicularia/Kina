@@ -285,9 +285,55 @@ local function partyStrip()
   strip:Show()
 end
 
+-- 2.0: what the running farm is worth so far (the same score it gets at Stop)
+local function progShown()
+  local P = C.Progress
+  if not (P and P.Score and C.Season) then return false end
+  return C.Season.live or (C.Net and C.Net.IAmDeveloper and C.Net.IAmDeveloper()) or false
+end
+local function progLine()
+  if not w.prog then return end
+  local s = C.session
+  if not (s and progShown()) then w.prog:Hide(); w.prog.sc, w.prog.why = nil, nil; w.best:SetWidth(ironOn() and W - 50 or W - 40); return end
+  local sc, why = C.Progress.Score(s)
+  w.prog.sc, w.prog.why = sc, why
+  if sc then
+    w.prog.text:SetText("|cffffd100+" .. shortXP(sc.earned) .. "|r |cff9a8f7arenown|r")
+  elseif why == "solo" then
+    w.prog.text:SetText("|cff9d9d9dsolo: no renown|r")
+  else
+    w.prog.text:SetText("|cff9d9d9d+0 renown|r")
+  end
+  w.prog:Show(); w.best:SetWidth((ironOn() and W - 50 or W - 40) - 124)
+end
+function C.ProgTip(owner)
+  if not GameTooltip then return end
+  GameTooltip:SetOwner(owner, "ANCHOR_TOP"); GameTooltip:ClearLines()
+  GameTooltip:AddLine("This farm so far")
+  local sc, why = w.prog.sc, w.prog.why
+  if not sc then
+    GameTooltip:AddLine(why == "solo" and "Only farms with at least one other Kina count toward renown and Kina XP."
+      or "Nothing yet: a kill, loot or gather starts the active minutes.", 1, 1, 1, true)
+  else
+    local pct = function(v) return string.format("+%d%%", math.floor(v * 100 + 0.5)) end
+    GameTooltip:AddDoubleLine("Renown", "+" .. shortXP(sc.earned), 1, 1, 1, 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Kina XP", "+" .. shortXP(sc.earned), 1, 1, 1, 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Active minutes", tostring(sc.mins), 0.8, 0.8, 0.8, 1, 1, 1)
+    GameTooltip:AddDoubleLine("Pace (gold/h per person)", string.format("x%.2f", sc.pace), 0.8, 0.8, 0.8, 1, 1, 1)
+    GameTooltip:AddDoubleLine("Bonus", pct(sc.bonus), 0.8, 0.8, 0.8, 0.5, 1, 0.5)
+    local p = sc.parts or {}
+    for _, k in ipairs({ { "party", "  party" }, { "streak", "  streak" }, { "campfire", "  campfire" }, { "tracks", "  track levels" } }) do
+      if (p[k[1]] or 0) > 0 then GameTooltip:AddDoubleLine(k[2], pct(p[k[1]]), 0.6, 0.6, 0.6, 0.6, 0.9, 0.6) end
+    end
+    GameTooltip:AddLine("Credited when you press Stop.", 0.6, 0.6, 0.6, true)
+  end
+  GameTooltip:Show()
+end
+
 function C.RefreshWidget()
   if not (w and w:IsShown()) then return end
   pcall(refreshPay)
+  pcall(progLine)
   pcall(partyStrip)
   if w.perf then
     local ok, txt = pcall(function()
@@ -570,6 +616,14 @@ local function build()
   -- best drop + status
   w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116 - DY)
   w.best = text(w, "GameFontHighlightSmall", "LEFT"); w.best:SetPoint("LEFT", w.bestIcon, "RIGHT", 5, 0); w.best:SetWidth(W - 40)
+  -- 2.0 (Taylor: "a spot that tells me how much exp/renown the current farm is giving me")
+  w.prog = CreateFrame("Button", nil, w); w.prog:SetSize(120, 16)
+  w.prog:SetPoint("RIGHT", w.bestIcon, "LEFT", W - 22, 0); w.prog:SetFrameLevel(w:GetFrameLevel() + 5)
+  w.prog.text = text(w.prog, "GameFontHighlightSmall", "RIGHT"); w.prog.text:SetPoint("RIGHT", 0, 0)
+  if w.prog.text.SetWordWrap then w.prog.text:SetWordWrap(false) end
+  w.prog:SetScript("OnEnter", function(self) if C.ProgTip then pcall(C.ProgTip, self) end end)
+  w.prog:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  w.prog:Hide()
   w.status = text(w, "GameFontHighlightSmall", "LEFT"); w.status:SetPoint("TOPLEFT", 10, -135 - DY); w.status:SetWidth(W - 20)
   -- 1.0.2 (Taylor: "a latency reading on the widget, small, along with fps")
   w.status:SetWidth(W - 20 - 84)
