@@ -44,19 +44,37 @@ function V.GoodLeft(ref)
 end
 -- the people from my qualifying farms (ended in the last 24 hours) I haven't commended
 -- for that farm yet, newest farm first
+-- 2.0.5 (Taylor: no commendation window after a 2-hour farm with Scàrlet): who was in a
+-- farm. The loot split's list when there is one; with splitting switched off (Settings),
+-- the farm's own member list (everyone whose Kina joined it).
+local function farmMembers(s)
+  local out = {}
+  if s.split and s.split.incomes then for who in pairs(s.split.incomes) do out[#out + 1] = who end end
+  if #out == 0 and s.sync then
+    local seen = {}
+    for _, ev in ipairs(s.sync.chain or {}) do
+      local o = ev.origin
+      if o and not seen[lower(o)] then seen[lower(o)] = true; out[#out + 1] = o end
+    end
+    for n in pairs(s.sync.members or {}) do if not seen[lower(n)] then seen[lower(n)] = true; out[#out + 1] = n end end
+  end
+  return out
+end
+V.FarmMembers = farmMembers
 function V.Eligible()
   local out, seen = {}, {}
   local me = lower(UnitName and UnitName("player"))
   local ss = C.db.sessions or {}
   for i = 1, #ss do -- (newest first: farms are stored newest at the front)
     local s = ss[i]
-    if s.stop and C.Now() - s.stop <= DAY and s.sync and s.split and s.split.incomes then
+    local mem = (s.stop and C.Now() - s.stop <= DAY and s.sync) and farmMembers(s) or {}
+    if #mem >= 2 then
       local secs = s.stop - (s.start or s.stop) - (s.pausedSecs or 0)
-      local n = 0; for _ in pairs(s.split.incomes) do n = n + 1 end
+      local n = #mem
       if secs >= 900 and n >= 2 then
         local ref = s.sync.sid or ("t" .. tostring(s.start))
         if vdb().closed[ref] then n = 0 end -- (1.5.4) its window was closed: too late
-        for who in pairs(n >= 2 and s.split.incomes or {}) do
+        for _, who in ipairs(n >= 2 and mem or {}) do
           local k = lower(who)
           if k ~= me and not (C.IsMyChar and C.IsMyChar(who)) and not seen[k] and not givenIn(ref, who) then
             seen[k] = true; out[#out + 1] = { who = first(who), ref = ref, farm = s.label }
@@ -101,9 +119,9 @@ function V.FarmMate(from, ref)
   for _, s in ipairs(C.db.sessions or {}) do
     local sref = (s.sync and s.sync.sid) or ("t" .. tostring(s.start))
     if sref == ref then
-      if not (s.stop and C.Now() - s.stop <= 2 * DAY and s.split and s.split.incomes) then return false end
+      if not (s.stop and C.Now() - s.stop <= 2 * DAY) then return false end
       if s.stop - (s.start or s.stop) - (s.pausedSecs or 0) < 900 then return false end
-      for who in pairs(s.split.incomes) do if lower(who) == k then return true end end
+      for _, who in ipairs(farmMembers(s)) do if lower(who) == k or lower(first(who)) == k then return true end end
       return false
     end
   end
@@ -129,7 +147,7 @@ function V.OnVouch(from, kind, ref)
   local rep = bad and V.BAD_REP or V.REP
   table.insert(d.got, { who = first(from), kind = kind, t = C.Now(), ref = ref, rep = rep })
   if C.Log then C.Log("vouch", "got", first(from), kind, ref or "", rep) end
-  if C.Toast and C.Toast.Vouched then C.Toast.Vouched(first(from), V.KINDS[kind], rep, bad) end
+  if C.Toast and C.Toast.Vouched and not V.quietToast then C.Toast.Vouched(first(from), V.KINDS[kind], rep, bad) end
 end
 -- counts for the You tab
 function V.Counts()
@@ -182,7 +200,7 @@ function V.ThumbButton(parent, bad, w, h, label)
   end
   local ic = b:CreateTexture(nil, "ARTWORK"); ic:SetSize(h - 4, h - 4); ic:SetPoint("LEFT", 4, 0); ic:SetTexture(bad and DOWN or UP)
   local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormal"); t:SetPoint("LEFT", ic, "RIGHT", 4, 0); t:SetPoint("RIGHT", -4, 0)
-  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Disgraced") .. "|r") or ("|cffffc54a" .. (label or "Commend") .. "|r"))
+  t:SetJustifyH("LEFT"); t:SetText(bad and (V.RED .. (label or "Thumbs down") .. "|r") or ("|cffffc54a" .. (label or "Commend") .. "|r"))
   local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetPoint("TOPLEFT", 2, -2); hl:SetPoint("BOTTOMRIGHT", -2, 2)
   hl:SetColorTexture(bad and 1 or 1, bad and 0.2 or 0.85, bad and 0.15 or 0.4, 0.18)
   b:SetMotionScriptsWhileDisabled(true)
@@ -214,7 +232,7 @@ local function makeCard(parent)
   if C.Cos then C.Cos.Font(c.name, 15, "OUTLINE") end
   c.stand = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.stand:SetPoint("TOP", c.name, "BOTTOM", 0, -3)
   c.up = V.ThumbButton(c, false, CARD_W - 16, 26, "Commend"); c.up:SetPoint("BOTTOM", 0, 40)
-  c.down = V.ThumbButton(c, true, CARD_W - 16, 26, "Disgraced"); c.down:SetPoint("BOTTOM", 0, 9)
+  c.down = V.ThumbButton(c, true, CARD_W - 16, 26, "Thumbs down"); c.down:SetPoint("BOTTOM", 0, 9)
   c.result = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); c.result:SetPoint("BOTTOM", 0, 22); c.result:SetWidth(CARD_W - 12)
   return c
 end

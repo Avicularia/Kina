@@ -111,7 +111,8 @@ local function questGold(s) return (s and s.money and s.money.quest) or 0 end
 local function setGained(t, s, net)
   local q = questGold(s)
   local v = (net or 0) + q
-  setTile(t, (v < 0 and "-" or "") .. C.Money(math.abs(v)), q > 0 and ("quests " .. C.Money(q)) or "with quests")
+  -- 2.0.4: the one gold box: loot, coin and quests, minus what you used
+  setTile(t, (v < 0 and "-" or "+") .. C.Money(math.abs(v)), q > 0 and ("incl. quests " .. C.Money(q)) or "loot, coin and quests")
 end
 local function setXPTile(t, s, kills, secs)
   kills = kills or 0
@@ -220,6 +221,32 @@ local function partyStrip()
   if not strip then
     strip = CreateFrame("Frame", nil, w); C.Widget.strip = strip
     strip:SetHeight(78)
+    -- 2.0 (Taylor: "a way to minimize the party section, or resize it"): a header row:
+    -- "Party (n)" on the left; smaller / bigger and hide / show as Kina buttons on the right
+    strip.head = strip:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    strip.head:SetPoint("TOPLEFT", strip, "TOPLEFT", 10, -7)
+    strip.head:SetTextColor(1, 0.82, 0.29)
+    local function sb(label, wdt, fn, tipTitle, tipText)
+      local b = CreateFrame("Button", nil, strip, "UIPanelButtonTemplate")
+      b:SetSize(wdt, 16); b:SetText(label)
+      if b:GetFontString() then b:GetFontString():SetFontObject("GameFontHighlightSmall") end
+      if C.Skin and C.Skin.Button then C.Skin.Button(b) end
+      b:SetScript("OnClick", fn)
+      tip(b, tipTitle, tipText)
+      return b
+    end
+    strip.tog = sb("Hide", 44, function() C.settings.stripHidden = not C.settings.stripHidden; pcall(partyStrip) end,
+      "Party portraits", "Hide or show your party's portraits under the widget.")
+    strip.tog:SetPoint("TOPRIGHT", strip, "TOPRIGHT", -8, -5)
+    local function step(d)
+      local v = math.max(0.6, math.min(1.2, (C.settings.stripScale or 1) + d))
+      C.settings.stripScale = math.floor(v * 10 + 0.5) / 10
+      pcall(partyStrip)
+    end
+    strip.bigger = sb("+", 18, function() step(0.1) end, "Bigger portraits", "Makes the party portraits bigger.")
+    strip.bigger:SetPoint("RIGHT", strip.tog, "LEFT", -6, 0)
+    strip.smaller = sb("-", 18, function() step(-0.1) end, "Smaller portraits", "Makes the party portraits smaller.")
+    strip.smaller:SetPoint("RIGHT", strip.bigger, "LEFT", -3, 0)
     if C.Skin and C.Skin.On() and C.Skin.Panel then C.Skin.Panel(strip, 6)
     else local bg = strip:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.6) end
     strip.cells = {}
@@ -256,12 +283,24 @@ local function partyStrip()
       strip.cells[i] = c
     end
   end
-  strip:ClearAllPoints(); strip:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, -4); strip:SetPoint("TOPRIGHT", w, "BOTTOMRIGHT", 0, -4)
+  local gapY = (C.Skin and C.Skin.On()) and -12 or -4 -- (below the iron rim, which overhangs)
+  strip:ClearAllPoints(); strip:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, gapY); strip:SetPoint("TOPRIGHT", w, "BOTTOMRIGHT", 0, gapY)
   local cw = (w:GetWidth() or 324) / 4
+  local hidden = C.settings.stripHidden
+  local sc = math.max(0.6, math.min(1.2, C.settings.stripScale or 1))
+  strip.head:SetText("Party (" .. #mates .. ")")
+  strip.tog:SetText(hidden and "Show" or "Hide")
+  strip.smaller:SetShown(not hidden); strip.bigger:SetShown(not hidden)
+  strip:SetHeight(hidden and 26 or (26 + 74 * sc))
   for i, c in ipairs(strip.cells) do
     local m = mates[i]
-    if m then
-      c:ClearAllPoints(); c:SetPoint("TOP", strip, "TOPLEFT", cw * (i - 0.5) + (4 - #mates) * cw / 2, -4)
+    if m and hidden then c:Hide()
+    elseif m then
+      -- (offsets in the cell's own scale)
+      c:SetScale(sc)
+      local slot = cw * sc
+      local x0 = ((w:GetWidth() or 324) - slot * #mates) / 2
+      c:ClearAllPoints(); c:SetPoint("TOP", strip, "TOPLEFT", (x0 + slot * (i - 0.5)) / sc, -26 / sc)
       c.who = m.name
       local vis = UnitIsVisible and UnitIsVisible(m.u) and "v" or "f"
       if c.lastUnit ~= m.u .. m.name .. vis then
@@ -285,56 +324,11 @@ local function partyStrip()
   strip:Show()
 end
 
--- 2.0: what the running farm is worth so far (the same score it gets at Stop)
-local function progShown()
-  local P = C.Progress
-  if not (P and P.Score and C.Season) then return false end
-  return C.Season.live or (C.Net and C.Net.IAmDeveloper and C.Net.IAmDeveloper()) or false
-end
-local function progLine()
-  if not w.prog then return end
-  local s = C.session
-  if not (s and progShown()) then w.prog:Hide(); w.prog.sc, w.prog.why = nil, nil; w.best:SetWidth(ironOn() and W - 50 or W - 40); return end
-  local sc, why = C.Progress.Score(s)
-  w.prog.sc, w.prog.why = sc, why
-  if sc then
-    w.prog.text:SetText("|cffffd100+" .. shortXP(sc.earned) .. "|r |cff9a8f7arenown|r")
-  elseif why == "solo" then
-    w.prog.text:SetText("|cff9d9d9dsolo: no renown|r")
-  else
-    w.prog.text:SetText("|cff9d9d9d+0 renown|r")
-  end
-  w.prog:Show(); w.best:SetWidth((ironOn() and W - 50 or W - 40) - 124)
-end
-function C.ProgTip(owner)
-  if not GameTooltip then return end
-  GameTooltip:SetOwner(owner, "ANCHOR_TOP"); GameTooltip:ClearLines()
-  GameTooltip:AddLine("This farm so far")
-  local sc, why = w.prog.sc, w.prog.why
-  if not sc then
-    GameTooltip:AddLine(why == "solo" and "Only farms with at least one other Kina count toward renown and Kina XP."
-      or "Nothing yet: a kill, loot or gather starts the active minutes.", 1, 1, 1, true)
-  else
-    local pct = function(v) return string.format("+%d%%", math.floor(v * 100 + 0.5)) end
-    GameTooltip:AddDoubleLine("Renown", "+" .. shortXP(sc.earned), 1, 1, 1, 1, 0.82, 0)
-    GameTooltip:AddDoubleLine("Kina XP", "+" .. shortXP(sc.earned), 1, 1, 1, 1, 0.82, 0)
-    GameTooltip:AddDoubleLine("Active minutes", tostring(sc.mins), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Pace (gold/h per person)", string.format("x%.2f", sc.pace), 0.8, 0.8, 0.8, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Bonus", pct(sc.bonus), 0.8, 0.8, 0.8, 0.5, 1, 0.5)
-    local p = sc.parts or {}
-    for _, k in ipairs({ { "party", "  party" }, { "streak", "  streak" }, { "campfire", "  campfire" }, { "tracks", "  track levels" } }) do
-      if (p[k[1]] or 0) > 0 then GameTooltip:AddDoubleLine(k[2], pct(p[k[1]]), 0.6, 0.6, 0.6, 0.6, 0.9, 0.6) end
-    end
-    GameTooltip:AddLine("Credited when you press Stop.", 0.6, 0.6, 0.6, true)
-  end
-  GameTooltip:Show()
-end
-
 function C.RefreshWidget()
   if not (w and w:IsShown()) then return end
   pcall(refreshPay)
-  pcall(progLine)
   pcall(partyStrip)
+  if C.WidgetCompact and C.WidgetCompact() and C.Widget.ApplyCompact then pcall(C.Widget.ApplyCompact) end
   if w.perf then
     local ok, txt = pcall(function()
       local fps = GetFramerate and C.Plain(GetFramerate())
@@ -381,8 +375,7 @@ function C.RefreshWidget()
         w.clock:SetText((v.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
         setRate(secs >= 30 and (C.Money(v.net * 3600 / secs)) or "|cff9d9d9dmeasuring|r", secs >= 30)
         setSub("per hour, group" .. (v.noSplit and " |cffffc54ano split|r" or "") .. "  |cff9d9d9d" .. ((s.label or "farm"):sub(1, v.noSplit and 10 or 16)) .. "|r")
-        setTile(w.tNet, signed(v.net), "same for all")
-        setGained(w.tCoin, s, v.net)
+        setGained(w.tNet, s, v.net)
         setTile(w.tLoot, C.Money(v.items or 0), "coin " .. C.Money(v.coin or 0)) -- 1.0.0: consumables are personal, not the group's
         -- 1.4.6: the kills tile's second line is game XP per hour (falls back to kills/h)
         setXPTile(w.tKills, s, v.kills, secs)
@@ -410,8 +403,7 @@ function C.RefreshWidget()
     w.clock:SetText((s.paused and "|cffffc54a" or "|cffffffff") .. clock(secs) .. "|r")
     setRate(secs >= 30 and C.Money(sum.perHour) or "|cff9d9d9dmeasuring|r", secs >= 30)
     setSub("per hour  |cff9d9d9d" .. ((s.label or "farm"):sub(1, 20)) .. "|r")
-    setTile(w.tNet, signed(sum.total), ((sum.used or 0) > 0) and ("used " .. C.Money(sum.used)) or "what you looted")
-    setGained(w.tCoin, s, sum.total)
+    setGained(w.tNet, s, sum.total)
     setTile(w.tLoot, C.Money(sum.items or 0), "coin " .. C.Money(sum.cash or 0))
     setXPTile(w.tKills, s, sum.kills, secs)
     if w.idle then w.idle:Hide(); w.best:Show(); w.bestIcon:Show(); w.status:Show() end
@@ -432,8 +424,7 @@ function C.RefreshWidget()
     if g then
       setRate("|cffbbbbbb" .. C.Money(net * 3600 / secs) .. "|r", true)
       setSub("last farm  |cff9d9d9d" .. ((last.label or "?"):sub(1, 18)) .. ", " .. (last.why or "stopped") .. "|r")
-      setTile(w.tNet, signed(net), last.gview and "group" or "")
-      setGained(w.tCoin, last, net)
+      setGained(w.tNet, last, net)
       setTile(w.tLoot, C.Money((last.gview and last.gview.items) or (last.result and last.result.items) or 0), "")
       setXPTile(w.tKills, last, g.kills, secs)
     else
@@ -481,7 +472,7 @@ local function build()
   if ironLook then W = 324 end -- 1.2.0: wider, so the 115% text fits the tiles
   w = CreateFrame("Frame", "KinaWidget", UIParent)
   local DY = ironLook and 8 or 0 -- 1.1.1: taller tiles in the iron look
-  w:SetSize(W, H + DY); w:SetFrameStrata("MEDIUM")
+  w:SetSize(W, H + DY); w:SetFrameStrata((C.KeepOnTop and C.KeepOnTop()) and "HIGH" or "MEDIUM")
   C.RestorePos(w, "widget", "TOP", UIParent, "TOP", 0, -120)
   if C.Cos and C.Cos.Glow then pcall(C.Cos.Glow, w, 10) end -- 1.5.0: standing glow on the widget
   -- 1.1.1: with the iron look the widget moves by its title area only
@@ -492,7 +483,9 @@ local function build()
     handle:SetFrameLevel(w:GetFrameLevel() + 1)
   end
   C.MakeDraggable(w, "widget", handle)
-  if C.ScaleGrip then C.ScaleGrip(w, "widgetScale") end
+  -- 2.0.4 (Taylor: "make the widget scale to a much smaller size while keeping the
+  -- relevant stats large enough to see"): two big boxes, and the grip goes down to 40%
+  if C.ScaleGrip then C.ScaleGrip(w, "widgetScale", 0.4) end
   w.bg = w:CreateTexture(nil, "BACKGROUND"); w.bg:SetAllPoints()
   local iron = C.Skin and C.Skin.On()
   local function edge(p1, p2, horiz, a)
@@ -612,18 +605,19 @@ local function build()
   w.tCoin = makeTile(w, "NET GAINED", x0 + (tw + gap), -72, tw)
   w.tLoot = makeTile(w, "LOOT", x0 + (tw + gap) * 2, -72, tw)
   w.tKills = makeTile(w, "XP / HOUR", x0 + (tw + gap) * 3, -72, tw)
+  -- 2.0.4: two boxes. Net looted is everything you gained (loot, coin and quests); the
+  -- separate Net gained and Loot boxes are gone (they repeated it)
+  w.tCoin:Hide(); w.tLoot:Hide()
+  local full = tw * 4 + gap * 3
+  local nw = math.floor(full * 0.6)
+  w.tNet:SetWidth(nw); w.tNet.value:SetWidth(nw - 6); w.tNet.sub:SetWidth(nw - 6)
+  w.tKills:ClearAllPoints(); w.tKills:SetPoint("TOPLEFT", x0 + nw + gap * 2, -72); w.tKills:SetWidth(full - nw - gap * 2)
+  w.tKills.value:SetWidth(full - nw - gap * 2 - 6); w.tKills.sub:SetWidth(full - nw - gap * 2 - 6)
+  for _, tl in ipairs({ w.tNet, w.tKills }) do if tl.value.SetFont then local f, _, fl = tl.value:GetFont(); if f then tl.value:SetFont(f, 16, fl) end end end
 
   -- best drop + status
   w.bestIcon = w:CreateTexture(nil, "OVERLAY"); w.bestIcon:SetSize(16, 16); w.bestIcon:SetPoint("TOPLEFT", 10, -116 - DY)
   w.best = text(w, "GameFontHighlightSmall", "LEFT"); w.best:SetPoint("LEFT", w.bestIcon, "RIGHT", 5, 0); w.best:SetWidth(W - 40)
-  -- 2.0 (Taylor: "a spot that tells me how much exp/renown the current farm is giving me")
-  w.prog = CreateFrame("Button", nil, w); w.prog:SetSize(120, 16)
-  w.prog:SetPoint("RIGHT", w.bestIcon, "LEFT", W - 22, 0); w.prog:SetFrameLevel(w:GetFrameLevel() + 5)
-  w.prog.text = text(w.prog, "GameFontHighlightSmall", "RIGHT"); w.prog.text:SetPoint("RIGHT", 0, 0)
-  if w.prog.text.SetWordWrap then w.prog.text:SetWordWrap(false) end
-  w.prog:SetScript("OnEnter", function(self) if C.ProgTip then pcall(C.ProgTip, self) end end)
-  w.prog:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  w.prog:Hide()
   w.status = text(w, "GameFontHighlightSmall", "LEFT"); w.status:SetPoint("TOPLEFT", 10, -135 - DY); w.status:SetWidth(W - 20)
   -- 1.0.2 (Taylor: "a latency reading on the widget, small, along with fps")
   w.status:SetWidth(W - 20 - 84)
@@ -650,6 +644,7 @@ local function build()
     C.Toggle()
   end, 26)
   w.kinaBtn = hide
+  w.runsBtn = runs
   hide:SetPoint("LEFT", runs, "RIGHT", 4, 0)
   tip(hide, "Kina", "Opens the main Kina window: dungeons, farms, Hot and skill-up plans.")
   -- pay what the split says you owe: opens the trade and puts the money in
@@ -757,19 +752,27 @@ local function build()
     w.timer:ClearAllPoints(); w.timer:SetPoint("TOPRIGHT", w, "TOPRIGHT", -12, -58); w.timer:SetSize(86, 20)
     if w.timer:GetFontString() then fx(w.timer:GetFontString(), 10) end
     -- tiles: 74 x 54, label / value / note each clear of the 5 px border
-    local tw, gap, x0, ty = 74, 4, 10, -86
-    for i, tl in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do
-      tl:ClearAllPoints(); tl:SetPoint("TOPLEFT", w, "TOPLEFT", x0 + (i - 1) * (tw + gap), ty); tl:SetSize(tw, 54)
-      fx(tl.label, 9, "CENTER"); tl.label:ClearAllPoints(); tl.label:SetPoint("TOP", tl, "TOP", 0, -9)
+    -- 2.0.4: two boxes across the same width, numbers big enough to read with the widget
+    -- scaled well down: Net looted (3/5) and XP / hour (2/5)
+    local gap, x0, ty = 6, 10, -86
+    local full = 74 * 4 + 4 * 3
+    local nw = math.floor(full * 0.6)
+    w.tCoin:Hide(); w.tLoot:Hide()
+    for i, tl in ipairs({ w.tNet, w.tKills }) do
+      local tw = (i == 1) and nw or (full - nw - gap)
+      tl:ClearAllPoints(); tl:SetPoint("TOPLEFT", w, "TOPLEFT", (i == 1) and x0 or (x0 + nw + gap), ty); tl:SetSize(tw, 54)
+      fx(tl.label, 10, "CENTER"); tl.label:ClearAllPoints(); tl.label:SetPoint("TOP", tl, "TOP", 0, -8)
       tl.label:SetTextColor(0.62, 0.62, 0.62)
-      fx(tl.value, 13, "CENTER"); tl.value:ClearAllPoints(); tl.value:SetPoint("CENTER", tl, "CENTER", 0, -1); tl.value:SetWidth(tw - 6)
-      fx(tl.sub, 8, "CENTER"); tl.sub:ClearAllPoints(); tl.sub:SetPoint("BOTTOM", tl, "BOTTOM", 0, 9); tl.sub:SetWidth(tw - 12)
+      fx(tl.value, 19, "CENTER"); tl.value:ClearAllPoints(); tl.value:SetPoint("CENTER", tl, "CENTER", 0, 0); tl.value:SetWidth(tw - 8)
+      fx(tl.sub, 9, "CENTER"); tl.sub:ClearAllPoints(); tl.sub:SetPoint("BOTTOM", tl, "BOTTOM", 0, 7); tl.sub:SetWidth(tw - 12)
       tl.sub:SetTextColor(0.55, 0.55, 0.55)
     end
     -- best drop and status
-    w.bestIcon:ClearAllPoints(); w.bestIcon:SetPoint("TOPLEFT", w, "TOPLEFT", 14, -150); w.bestIcon:SetSize(18, 18)
+    w.bestIcon:ClearAllPoints(); w.bestIcon:SetPoint("TOPLEFT", w, "TOPLEFT", 14, -152); w.bestIcon:SetSize(18, 18)
     fx(w.best, 11); w.best:SetWidth(W - 50)
-    place(w.status, "TOPLEFT", 15, -174); fx(w.status, 11); w.status:SetWidth(W - 30)
+    place(w.status, "TOPLEFT", 15, -178); fx(w.status, 11); w.status:SetWidth(W - 30)
+    -- 2.0 (Taylor: "the spacing is off"): fps / latency in the corner above the buttons
+    w.perf:ClearAllPoints(); w.perf:SetPoint("BOTTOMRIGHT", w, "BOTTOMRIGHT", -14, 42)
     -- buttons
     for _, b in ipairs({ w.go, w.pause, runs, hide, w.pay, w.scan }) do
       if b and b.GetFontString and b:GetFontString() then fx(b:GetFontString(), 12) end
@@ -828,6 +831,15 @@ local function build()
       card:Show()
     end
     card:Hide(); w.idle = card
+    -- 2.0 (Taylor: the last farm card hid fps and latency): while the card shows, fps and
+    -- latency sit in its bottom-right corner, above it; back on the status row when it hides
+    card:HookScript("OnShow", function()
+      w.perf:SetParent(card); w.perf:ClearAllPoints(); w.perf:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 6)
+      w.perf:SetDrawLayer("OVERLAY", 7)
+    end)
+    card:HookScript("OnHide", function()
+      w.perf:SetParent(w); w.perf:ClearAllPoints(); w.perf:SetPoint("BOTTOMRIGHT", w, "BOTTOMRIGHT", -14, 42)
+    end)
   end
 
   local acc, tick = 0, 0
@@ -856,8 +868,102 @@ function C.Widget.Part(k)
   return w[k]
 end
 
+-- 2.0 (Taylor: "squeeze the widget box down to only show" the rate, timer and the four
+-- tiles): compact mode. The − button by the close X shrinks it; + brings it back. While
+-- compact, right-click the widget for Start/Stop, Pause, Log and Kina.
+local COMPACT_H = 152
+local function belowTiles()
+  return { w.go, w.pause, w.runsBtn, w.kinaBtn, w.pay, w.scan, w.idle, w.best, w.bestIcon, w.status, w.perf }
+end
+local compactMenu
+local function menuItem(parent, i, label, fn)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(110, 18); b:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -6 - (i - 1) * 19)
+  b.t = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); b.t:SetAllPoints(); b.t:SetJustifyH("LEFT"); b.t:SetText(label)
+  b:SetScript("OnClick", function() parent:Hide(); pcall(fn) end)
+  return b
+end
+local function showCompactMenu()
+  if not compactMenu then
+    compactMenu = CreateFrame("Frame", nil, w)
+    compactMenu:SetSize(122, 6 * 19 + 12); compactMenu:SetFrameLevel(w:GetFrameLevel() + 60)
+    local bg = compactMenu:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints()
+    if bg.SetColorTexture then bg:SetColorTexture(0.07, 0.06, 0.04, 0.95) end
+    compactMenu.go = menuItem(compactMenu, 1, "Start / Stop", function() if w.go:GetScript("OnClick") then w.go:GetScript("OnClick")(w.go, "LeftButton") end end)
+    menuItem(compactMenu, 2, "Pause / Resume", function() if C.session then C.PauseSession() end; C.RefreshWidget() end)
+    menuItem(compactMenu, 3, "Farm log", function() if C.OpenFarmLog then C.OpenFarmLog() else C.Toggle("Session") end end)
+    menuItem(compactMenu, 4, "Open Kina", function() C.Toggle() end)
+    menuItem(compactMenu, 5, "Full widget", function() C.SetWidgetCompact(false) end)
+    menuItem(compactMenu, 6, "Close menu", function() end)
+  end
+  compactMenu:ClearAllPoints(); compactMenu:SetPoint("TOPRIGHT", w, "BOTTOMRIGHT", 0, -2)
+  compactMenu.go.t:SetText(C.session and "Stop farm" or "Start farm")
+  compactMenu:Show()
+end
+function C.WidgetCompact() return C.settings.widgetCompact == true end
+local fullH
+local function applyCompact()
+  if not w then return end
+  fullH = fullH or w:GetHeight()
+  local on = C.WidgetCompact()
+  w:SetHeight(on and COMPACT_H or fullH)
+  -- (2.0.3: no clipping: it cut off the logo on top and the iron rim; what sits below
+  -- the tiles is hidden instead)
+  if w.SetClipsChildren then w:SetClipsChildren(false) end
+  -- going compact: remember what was showing; back to full: show those again (the next
+  -- refresh settles the rest)
+  for _, f in ipairs(belowTiles()) do
+    if f then
+      if on then
+        if f:IsShown() then f.kinaWasShown = true end
+        f:Hide()
+      elseif f.kinaWasShown then
+        f.kinaWasShown = nil; f:Show()
+      end
+    end
+  end
+  if w.miniBtn and w.miniBtn.kinaArt then w.miniBtn.kinaArt(on) end
+  if not on and compactMenu then compactMenu:Hide() end
+end
+function C.SetWidgetCompact(on)
+  C.settings.widgetCompact = on and true or nil
+  applyCompact()
+  C.RefreshWidget()
+end
+local function setupCompact()
+  -- the game's own minimize / maximize buttons, the same family as the close X beside it
+  local b = CreateFrame("Button", nil, w)
+  b:SetSize(24, 24); b:SetPoint("TOPRIGHT", w, "TOPRIGHT", -21, 1); b:SetFrameLevel(w:GetFrameLevel() + 40)
+  b:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight", "ADD")
+  function b.kinaArt(compact)
+    local base = compact and "Interface\\Buttons\\UI-Panel-BiggerButton-" or "Interface\\Buttons\\UI-Panel-SmallerButton-"
+    b:SetNormalTexture(base .. "Up"); b:SetPushedTexture(base .. "Down")
+  end
+  b.kinaArt(C.WidgetCompact())
+  b:SetScript("OnClick", function() C.SetWidgetCompact(not C.WidgetCompact()) end)
+  b:SetScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+    GameTooltip:AddLine(C.WidgetCompact() and "Full widget" or "Compact widget")
+    GameTooltip:AddLine(C.WidgetCompact() and "Brings back the buttons and the last farm card." or "Shows only the rate, the timer and the four boxes. Right-click it for Start, Pause, Log and Kina.", 0.85, 0.85, 0.85, true)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  w.miniBtn = b
+  -- whatever shows one of these later stays hidden while compact
+  for _, f in ipairs(belowTiles()) do
+    if f and f.HookScript then f:HookScript("OnShow", function(self) if C.WidgetCompact() then self.kinaWasShown = true; self:Hide() end end) end
+  end
+  w:HookScript("OnMouseUp", function(_, btn) if btn == "RightButton" and C.WidgetCompact() then showCompactMenu() end end)
+  for _, tl in ipairs({ w.tNet, w.tCoin, w.tLoot, w.tKills }) do
+    if tl and tl.HookScript then tl:HookScript("OnMouseUp", function(_, btn) if btn == "RightButton" and C.WidgetCompact() then showCompactMenu() end end) end
+  end
+  applyCompact()
+end
+C.Widget.ApplyCompact = applyCompact
+
 function C.ShowWidget(show)
-  if show and not w then build() end
+  if show and not w then build(); pcall(setupCompact) end
   C.settings.hudShown = show and true or false
   if w then if show then w:Show(); C.RefreshWidget() else w:Hide() end end
 end

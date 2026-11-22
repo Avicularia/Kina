@@ -96,6 +96,12 @@ function C.SeedStock()
   end
 end
 C.On("INIT", C.SeedStock)
+-- 2.0: everyone's watch list starts empty, once (items added after this stay)
+C.On("INIT", function()
+  if C.db.stockCleared20 then return end
+  C.db.stockCleared20 = true
+  C.db.stock = {}
+end)
 
 function C.StockRows()
   local rows = {}
@@ -133,8 +139,12 @@ function C.BagCount(id)
 end
 
 C.OnMarket(function()
+  C.db.stockAlerted = C.db.stockAlerted or {}
+  local day = math.floor(C.Now() / 86400)
   for _, row in ipairs(C.StockRows()) do
-    if row.under > 0 then
+    -- 2.0: at most one alert per item per day
+    if row.under > 0 and C.db.stockAlerted[row.id] ~= day then
+      C.db.stockAlerted[row.id] = day
       local r = C.Item(row.id)
       C.Print(string.format("|cff7CFC00STOCK ALERT|r %s: %d listed at or under %s (low %s).",
         (r and r.name) or ("item " .. row.id), row.under, C.Money(row.s.buyUnder), C.Money(row.low)))

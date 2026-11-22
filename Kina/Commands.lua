@@ -115,6 +115,16 @@ SlashCmdList.KINA = function(msg)
   elseif cmd == "link" then if C.Mentor then C.Mentor.CopyBox() end
   elseif cmd == "feedback" then C.Toggle("Help"); if C.ShowHelpTopic then C.ShowHelpTopic("Feedback") end
   elseif cmd == "net" or cmd == "network" or cmd == "log" then if C.NetLogUI then C.NetLogUI.Toggle() end
+  elseif cmd == "prices" or cmd == "ah" or cmd == "price" then if C.Prices then C.Prices.Toggle() end
+  elseif cmd == "grant" then
+    -- /kina grant <name> <amount> <reason>  (a "quoted name" can have a space)
+    local who, rest2 = rest:match('^"([^"]+)"%s*(.*)$')
+    if not who then who, rest2 = rest:match("^(%S+)%s*(.*)$") end
+    local amt, why = (rest2 or ""):match("^(%d+)%s*(.*)$")
+    if C.Grant then C.Grant.Send(who, amt, why or "") end
+  elseif cmd == "recap" then
+    local ok, e = pcall(C.Progress.ShowLastRecap)
+    if not ok then C.Print("|cffff8060recap failed: " .. tostring(e) .. "|r") end
   elseif cmd == "pad" or cmd == "controller" then if C.Pad then C.Pad.Report() end
   elseif cmd == "blocked" then
     local b = C.db.blocked or {}

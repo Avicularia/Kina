@@ -7,8 +7,7 @@ C.Cos = K
 local P = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Cos\\"
 K.FONT = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Fonts\\Cinzel-Bold.ttf"
 local RING = { Unproven = "ring_base", Vouched = "ring_vouched", Reliable = "ring_reliable", Trusted = "ring_trusted",
-  Honored = "ring_honored", Revered = "ring_revered", Exalted = "ring_exalted",
-  Delinquent = "ring_delinquent", Disgraced = "ring_disgraced", Oathbreaker = "ring_oathbreaker", Blacklisted = "ring_oathbreaker" }
+  Honored = "ring_honored", Revered = "ring_revered", Exalted = "ring_exalted" } -- 2.0: no broken rings
 local PROF = { Mining = "prof_mining", Herbalism = "prof_herbalism", Skinning = "prof_skinning", Enchanting = "prof_enchanting" }
 function K.Tex(name) return P .. name end
 function K.RingFor(standing) return P .. (RING[standing or "Unproven"] or "ring_base") end
@@ -61,9 +60,6 @@ local FX = {
   -- the ring, the plate cracked. Oathbreaker: ring and portrait snapped in two, the
   -- plate split. Nothing glows. damage = overlay on the portrait, ring/plate = the
   -- broken versions, ash = grit falling from grit = { x, y, spread } (portrait widths)
-  Delinquent  = { damage = "fx_crack1", ring = "ring_delinquent_cracked", plate = "kina_plaque_arc_chip", ash = 6, grit = { 0.36, 0.41, 0.04 } },
-  Disgraced   = { damage = "fx_shatter", ring = "ring_disgraced_broken", plate = "kina_plaque_arc_crack", ash = 16, grit = { -0.39, -0.39, 0.08 } },
-  Oathbreaker = { damage = "fx_tear", ring = "ring_oathbreaker_split", plate = "kina_plaque_arc_split", ash = 24, grit = { 0, 0.5, 0.06 } },
 }
 local function heartbeat(t, rate)
   local p = (t * rate) % 1
@@ -549,8 +545,7 @@ end
 -- 1.5.0: the Kina window and the farm widget take on your standing: a soft golden edge
 -- glow from Honored up (brighter at Revered, slowly pulsing at Exalted), a dull red one
 -- when your standing is below 0. Nothing below Honored, so it means something.
-local EDGE = { Honored = { 0.95, 0.85, 0.55, 0.35 }, Revered = { 1, 0.92, 0.70, 0.50 }, Exalted = { 1, 0.80, 0.25, 0.65 },
-  Delinquent = { 0.8, 0.15, 0.1, 0.35 }, Disgraced = { 0.8, 0.1, 0.05, 0.45 }, Oathbreaker = { 0.7, 0.05, 0.05, 0.55 } }
+local EDGE = { Honored = { 0.95, 0.85, 0.55, 0.35 }, Revered = { 1, 0.92, 0.70, 0.50 }, Exalted = { 1, 0.80, 0.25, 0.65 } }
 local glows = {}
 local function edge(f, p1, p2, w, h, x1, y1, x2, y2, horiz, flip)
   local t = f:CreateTexture(nil, "BACKGROUND", nil, -8)

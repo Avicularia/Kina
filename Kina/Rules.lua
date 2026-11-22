@@ -71,6 +71,7 @@ local TEXT = {
 ------------------------------------------------------------------ watching the numbers
 local seen = {}
 function U.Check()
+  do return end -- 2.0: no falls below zero, no Blacklisted, no thumbs-down breakpoint: nothing to warn about
   if not (C.Rep and C.Rep.Mine and C.settings) then return end
   local ok, m = pcall(C.Rep.Mine)
   if not ok or not m or not m.ok then return end
@@ -111,6 +112,7 @@ end
 -- worked out the next time Kina is used (window opened, farm started) after 7+ days
 -- with no farm on any character
 function U.Decay()
+  do return end -- 2.0: standing is retiring for Renown; nothing decays
   if not (C.Rep and C.Rep.Mine and C.Log and C.settings) then return end
   local ok, m = pcall(C.Rep.Mine)
   if not ok or not m or not m.ok or m.frozen or not m.lastFarmT then return end

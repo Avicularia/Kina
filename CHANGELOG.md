@@ -1,3 +1,23 @@
+# Kina 2.0.8
+
+Kina 2.0: farming with other Kinas now earns Renown, Kina XP and a whole season of cosmetics.
+
+- New: Renown and Kina XP, earned by farming with at least one other Kina. Ten ranks, from the Wanderer to the Everlasting. Everyone in the farm gets credit for the whole group's loot.
+- Bonuses that stack: party, daily streak, campfire, season track levels, and +10% for every commendation you receive.
+- Hot Farms, live: the list rebuilds near your level from live AH prices and Kina players' kills. A drop selling at 1.5x its usual price makes its mob HOT while the streak lasts.
+- Every hot mob's page explains why: worth per kill, gold per hour at your own pace, whether it still gives you XP, how full the market is, and how sure Kina is. Gold per kill always shows; the logo still lights up at 30 of your kills.
+- New: Gathering on Hot Farms: every Mining and Herbalism node you can gather, what each gather gives ("Iron Ore: 300%" = 3 a node) and what it's worth, with HOT when a material spikes.
+- Skins count toward a mob's value once your Skinning is high enough.
+- New: Prices, anywhere: an auction house browser that works away from the AH, with Blizzard's own categories (/kina prices).
+- New: account net worth on the You page: every character's gold plus unsoulbound bags and bank.
+- Prices: a busy market (20+ listed) is valued at today's price, so a material that jumps counts the day it happens.
+- AH scans: prices are ready the moment the book is read; item names finish loading in the background.
+- Scans shared with your group arrive up to 8 times faster.
+- The widget: two big boxes (Net looted and XP / hour), a compact mode, and a party strip you can hide or resize. It scales down to 40%.
+- Kina network: a busy channel no longer cuts you off (backup channels and relays), and add-on messages are registered so every Kina hears every other.
+- Party post fixed: with no other Kina in the group, the 15-minute post shows your own gold per hour.
+- Debts, Oathbreaker and the negative tiers are gone. A thumbs down never costs anything.
+
 # Kina 1.0.9
 
 - Kina network fixed: scans now reach every Kina, on every realm and layer.

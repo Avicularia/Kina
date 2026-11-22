@@ -317,6 +317,28 @@ end)
 local roster
 local READY, NOTREADY, WAITING = "Interface\\RaidFrame\\ReadyCheck-Ready", "Interface\\RaidFrame\\ReadyCheck-NotReady", "Interface\\RaidFrame\\ReadyCheck-Waiting"
 -- who's who: { name, state = "yes" | "no" | "wait" }, you first
+-- 2.0 (Taylor: warn when a group member's Kina is too old to join your farm): the version
+-- each group member's Kina last said it runs (from its hello)
+local function vnum(v)
+  local a, b, c = tostring(v or ""):match("^(%d+)%.(%d+)%.(%d+)")
+  return a and (tonumber(a) * 1e6 + tonumber(b) * 1e3 + tonumber(c)) or 0
+end
+function F.KinaVersionOf(name)
+  local want = (tostring(name or ""):match("^([^%s%-]+)") or ""):lower()
+  local sh = C.db and C.db.share
+  if want == "" or not (sh and sh.authors) then return nil end
+  local best, bestT
+  for _, a in pairs(sh.authors) do
+    local hit = a.name and (a.name:match("^([^%s%-]+)") or a.name):lower() == want
+    if not hit and a.chars then for n in pairs(a.chars) do if (n:match("^([^%s%-]+)") or n):lower() == want then hit = true end end end
+    if hit and a.ver and (not bestT or (a.seen or a.t or 0) > bestT) then best, bestT = a.ver, a.seen or a.t or 0 end
+  end
+  return best
+end
+function F.TooOld(name)
+  local v = F.KinaVersionOf(name)
+  return v and vnum(v) < vnum(C.version) and v or nil
+end
 function F.RosterList()
   local s = C.session and C.session.sync
   local sid = s and s.sid
@@ -342,7 +364,9 @@ function F.RosterList()
     if seen[k] or k == "" then return end
     seen[k] = true
     local st = (k == mine:lower() or inFarm[k]) and "yes" or (said[k] == "no" and "no" or "wait")
-    out[#out + 1] = { name = proper[k] or (k:sub(1, 1):upper() .. k:sub(2)), state = st }
+    local old = st == "wait" and F.TooOld(k) or nil
+    if old then st = "old" end
+    out[#out + 1] = { name = proper[k] or (k:sub(1, 1):upper() .. k:sub(2)), state = st, ver = old }
   end
   add(mine)
   local names = {}
@@ -392,9 +416,19 @@ function F.RefreshRoster()
       roster.rows[i] = r
     end
     r:ClearAllPoints(); r:SetPoint("TOPLEFT", 20, -54 - (i - 1) * 24)
-    r.icon:SetTexture(e.state == "yes" and READY or (e.state == "no" and NOTREADY or WAITING))
+    r.icon:SetTexture(e.state == "yes" and READY or ((e.state == "no" or e.state == "old") and NOTREADY or WAITING))
     r.name:SetText(e.name .. (e.name == me() and " |cff9d9d9d(you)|r" or ""))
-    r.state:SetText(e.state == "yes" and "|cff3fd03fin the farm|r" or (e.state == "no" and "|cffff5050said no|r" or "|cffffd040no answer yet|r"))
+    r.state:SetText(e.state == "yes" and "|cff3fd03fin the farm|r" or (e.state == "no" and "|cffff5050said no|r")
+      or (e.state == "old" and ("|cffff8040old Kina (v" .. e.ver .. "): needs an update|r")) or "|cffffd040no answer yet|r")
+    -- tell you once per farm, in your chat only
+    if e.state == "old" then
+      roster.warned = roster.warned or {}
+      local key = (C.session.sync.sid or "") .. e.name
+      if not roster.warned[key] then
+        roster.warned[key] = true
+        C.Print(e.name .. "'s Kina is too old (v" .. e.ver .. ") to join your farm. They need to update Kina to v" .. tostring(C.version) .. ".")
+      end
+    end
     r.entry = e
     r:Show()
   end

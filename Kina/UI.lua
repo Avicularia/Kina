@@ -187,14 +187,40 @@ tabs["Hot Farms"] = function()
       or "Hot mobs taken off the list, with what they gave you. Gold per kill shows once you had 30 kills."
     return head, { "", "Mob", "Zone", "Your kills", "Per kill", "Total gold", "Card" }, { 0, 70, 280, 430, 520, 610, 720 }, out
   end
+  -- 2.0.6: gathering. Every node you can gather, its materials per gather ("Iron Ore:
+  -- 300%") and what a gather is worth; HOT when a material is on a price streak
+  if ui.hotGather then
+    local G = C.Gather
+    local out = {}
+    local q = ui.search["Hot Farms"]
+    for _, r in ipairs(G and G.List() or {}) do
+      local mats = {}
+      for i, m in ipairs(r.mats) do
+        if i > 3 then break end
+        mats[#mats + 1] = G.MatText(m, itemName(m.id)) .. ((m.spike and m.spike >= C.Hot.SPIKE) and string.format(" |cffff7a1a+%d%%|r", math.floor((m.spike - 1) * 100 + 0.5)) or "")
+      end
+      local matText = table.concat(mats, ", ") .. (r.how == "est." and " |cff9d9d9d(est.)|r" or "")
+      local tag = r.hot and "|cffff7a1aHOT|r" or ""
+      if not (q and q:find("%S")) or C.LooseMatch(q, r.name) or C.LooseMatch(q, matText) then
+        out[#out + 1] = { gather = r.oid, cols = { tag, r.name, r.prof .. " " .. r.skill, C.Money(math.floor(r.value + 0.5)), matText },
+          sort = { r.hot and 1 or 0, r.name, r.skill, r.value, matText } }
+      end
+    end
+    local head = #out == 0 and "No gathering professions on this character yet (Mining or Herbalism). Learn one and Kina lists every node you can gather and what it's worth."
+      or "Every node you can gather, worth per gather. |cffff7a1aHOT|r = a material selling for 1.5x its usual price. 300% = 3 per gather."
+    return head, { "", "Node", "Skill", "Per gather", "Materials per gather" }, { 0, 44, 230, 330, 430 }, out
+  end
   local all = ui.hotAll
   local list = H.Farms(not all and 4 or nil)
   local q = ui.search["Hot Farms"]
   local out = {}
   for _, r in ipairs(list) do
     local why = ""
-    for _, d in ipairs(r.det) do
-      if d.kind == "item" then
+    if r.streak then
+      why = string.format("|cffff7a1a%s +%d%% this week|r", itemName(r.streak.id), math.floor((r.streak.ratio - 1) * 100 + 0.5))
+    end
+    for _, d in ipairs(why == "" and r.det or {}) do
+      if d.kind == "item" or d.kind == "skin" then
         why = string.format("%s %d%%%s", itemName(d.id), math.floor(d.rate * 100 + 0.5),
           d.how == "AH" and string.format(" |cff9d9d9d(sells ~%d/hr)|r", math.floor((d.sold or 0) + 0.5)) or " |cff9d9d9d(vendor)|r")
         break
@@ -216,7 +242,7 @@ tabs["Hot Farms"] = function()
     head = all and "No hot mobs yet. Prices come from AH scans and kill data from Kina users: scan the AH and farm, and it fills in."
       or string.format("No hot mobs from level %d to %d. Press All levels to see the rest.", math.max(1, L - 2), L + 4)
   else
-    head = string.format("%s, gold per kill. |cffff7a1aHOT|r = best in its zone and far above its level. |cff9d9d9dGrey|r = fewer than %d Kina kills so far.",
+    head = string.format("%s, gold per kill. |cffff7a1aHOT|r = best in its zone and far above its level, or a drop on a price streak. |cff9d9d9dGrey|r logo = fewer than %d of your kills (it lights up as a collectible).",
       all and "Every level" or string.format("Top 10 from level %d to %d (where you're headed)", math.max(1, L - 2), L + 4), H.KINA_KILLS)
       .. (C.HotNudge and C.HotNudge.TodayText() and ("   " .. C.HotNudge.TodayText()) or "")
   end
@@ -1969,35 +1995,82 @@ function C.ShowHotMob(npc)
   if not ui.frame then C.Toggle() end
   if not detail then buildDetail() end
   placeDetail()
-  local tierText = r.tier == "hot" and "|cffff7a1aHOT|r: never skip it, worth stopping to farm"
-    or (r.tier == "kos" and "|cffffc54aKill on sight|r: well above other mobs your level" or "Not hot right now")
-  local hidden = r.hideValue
+  -- 2.0.6 (Taylor: "the details on the hot farm don't tell me why I should stop to kill
+  -- it. I need the info, what is kina seeing that led it to that conclusion"): the page
+  -- reads like an answer: what it pays per kill and where that comes from, what that is per
+  -- hour at your own pace, whether it fits your levelling, how full the market is, and how
+  -- sure Kina is.
+  local tierText = r.tier == "hot" and (r.streak and string.format("|cffff7a1aHOT|r: %s sells %.1fx its usual price", itemName(r.streak.id), r.streak.ratio)
+      or "|cffff7a1aHOT|r: best in its zone, far above its level")
+    or (r.tier == "kos" and "|cffffc54aKill on sight|r: well above mobs its level" or "Not hot right now")
   local lines = {
     (r.grey and "|cff9d9d9d" or "|cffffffff") .. r.name .. "|r" .. (r.elite and "  |cffffc54aElite|r" or ""),
     string.format("Level %d   %s   %s", r.lvl, H.TYPE_NAME[r.type] or "?", r.zone or "?"),
     tierText,
-    hidden and string.format("|cffffc54aPer kill: ?|r   |cff9d9d9dKill it %d times to light it up and see what it pays you (%d so far).|r", H.KINA_KILLS, r.kinaKills or 0)
-      or string.format("|cffffc54aPer kill: %s|r   %.1fx the usual mob of its level, %.1fx the top 10%%   #%d of %d in %s",
-      C.Money(math.floor(r.value + 0.5)), r.xMed or 0, r.xTop or 0, r.rank or 0, r.zoneN or 0, r.zone or "its zone"),
   }
-  if not hidden then lines[#lines + 1] = "Where the gold comes from:" end
-  for i, d in ipairs(hidden and {} or r.det) do
-    if i > 6 then break end
-    if d.kind == "coin" then
-      if d.value > 0 then lines[#lines + 1] = string.format("   coin %s (%s)", C.Money(math.floor(d.value + 0.5)), d.how) end
-    else
-      local how = d.how == "AH" and string.format("AH after cut; ~%d sell per hour, %d listed", math.floor((d.sold or 0) + 0.5), d.listed or 0) or "vendor"
-      lines[#lines + 1] = string.format("   %s  %d%% x %s (%s) = %s", itemCell(d.id), math.floor(d.rate * 100 + 0.5), C.Money(math.floor(d.price + 0.5)), how, C.Money(math.floor(d.value + 0.5)))
+  local coin, drops = 0, 0
+  for _, d in ipairs(r.det) do if d.kind == "coin" then coin = coin + d.value else drops = drops + d.value end end
+  if r.value > 0 then
+    lines[#lines + 1] = string.format("|cffffc54aWorth per kill: %s|r (coin %s, drops %s)",
+      C.Money(math.floor(r.value + 0.5)), C.Money(math.floor(coin + 0.5)), C.Money(math.floor(drops + 0.5)))
+    lines[#lines + 1] = string.format("   %.1fx the usual mob its level, #%d of %d in its zone", r.xMed or 0, r.rank or 0, r.zoneN or 0)
+  else
+    lines[#lines + 1] = "|cff9d9d9dNo drop data for it yet: kill a few and Kina fills this in.|r"
+  end
+  local shown = 0
+  for _, d in ipairs(r.det) do
+    if d.kind ~= "coin" and shown < 5 then
+      shown = shown + 1
+      local streak = (d.spike and d.spike >= H.SPIKE and d.how == "AH") and string.format(" |cffff7a1a%.1fx usual|r", d.spike) or ""
+      lines[#lines + 1] = string.format("   %s%s  %d%% x %s = %s%s", d.kind == "skin" and "skin: " or "", itemCell(d.id), math.floor(d.rate * 100 + 0.5),
+        C.Money(math.floor(d.price + 0.5)), C.Money(math.floor(d.value + 0.5)), streak)
     end
   end
+  -- your pace: kills per hour over your own farms
+  local kills, secs = 0, 0
+  for _, ss in ipairs(C.db.sessions or {}) do
+    if (ss.kills or 0) > 0 and ss.start and (ss.stop or ss.last) then
+      kills = kills + ss.kills; secs = secs + math.max(0, (ss.stop or ss.last) - ss.start - (ss.pausedSecs or 0))
+    end
+  end
+  local kph, paceHow = 50, "a typical pace"
+  if kills >= 100 and secs >= 3600 then kph, paceHow = kills / (secs / 3600), "your pace" end
+  if r.value > 0 then
+    lines[#lines + 1] = string.format("|cffffc54aPer hour:|r ~%s at %s (%d kills/h)", C.Money(math.floor(r.value * kph / 100 + 0.5) * 100), paceHow, math.floor(kph + 0.5))
+  end
+  -- levelling: does it still give XP?
+  local L = (UnitLevel and UnitLevel("player")) or 1
+  local grey = L <= 5 and 0 or (L <= 39 and (L - 5 - math.floor(L / 10)) or (L - 1 - math.floor(L / 5)))
+  local fit
+  if r.lvl <= grey then fit = "|cff9d9d9dgrey to you: gold, no XP|r"
+  elseif r.lvl > L + 2 then fit = string.format("|cffff8060%d levels above you: slower kills|r", r.lvl - L)
+  else fit = "|cff7CFC00gold and XP together|r" end
+  lines[#lines + 1] = "|cffffc54aLevelling:|r " .. fit
+  -- the market for its best drop
+  local top
+  for _, d in ipairs(r.det) do if d.kind ~= "coin" and d.how == "AH" then top = d; break end end
+  if top then
+    local sold, listed = top.sold or 0, top.listed or 0
+    local hrs = sold > 0 and listed / sold or nil
+    local state = not hrs and "|cff9d9d9dno sales measured|r" or (hrs > 24 and "|cffff8060flooded|r"
+      or (hrs < 4 and "|cff7CFC00tight|r" or "|cffffc54ahealthy|r"))
+    lines[#lines + 1] = string.format("|cffffc54aMarket:|r %s %d listed, ~%d sell/h, %s", itemName(top.id), listed, math.floor(sold + 0.5), state)
+  end
+  -- how sure
+  local n = r.loots or 0
+  local conf = n >= 300 and "|cff7CFC00high|r" or (n >= 100 and "|cffffc54amedium|r" or "|cffff8060low|r")
+  lines[#lines + 1] = string.format("|cffffc54aConfidence:|r %s (%d loots, %s)", conf, n,
+    r.source == "you" and "your kills" or (r.source == "Kina" and "Kina users' kills" or "Wowhead Forever"))
+  local age = C.ScanAgeMinutes and C.ScanAgeMinutes()
+  lines[#lines + 1] = "   |cff9d9d9dprices: " .. (age and (age < 120 and (age .. " min") or (math.floor(age / 60) .. " h")) .. " old AH scan" or "no AH scan yet") .. "|r"
   local s = H.Spot(npc)
   lines[#lines + 1] = ""
   lines[#lines + 1] = "|cffffc54aWhere|r"
   if s then
-    lines[#lines + 1] = string.format("   thickest spawn: %s %.1f, %.1f%s", r.zone or "?", s.x * 100, s.y * 100, s.noMap and " (no map pin for this zone yet)" or "")
+    lines[#lines + 1] = string.format("   thickest spawn: %s %.1f, %.1f%s", r.zone or "?", s.x * 100, s.y * 100, s.noMap and " (no map pin)" or "")
     if s.total then
       local dense = (s.inCamp or 0) >= 15 and "|cff7CFC00thick|r" or ((s.inCamp or 0) >= 7 and "|cffffc54agood|r" or "|cff9d9d9dsparse|r")
-      lines[#lines + 1] = string.format("   %d spawn points in all, %d of them in the main camp (%s)", s.total, s.inCamp or 0, dense)
+      lines[#lines + 1] = string.format("   %d spawn points, %d in the main camp (%s)", s.total, s.inCamp or 0, dense)
     elseif s.inCamp then
       lines[#lines + 1] = string.format("   %d Kina kills recorded around this spot", s.inCamp)
     end
@@ -2006,13 +2079,7 @@ function C.ShowHotMob(npc)
     lines[#lines + 1] = "   no spawn points known yet: once Kina users kill it, it shows where"
   end
   lines[#lines + 1] = ""
-  lines[#lines + 1] = r.listed and string.format("Your kills: %d%s", r.kinaKills or 0, r.grey and string.format(" |cff9d9d9d(the logo lights up for you at %d)|r", H.KINA_KILLS) or "  |cff7CFC00lit|r")
-    or string.format("Kina data: %d kills recorded by Kina users%s", r.kinaKills or 0,
-    r.grey and string.format(" |cff9d9d9d(the logo stays grey until %d)|r", H.KINA_KILLS) or "")
-  if not hidden then
-    lines[#lines + 1] = string.format("|cff9d9d9dDrop rates from %s (%d loots). Prices from your AH scans.|r",
-      r.source == "you" and "your own kills" or (r.source == "Kina" and "Kina users' kills" or "Wowhead Forever"), r.loots or 0)
-  end
+  lines[#lines + 1] = string.format("Your kills: %d%s", r.mine or 0, r.grey and string.format(" |cff9d9d9d(the logo lights up at %d)|r", H.KINA_KILLS) or "  |cff7CFC00lit|r")
   setLines(lines)
   detail.graph:Hide()
   setButtons({
@@ -2020,6 +2087,39 @@ function C.ShowHotMob(npc)
     { "Mob details", function() C.ShowMob(npc) end },
     { "Close", function() detail:Hide() end },
   })
+  detail:Show(); if C.RaiseKina then C.RaiseKina() else detail:Raise() end
+end
+
+-- 2.0.6: a gathering node's page: what one gather gives, what it's worth, the hot material
+function C.ShowGatherNode(oid)
+  local G = C.Gather
+  local r
+  for _, x in ipairs(G and G.List() or {}) do if x.oid == oid then r = x end end
+  if not r then return end
+  if not ui.frame then C.Toggle() end
+  if not detail then buildDetail() end
+  placeDetail()
+  local lines = { "|cffffffff" .. r.name .. "|r",
+    string.format("%s %d to gather (you: %d)", r.prof, r.skill, r.your or 0),
+    r.hot and string.format("|cffff7a1aHOT|r: %s sells %.1fx its usual price", itemName(r.hot.id), r.hot.spike) or "No material on a price streak now",
+    string.format("|cffffc54aWorth per gather: %s|r", C.Money(math.floor(r.value + 0.5))), "Per gather:" }
+  for _, m in ipairs(r.mats) do
+    local how = m.route == "AH" and string.format("AH, ~%d sell an hour, %d listed", math.floor((m.sold or 0) + 0.5), m.listed or 0) or "vendor"
+    lines[#lines + 1] = string.format("   %s  x %s (%s) = %s%s", G.MatText(m, itemCell(m.id)), C.Money(math.floor(m.price + 0.5)), how,
+      C.Money(math.floor(m.value + 0.5)), (m.spike and m.spike >= C.Hot.SPIKE and m.route == "AH") and string.format(" |cffff7a1a%.1fx usual|r", m.spike) or "")
+  end
+  local pace = G.Pace()
+  lines[#lines + 1] = ""
+  if pace then
+    lines[#lines + 1] = string.format("|cffffc54aPer hour:|r ~%s at your pace (%.0f nodes/h)", C.Money(math.floor(r.value * pace / 100 + 0.5) * 100), pace)
+  else
+    lines[#lines + 1] = "|cff9d9d9dPer hour: needs more of your gathers first|r"
+  end
+  lines[#lines + 1] = r.how == "est." and string.format("|cff9d9d9dTypical yield until you've gathered it %d times (%d)|r", G.MIN_OWN, r.gathers)
+    or string.format("|cff9d9d9dYields from your own %d gathers|r", r.gathers)
+  setLines(lines)
+  detail.graph:Hide()
+  setButtons({ { "Close", function() detail:Hide() end } })
   detail:Show(); if C.RaiseKina then C.RaiseKina() else detail:Raise() end
 end
 
@@ -2896,11 +2996,13 @@ local function buildSettings(f)
     y = y + ROWH
     action("Text size: back to 100%", function() sl:SetValue(1); C.ApplyTextScale(1) end)
     -- 1.0.6: window sizes without dragging the corner (controllers)
-    action("Window size: default", function() C.SetWindowSize(880, 660) end)
-    action("Window size: large", function() C.SetWindowSize(1280, 860) end)
-    action("Window size: largest", function() C.SetWindowSize(99999, 99999) end)
+    action("Window size: default", function() C.SetWindowScale(1) end)
+    action("Window size: large", function() C.SetWindowScale(1.25) end)
+    action("Window size: largest", function() C.SetWindowScale(99) end)
   end
   action("Put every Kina window back", function() C.ResetWindows() end)
+  toggle("Keep Kina on top of other windows", function() return C.KeepOnTop() end, function(v) C.settings.keepOnTop = v and nil or false; if C.ApplyKeepOnTop then C.ApplyKeepOnTop() end end,
+    "Kina's window and farm widget stay above other addons' windows. Off: Kina steps back when you click another window.")
   toggle("Controller in Kina's windows", function() return not st.padOff end, function(v) st.padOff = not v end,
     "With gamepad mode on: D-pad moves, A presses, B goes back, X shows info, Y is right-click, LB / RB change tabs.")
   toggle("Kina iron look (after /reload)", function() return st.look ~= "classic" end, function(v) st.look = (not v) and "classic" or nil
@@ -3057,50 +3159,30 @@ local function buildSettings(f)
 end
 
 ------------------------------------------------------------------ main window
+C.MAIN_W, C.MAIN_H = 880, 660
 local function build()
   local f = CreateFrame("Frame", "KinaFrame", UIParent, "BasicFrameTemplateWithInset")
   -- 1.1.1 iron look: remove the template's own art first, before Kina adds its parts
   if C.Skin and C.Skin.On() then C.Skin.StripTemplate(f) end
-  -- never bigger than the screen (a saved size from a broken drag is shrunk back)
+  -- 2.0 (Taylor: "the text and everything else need to scale with the corner slider;
+  -- everything is stepping on everything else"): the window is always laid out at one size
+  -- (880 x 660, the size every page is designed for) and the corner grip scales all of it,
+  -- text included, like the details panel. A size saved by older Kinas becomes a scale.
   local screenW, screenH = (UIParent:GetWidth() or 1900) - 20, (UIParent:GetHeight() or 1200) - 20
-  -- (0.9.6: tall enough for the You and profile pages, which overlapped in a small window)
-  local MINW, MINH = math.min(880, screenW), math.min(660, screenH)
-  ui.w, ui.h = math.max(ui.w or 0, MINW), math.max(ui.h or 0, MINH)
+  ui.w, ui.h = C.MAIN_W, C.MAIN_H
   local saved = C.settings.pos.mainSize
-  if type(saved) == "table" and saved[1] then
-    ui.w = math.max(MINW, math.min(screenW, saved[1])); ui.h = math.max(MINH, math.min(screenH, saved[2]))
+  if type(saved) == "table" and saved[1] and C.settings.pos.mainScale == nil then
+    C.settings.pos.mainScale = math.max(0.6, math.min(1.5, math.min(saved[1] / C.MAIN_W, saved[2] / C.MAIN_H)))
   end
+  C.settings.pos.mainSize = nil
   f:SetSize(ui.w, ui.h); C.RestorePos(f, "main", "LEFT", UIParent, "LEFT", 40, 40)
-  -- drag the bottom-right corner to resize; columns stretch, more rows show. The
-  -- top-left corner stays pinned and the window stops at the screen's edge.
-  local grip = CreateFrame("Button", nil, f)
-  grip:SetPoint("BOTTOMRIGHT", -2, 2); grip:SetFrameLevel(f:GetFrameLevel() + 20)
-  C.StyleGrip(grip, "Drag to resize the window (more rows and wider columns).")
-  grip:SetScript("OnMouseDown", function(self)
-    local l, t = f:GetLeft(), f:GetTop()
-    if not (l and t) then return end
-    local eff = f:GetEffectiveScale()
-    self.l, self.t, self.w0, self.h0 = l, t, f:GetWidth(), f:GetHeight()
-    local cx, cy = GetCursorPosition()
-    self.cx, self.cy, self.eff = cx, cy, eff
-    f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
-    C.GuardScript(self, "OnUpdate", "UI:2853", function(g)
-      local x, y = GetCursorPosition()
-      local maxW = math.max(MINW, (UIParent:GetRight() or screenW) - g.l - 4)
-      local maxH = math.max(MINH, g.t - 4)
-      local w = math.max(MINW, math.min(maxW, g.w0 + (x - g.cx) / g.eff))
-      local h = math.max(MINH, math.min(maxH, g.h0 + (g.cy - y) / g.eff))
-      if math.abs(w - f:GetWidth()) >= 1 or math.abs(h - f:GetHeight()) >= 1 then f:SetSize(w, h) end
-    end)
-  end)
-  local function stop(self)
-    if not self:GetScript("OnUpdate") then return end
-    self:SetScript("OnUpdate", nil)
-    C.settings.pos.mainSize = { math.floor(ui.w + 0.5), math.floor(ui.h + 0.5) }
-    C.SavePos(f, "main")
+  -- never bigger than the screen
+  local fit = math.min(screenW / C.MAIN_W, screenH / C.MAIN_H)
+  if type(C.settings.pos.mainScale) == "number" and C.settings.pos.mainScale > fit then C.settings.pos.mainScale = math.max(0.6, fit) end
+  if C.ScaleGrip then
+    local grip = C.ScaleGrip(f, "mainScale")
+    if grip then C.StyleGrip(grip, "Drag to make Kina's window bigger or smaller: everything in it scales together.") end
   end
-  grip:SetScript("OnMouseUp", stop)
-  grip:SetScript("OnHide", stop)
   f:SetScript("OnSizeChanged", function(_, w, h)
     ui.w, ui.h = w, h
     fitWidths()
@@ -3322,9 +3404,16 @@ local function build()
   hotB:SetPoint("BOTTOMLEFT", 16, 10); hotB:Hide()
   ui.hotButton = hotB
   local arcB = button(f, "Archive", 90, function(self)
-    ui.hotArchive = not ui.hotArchive; self:SetText(ui.hotArchive and "Hot list" or "Archive"); ui.tab = "Hot Farms"; C.Refresh() end)
+    ui.hotArchive = not ui.hotArchive; ui.hotGather = nil; if ui.hotGatButton then ui.hotGatButton:SetText("Gathering") end
+    self:SetText(ui.hotArchive and "Hot list" or "Archive"); ui.tab = "Hot Farms"; C.Refresh() end)
   arcB:SetPoint("LEFT", hotB, "RIGHT", 6, 0); arcB:Hide()
   ui.hotArcButton = arcB
+  local gatB = button(f, "Gathering", 90, function(self)
+    ui.hotGather = not ui.hotGather; ui.hotArchive = nil; ui.offset = 0
+    self:SetText(ui.hotGather and "Mobs" or "Gathering"); if ui.hotArcButton then ui.hotArcButton:SetText("Archive") end
+    ui.tab = "Hot Farms"; C.Refresh() end)
+  gatB:Hide()
+  ui.hotGatButton = gatB
   ui.ledgerDaysButton = days
   ui.scanBar = buildScanBar(f)
   -- Public Kina: no scan button, scan bar or farm-advice buttons (those tabs are hidden);
@@ -3344,6 +3433,11 @@ local function build()
   fbB.dot = fbB:CreateTexture(nil, "OVERLAY"); fbB.dot:SetSize(10, 10); fbB.dot:SetPoint("LEFT", fbB, "LEFT", 7, 0)
   fbB.dot:SetTexture("Interface\\COMMON\\Indicator-Green"); fbB.dot:Hide()
   ui.feedbackButton = fbB
+  -- 2.0 (Taylor): an AH browser that works anywhere, from your last scan
+  local pricesB = button(f, "Prices", 80, function() if C.Prices then C.Prices.Toggle() end end)
+  pricesB:SetPoint("RIGHT", fbB, "LEFT", -6, 0)
+  if C.ButtonTip then C.ButtonTip(pricesB, "Prices", "Browse every item from your last AH scan (and other Kinas' scans) anywhere: search, filter, sort, and see each item's cheapest listings. Research only.") end
+  ui.pricesButton = pricesB
   buildSettings(f)
   -- ROI filter row (every tab): rows below the typed ROI %, and with the switch on,
   -- rows that don't pay for your time, are hidden. They are still calculated.
@@ -3600,6 +3694,8 @@ local function build()
       if not d then return end
       if d.route and (d.route.route or d.route.kind ~= "Kill") and not (d.route.kind == "Pick+Kill") then
         if btn == "RightButton" then C.FarmRowMenu(d.route) else C.ShowFarmRow(d.route) end
+      elseif d.gather and C.ShowGatherNode then
+        C.ShowGatherNode(d.gather)
       elseif d.hot and C.ShowHotMob then
         C.ShowHotMob(d.npc)
       elseif d.npc then
@@ -3880,7 +3976,8 @@ function C.Refresh()
   ui.head:SetText(head)
   ui.headClick = opts.headClick
   -- public Ledger: the period button (7 days / 30 days / all time) only on the Ledger list
-  if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms" and not ui.hotArchive) end
+  if ui.hotButton then ui.hotButton:SetShown(tab == "Hot Farms" and not ui.hotArchive and not ui.hotGather) end
+  if ui.hotGatButton then ui.hotGatButton:SetShown(tab == "Hot Farms") end
   if ui.hotArcButton then ui.hotArcButton:SetShown(tab == "Hot Farms") end
   -- 1.0.8 (Taylor: they sat on top of the scan bar): the Hot Farms buttons go up in the
   -- header row, at the right, like the Ledger's
@@ -3888,7 +3985,11 @@ function C.Refresh()
     ui.hotArcButton:ClearAllPoints(); ui.hotArcButton:SetPoint("TOPRIGHT", ui.frame, "TOPRIGHT", -16, -52 - (ui.baseTop or 0))
     ui.hotButton:ClearAllPoints(); ui.hotButton:SetPoint("RIGHT", ui.hotArcButton, "LEFT", -8, 0)
     ui.hotButton:SetHeight(24); ui.hotArcButton:SetHeight(24)
-    if ui.head then ui.head:SetWidth(math.max(200, ui.w - 260)) end
+    if ui.hotGatButton then
+      ui.hotGatButton:ClearAllPoints(); ui.hotGatButton:SetHeight(24)
+      ui.hotGatButton:SetPoint("RIGHT", ui.hotGather and ui.hotArcButton or ui.hotButton, "LEFT", -8, 0)
+    end
+    if ui.head then ui.head:SetWidth(math.max(200, ui.w - 360)) end
   end
   if C.PUBLIC and ui.ledgerDaysButton then
     if tab == "Ledger" and not ui.bookOf then ui.ledgerDaysButton:Show() else ui.ledgerDaysButton:Hide() end
@@ -4030,14 +4131,22 @@ function C.Toggle(tab)
   end
 end
 
--- 1.0.6: set the window size (fits the screen); the pages scale with it
-function C.SetWindowSize(w, h)
+-- 1.0.6: set the window size; 2.0: as a scale of the whole window (fits the screen)
+function C.SetWindowScale(s)
   if not ui.frame then build() end
   local sw, sh = (UIParent:GetWidth() or 1900) - 20, (UIParent:GetHeight() or 1200) - 20
-  ui.w, ui.h = math.max(math.min(880, sw), math.min(sw, w)), math.max(math.min(660, sh), math.min(sh, h))
-  ui.frame:SetSize(ui.w, ui.h)
-  C.settings.pos.mainSize = { ui.w, ui.h }
-  C.Refresh()
+  local fit = math.min(sw / C.MAIN_W, sh / C.MAIN_H, 1.5)
+  s = math.max(0.6, math.min(fit, s))
+  local f = ui.frame
+  local l, t = f:GetLeft(), f:GetTop()
+  local old = f:GetScale()
+  f:SetScale(s)
+  if l and t then f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l * old / s, t * old / s) end
+  C.settings.pos.mainScale = math.floor(s * 100 + 0.5) / 100
+  C.SavePos(f, "main")
+end
+function C.SetWindowSize(w, h) -- (older callers: a size becomes a scale)
+  C.SetWindowScale(math.min((w or C.MAIN_W) / C.MAIN_W, (h or C.MAIN_H) / C.MAIN_H))
 end
 
 -- 1.1.1: open one farm's Ledger details (from the widget's Pay / Ask button)

@@ -70,6 +70,8 @@ function REC.Mine()
   for _, p in ipairs(C.db.forgive and C.db.forgive.pending or {}) do if p.kind == "dsp" then r.disputes = r.disputes + 1 end end
   for _ in pairs(C.db.forgive and C.db.forgive.asks or {}) do r.disputes = r.disputes + 1 end
   r.hs = REC.MyHighScore()
+  -- 2.0: Renown (replaces standing)
+  if C.Progress and C.Progress.State then local ok, st = pcall(C.Progress.State); if ok and st then r.renown = math.floor(st.renown or 0) end end
   return r
 end
 
@@ -81,6 +83,7 @@ function REC.Encode(r)
   p[#p + 1] = "l=" .. b36(r.lapses) .. "," .. b36(r.lastLapse or 0)
   p[#p + 1] = "o=" .. b36(r.owe) .. "," .. b36(r.oweN)
   p[#p + 1] = "d=" .. b36(r.disputes)
+  if r.renown then p[#p + 1] = "n=" .. b36(r.renown) end
   if r.hs then
     p[#p + 1] = "h=" .. table.concat({ b36(r.hs.gph), b36(r.hs.total), b36(r.hs.secs), b36(r.hs.kills), clean(r.hs.label, 20), b36(r.hs.t or 0) }, ",")
   end
@@ -98,6 +101,7 @@ function REC.Decode(s)
     elseif k == "l" then local a, b = v:match("^(%w+),(%w+)$"); r.lapses = n36(a) or 0; r.lastLapse = (n36(b) or 0) > 0 and n36(b) or nil
     elseif k == "o" then local a, b = v:match("^(%w+),(%w+)$"); r.owe = n36(a) or 0; r.oweN = n36(b) or 0
     elseif k == "d" then r.disputes = n36(v) or 0
+    elseif k == "n" then r.renown = n36(v)
     elseif k == "h" then
       local a, b, c, d, lab, t = v:match("^(%w+),(%w+),(%w+),(%w+),([^,]*),(%w+)$")
       if a then r.hs = { gph = n36(a), total = n36(b), secs = n36(c), kills = n36(d), label = lab, t = n36(t) } end
@@ -164,8 +168,6 @@ function REC.Summary(r, who)
   if not r then return GREY .. (who and REC.Waiting(who) or "asking their Kina...") .. "|r" end
   local bits = {}
   bits[#bits + 1] = (r.bad or 0) > 0 and (RED .. r.bad .. " bad vote" .. (r.bad == 1 and "" or "s") .. "|r") or (GREEN .. "no bad votes|r")
-  if (r.lapses or 0) > 0 then bits[#bits + 1] = RED .. r.lapses .. " ran out|r" end
-  if (r.owe or 0) >= 1 then bits[#bits + 1] = ORANGE .. "owes " .. C.Money(math.floor(r.owe)) .. "|r" end
   return table.concat(bits, GREY .. "  ·  |r")
 end
 
@@ -182,6 +184,10 @@ function REC.Show(name)
       f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
       f:SetBackdropColor(0.07, 0.055, 0.04, 0.97); f:SetBackdropBorderColor(0.6, 0.45, 0.2)
     end
+    -- 2.0: a solid backing whatever the skin draws, so nothing behind shows through
+    local solid = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+    solid:SetPoint("TOPLEFT", 4, -4); solid:SetPoint("BOTTOMRIGHT", -4, 4)
+    if solid.SetColorTexture then solid:SetColorTexture(0.06, 0.05, 0.035, 1) else solid:SetTexture(0.06, 0.05, 0.035, 1) end
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); f.title:SetPoint("TOPLEFT", 18, -16)
     if C.Cos and C.Cos.Font then C.Cos.Font(f.title, 20, "") end
     f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); f.sub:SetPoint("TOPLEFT", 18, -44)
@@ -206,7 +212,7 @@ function REC.Show(name)
   end
   f.who = who
   f.title:SetText(GOLD .. tostring(who) .. "'s record|r")
-  f.sub:SetText(GREY .. "What their Kina reports (unverified). Bad votes are a count only. What others owe them isn't shared.|r")
+  f.sub:SetText(GREY .. "What their Kina reports (unverified). Bad votes are a count only.|r")
   local rows
   if not r then
     rows = {}
@@ -214,11 +220,8 @@ function REC.Show(name)
     local nextName, nextAt
     if C.Rep and C.Rep.StandingOf then local _, _, na, nn = C.Rep.StandingOf(r.stand or 0); nextAt, nextName = na, nn end
     rows = {
-      { "Standing now", tostring(r.stand or 0) .. ((nextAt and nextName) and (GREY .. "  (" .. (nextAt - (r.stand or 0)) .. " until " .. nextName .. ")|r") or "") },
+      { "Renown", (r.renown and C.Progress and C.Progress.RankText) and (C.Progress.RankText({ renown = r.renown }) .. GREY .. "  (" .. r.renown .. ")|r") or (GREY .. "their Kina is older than 2.0|r") },
       { "Bad votes received", ((r.bad or 0) > 0 and RED or GREEN) .. (r.bad or 0) .. "|r" },
-      { "Debts run out", ((r.lapses or 0) > 0 and (RED .. r.lapses .. "|r" .. (r.lastLapse and (RED .. "   last: " .. day(r.lastLapse) .. "|r") or "")) or (GREEN .. "0|r")) },
-      { "Owes now", (r.owe or 0) >= 1 and (ORANGE .. C.Money(math.floor(r.owe)) .. " to " .. (r.oweN or 1) .. " player" .. ((r.oweN or 1) == 1 and "" or "s") .. "|r") or (GREEN .. "nothing|r") },
-      { "Disputes open", ((r.disputes or 0) > 0 and ORANGE or GREY) .. (r.disputes or 0) .. "|r" },
       { "Commends received", GREEN .. (r.good or 0) .. "|r" },
       { "Kina high score", REC.HighScoreText(r) .. (r.hs and (GOLD .. "  ›|r") or "") },
     }

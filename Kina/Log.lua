@@ -160,7 +160,7 @@ local function logSplit(s)
 end
 local origEnded = C.FarmEnded
 C.FarmEnded = function(s)
-  if origEnded then origEnded(s) end
+  if origEnded then local ok, e = pcall(origEnded, s); if not ok and C.LogError then C.LogError("farm end", e) end end
   pcall(logEnd, s); pcall(logSplit, s)
 end
 for _, name in ipairs({ "ShowGroupSplit", "TrySettle" }) do

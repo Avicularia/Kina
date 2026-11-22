@@ -23,22 +23,17 @@ local FARM_DAY_CAP = 480                             -- farm XP per day
 -- what you owe (10 + 2 per gold of the debt, max 40, part payments their share; +5 when
 -- paid before the due time), from qualifying group farms (+5) and later commendations;
 -- it falls when a debt you owe lapses unpaid (-50). Worked out from the log like XP.
+-- 2.0 (Taylor: "remove the Oathbreaker stuff"): no tiers below zero; standing never goes
+-- below 0 and nobody is ever Blacklisted (the three below-zero rows are gone)
 R.STANDING = {
-  { -300, "Oathbreaker" }, { -100, "Disgraced" }, { -1, "Delinquent" },
   { 0, "Unproven" }, { 100, "Vouched" }, { 300, "Reliable" }, { 600, "Trusted" },
   { 1000, "Honored" }, { 1600, "Revered" }, { 2500, "Exalted" },
 }
 function R.StandingOf(pts)
   pts = tonumber(pts) or 0
   local name, at, nextAt, nextName = "Unproven", 0, nil, nil
-  if pts < 0 then
-    name = "Delinquent"; at = -1
-    if pts <= -100 then name, at = "Disgraced", -100 end
-    if pts <= -300 then name, at = "Oathbreaker", -300 end
-    if pts <= -1000 then name, at = "Blacklisted", -1000 end
-    return name, at, 0, "Unproven"
-  end
-  for i = 4, #R.STANDING do
+  if pts < 0 then pts = 0 end
+  for i = 1, #R.STANDING do
     if pts >= R.STANDING[i][1] then name, at = R.STANDING[i][2], R.STANDING[i][1]; nextAt = R.STANDING[i + 1] and R.STANDING[i + 1][1]; nextName = R.STANDING[i + 1] and R.STANDING[i + 1][2] end
   end
   return name, at, nextAt, nextName
@@ -211,8 +206,8 @@ function R.Replay(lines, st, gains)
   local function after(t)
     if st.rep > st.maxEver then st.maxEver = st.rep end
     if st.rep < st.lowEver then st.lowEver = st.rep end
-    if st.rep <= R.BLACKLIST then st.black = true; st.everBlack = true end
-    if st.rep > 0 then st.black = nil end
+    if st.rep < 0 then st.rep = 0 end -- 2.0: never below zero
+    st.black = nil; st.everBlack = nil
     if st.recoverTo and st.rep >= st.recoverTo then st.recoverTo = nil end
   end
   local function fell(before, t)
@@ -282,7 +277,6 @@ function R.Replay(lines, st, gains)
       -- remembered a negative standing (KinaMark): it carries over, never improves
       local v = tonumber(f[3]) or 0
       if v < (st.rep or 0) then st.rep = v end
-      if f[4] == "b" then st.everBlack = true end
       after(t)
     elseif kind == "decay" then
       local amt = tonumber(f[3]) or 0
@@ -335,9 +329,11 @@ function R.Replay(lines, st, gains)
       local k = tonumber(f[5]) or 1
       local rp
       if k > 4 then
-        local before = st.rep
-        rp = loseRep(10, t)
-        if not st.frozen then
+        -- 2.0 (Taylor: "no penalty on negative commendations"): a thumbs down costs nothing;
+        -- it only shows on the profile
+        rp = 0
+        if false then
+          local before = st.rep
           -- the thumbs-down breakpoint (positive standing only)
           local keep = {}
           for _, bt in ipairs(st.badTimes) do if t - bt < 7 * DAY then keep[#keep + 1] = bt end end
@@ -506,9 +502,9 @@ function R.MineNow()
   local mark = C.db.mark
   local rp = ok and (st.rep or 0) or math.min(0, tonumber(mark and mark.rep) or 0)
   if ok then
-    C.db.mark = { rep = rp, black = st.everBlack or nil, t = C.Now() }
+    C.db.mark = { rep = rp, t = C.Now() }
     if type(KinaMark) ~= "table" then KinaMark = {} end
-    KinaMark.rep, KinaMark.black, KinaMark.t = rp, st.everBlack or nil, C.Now()
+    KinaMark.rep, KinaMark.black, KinaMark.t = rp, nil, C.Now()
   end
   local sname, sat, snext, snextName = R.StandingOf(rp)
   -- 1.5.4: the record numbers (time counted up to now)
@@ -525,7 +521,7 @@ function R.MineNow()
     rep = rp, standing = sname, standingAt = sat, standingNext = snext, standingNextName = snextName,
     share = C.ShareData(), ok = ok,
     best = st.maxEver or math.max(0, rp), lowest = st.lowEver or math.min(0, rp), negDays = neg / DAY, posDays = pos / DAY,
-    black = ok and st.black or (rp <= R.BLACKLIST) or nil, everBlack = st.everBlack or (not ok and mark and mark.black) or nil, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
+    black = nil, everBlack = nil, jailUsed = st.jailUsed, mult = R.Mult(st), recoverTo = st.recoverTo,
     lastFarmT = st.lastFarmT, fell = st.fell or 0, frozen = st.frozen, bad48 = n48, bad7 = n7,
     partner = st.partner, partnerName = st.partnerName, pchars = st.pchars, bondFarms = st.partner and bondGet(st.bonds, st.partner) or 0, goldU = st.goldU or 0,
     pairBonus = st.partner and R.PairBonus(bondGet(st.bonds, st.partner)) or 0, bonds = st.bonds }

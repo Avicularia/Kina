@@ -4,7 +4,7 @@
 -- pulls a full snapshot, Kina also reads the same rows.
 local _, C = ...
 local AH = C_AuctionHouse
-local CHUNK = 600
+local CHUNK = 1500 -- (2.0.5: the runner now limits each frame to 6 ms)
 local HISTORY_DAYS = 30
 C.ahOpen = false
 local reading, ownRequest = false, false
@@ -128,10 +128,29 @@ local function commit(acc, rows)
   m.rows = rows
   C.Print(string.format("market updated: %d items, %d listings. Loading item data...", #ids, rows))
   phase("items", 0, #ids)
+  local tm = C.scanTiming or {}
+  tm.itemsStart = GetTime and GetTime() or 0
+  -- 2.0.8 (Taylor: "the scan needs to be significantly faster"): the prices are ready the
+  -- moment the book is read, so they go out to the rest of Kina (and to other Kinas) now;
+  -- item names and levels keep loading in the background (up to 10 s) and only redraw
+  local function secs(a, b) return (a and b and b >= a) and (b - a) or nil end
+  for _, fn in ipairs(listeners) do pcall(fn) end
+  phase("done", #ids, #ids); C.scan.items = #ids; C.scan.rows = rows
+  local ready = GetTime and GetTime() or 0
+  -- where the time went, kept for the last 10 scans (read from the saved file to find
+  -- the slow part): asked -> the AH's answer -> read -> prices ready -> item info
+  C.db.scanLog = type(C.db.scanLog) == "table" and C.db.scanLog or {}
+  local entry = { t = now, rows = rows, items = #ids, answer = secs(tm.asked, tm.readStart), read = secs(tm.readStart, tm.itemsStart),
+    own = tm.asked and true or false }
+  table.insert(C.db.scanLog, 1, entry)
+  while #C.db.scanLog > 10 do table.remove(C.db.scanLog) end
+  local function f(v) return v and string.format("%.0fs", v) or "?" end
+  C.Print(string.format("prices ready (the AH answered in %s, reading %s). /kina opens the window.", f(entry.answer), f(entry.read)))
   C.LoadItems(ids, function()
-    for _, fn in ipairs(listeners) do pcall(fn) end
-    phase("done", #ids, #ids); C.scan.items = #ids; C.scan.rows = rows
-    C.Print("analysis ready. /kina opens the window.")
+    entry.info = secs(ready, GetTime and GetTime() or 0)
+    if C.Prices and C.Prices.Invalidate then pcall(C.Prices.Invalidate) end
+    if C.Hot and C.Hot.Invalidate then pcall(C.Hot.Invalidate) end
+    if C.Refresh then pcall(C.Refresh) end
   end, function(i) C.scan.done = i end)
 end
 
@@ -153,6 +172,8 @@ local function readAll()
     return
   end
   reading = true
+  C.scanTiming = C.scanTiming or {}
+  C.scanTiming.readStart = GetTime and GetTime() or 0
   local i, acc = 0, {}
   local soldRows, soldBy = 0, {}
   phase("read", 0, n)
@@ -201,7 +222,7 @@ local function readAll()
       end
       return true
     end
-  end)
+  end, true)
 end
 
 -- Scanning: nothing happens when the AH opens. Click Scan once and Kina keeps a full
@@ -276,9 +297,18 @@ end
 function C.Scan(auto)
   if not C.ahOpen then C.Print("open the auction house first."); return end
   local left = C.ScanCooldown()
-  if left > 0 then C.Print(string.format("full scan cooldown: %d min left.", math.ceil(left / 60))); return end
+  if left > 0 then
+    -- 2.0.8 (Scàrlet: "no scan yet" but a 15-minute wait): the wait is the game's, and it
+    -- starts with ANY full scan on the account (another addon's too). Say so, and that
+    -- Kina reads that scan or the next one by itself
+    if not C.market.scanTime then
+      C.Print(string.format("the game's 15-minute full-scan limit is in use (another addon or character scanned): %d min left. Kina reads the next scan by itself, and other Kinas' prices arrive meanwhile.", math.ceil(left / 60)))
+    else C.Print(string.format("full scan cooldown: %d min left.", math.ceil(left / 60))) end
+    return
+  end
   if not (AH and AH.ReplicateItems) then C.Print("this client has no full-scan API."); return end
   ownRequest = true
+  C.scanTiming = { asked = GetTime and GetTime() or 0 }
   local ok = pcall(AH.ReplicateItems)
   if not ok then ownRequest = false; phase("noreply"); C.Print("the auction house refused the scan request."); return end
   -- count the request now: a refused or silent request still uses the 15 minutes

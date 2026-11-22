@@ -930,7 +930,7 @@ function C.StopSession(at, why, silent, fromParty)
     -- 0.9.1 (security): the log has loot in my name I never looted: record no debts
     if (s.sync.forged or 0) > 0 then
       transfers = {}; s.noSplit = true; s.forged = true
-      C.Print("|cffff4030This farm's log was changed by someone else|r (it has loot under your name you never looted): Kina records no debts for you from it.")
+      C.Print("|cffff4030This farm's log was changed by someone else|r (it has loot under your name you never looted): Kina doesn't count it for you.")
     end
     -- 0.9.1 (security): the leader stamps the prices; if mine disagree a lot, say so
     if not t.noSplit and C.SplitValue and s.sync.leader ~= C.FarmSync.First(UnitName and UnitName("player")) then
@@ -955,8 +955,6 @@ function C.StopSession(at, why, silent, fromParty)
     if C.Admin() then
       for who, v in pairs(by) do C.Print(string.format("   %s: %s looted", who, C.Money(v))) end
     end
-    if #transfers == 0 then C.Print("   Everyone is even: nobody owes anything.") end
-    for _, tr in ipairs(transfers) do C.Print(string.format("   |cff7CFC00%s pays %s %s|r", tr.from, tr.to, C.Money(tr.amt))) end
   end
   if s.paused then s.pausedSecs = (s.pausedSecs or 0) + (C.Now() - (s.pauseAt or C.Now())); s.paused = nil end
   -- the group's numbers as the widgets showed them, so every stopped widget shows the same
@@ -1093,6 +1091,10 @@ function C.SessionTick()
   -- 0.9.14 (Taylor): a solo farm never ends by itself; only shared farms stop when idle
   if s.sync and not s.paused and now - lk >= 3600 then C.StopSession(lk + 60, "no kills for an hour"); return end
   -- group farm: the leader tells everyone the group's numbers every 5 seconds
+  -- 2.0.6 (Taylor: the party post said 2s/h while he made 3g/h): a group with no other
+  -- Kina in it can't share a farm, and its "group" numbers only saw the coin shares. Then
+  -- the farm is yours alone: the widget and the party post use your own loot and coin.
+  if s.g and C.KinaUsersInGroup and C.KinaUsersInGroup() <= 1 then return nil end
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then
     local _, lead = C.FarmLeader()
     if lead and C.Share and C.Share.SendGroupView then
@@ -1120,6 +1122,10 @@ function C.FarmView()
     if v then return v, true, leader end
     return nil, true, s.sync.leader
   end
+  -- 2.0.6 (Taylor: the party post said 2s/h while he made 3g/h): a group with no other
+  -- Kina in it can't share a farm, and its "group" numbers only saw the coin shares. Then
+  -- the farm is yours alone: the widget and the party post use your own loot and coin.
+  if s.g and C.KinaUsersInGroup and C.KinaUsersInGroup() <= 1 then return nil end
   if s.g and C.GroupSize and C.GroupSize() > 1 and C.FarmLeader then
     local leader, lead = C.FarmLeader()
     if lead then

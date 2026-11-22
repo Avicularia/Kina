@@ -1,11 +1,11 @@
 ## Interface: 16001
 ## Title: |cff4fc3f7Kina|r
 ## IconTexture: Interface\AddOns\Kina\Media\KinaLogo
-## Notes: Farm together, split the loot fairly, settle up, and build your standing. Shared farm log, even splits, debts paid by trade or mail, commendations and Kina levels for WoW Forever.
+## Notes: Gold per hour, live Hot Farms, an AH browser that works anywhere, and fair group farms that earn Renown and Season 1 cosmetics, for WoW Forever.
 ## Author: Taylor (Hybana)
 ## X-License: All Rights Reserved
 ## X-Credits: Ben (Triforce), playtesting
-## Version: 1.0.9
+## Version: 2.0.8
 ## SavedVariables: KinaDB
 ## SavedVariablesPerCharacter: KinaMark
 ## OptionalDeps: ForeverGuide, ForeverVendors, TomTom, Auctionator, KaydeesPockets
@@ -48,6 +48,7 @@ Ledger.lua
 Farms.lua
 ClassFarms.lua
 HotMobs.lua
+Gather.lua
 HotNudge.lua
 WhatsNew.lua
 NetLog.lua
@@ -67,6 +68,9 @@ Toast.lua
 Vouch.lua
 Season.lua
 Progress.lua
+Grant.lua
+NetWorth.lua
+Prices.lua
 Profile.lua
 Rules.lua
 PriceHold.lua

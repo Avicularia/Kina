@@ -12,7 +12,7 @@ C.SeasonGuide = G
 local P = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Cos\\"
 local GOLD, GREY, GREEN, RED, PALE, BLUE = "|cffffc54a", "|cff9d9d9d", "|cff6ee678", "|cffff5a50", "|cffe8d6a0", "|cff78beff"
 local GOOD = { { "Unproven", 0 }, { "Vouched", 100 }, { "Reliable", 300 }, { "Trusted", 600 }, { "Honored", 1000 }, { "Revered", 1600 }, { "Exalted", 2500 } }
-local BAD = { { "Delinquent", -1 }, { "Disgraced", -100 }, { "Oathbreaker", -300 } }
+local BAD = {} -- 2.0: no tiers below zero
 local STARS = { 1, 5, 10, 20, 50 }
 local TIERS = { { "Uncommon", { 0.27, 0.75, 0.33 }, "|cff46be55" }, { "Rare", { 0.27, 0.57, 0.94 }, "|cff4691f0" },
   { "Epic", { 0.67, 0.35, 0.92 }, "|cffaa5aeb" }, { "Legendary", { 1, 0.65, 0.2 }, "|cffffa532" } }
@@ -213,21 +213,39 @@ local function build(parent, w)
   end
   y = y - math.ceil(#TIERS / ccols) * 170 - 6
   -- your progress
-  y = header(f, y, "Your progress", nil, w)
+  y = header(f, y, "Your tracks", nil, w)
   local nextStand
   for _, r in ipairs(GOOD) do if r[2] > n.stand then nextStand = r; break end end
   local prevStand = 0; for _, r in ipairs(GOOD) do if r[2] <= n.stand then prevStand = r[2] end end
   local nextStar, prevStar = nil, 0
   for _, s in ipairs(STARS) do if s > n.recruits then nextStar = s; break end; prevStar = s end
   local cuLo, cuHi = bondCU(lvl), bondCU(math.min(20, lvl + 1))
-  local rowsP = {
-    { "Standing", (C.Rep and C.Rep.StandingOf(n.stand) or "") .. "  " .. n.stand, n.stand, prevStand, nextStand and nextStand[2],
-      nextStand and (nextStand[2] - n.stand .. " standing until " .. nextStand[1] .. " (" .. nextStand[2] .. ")") or "Exalted: the top ring", "standing_bar", { 1, 0.69, 0.2 }, "standing" },
-    { "Recruits", n.recruits .. " player" .. (n.recruits == 1 and "" or "s"), n.recruits, prevStar, nextStar,
-      nextStar and ((nextStar - n.recruits) .. " recruit" .. (nextStar - n.recruits == 1 and "" or "s") .. " until the " .. nextStar .. "-recruit star") or "every star earned", "xp_bar", { 0.92, 0.55, 0.27 }, "recruits" },
-    { "Bond XP", n.bondWith and ((R.BondText and R.BondText(n.bondCU) or ("level " .. lvl))) or "no partner yet", math.floor(n.bondCU), math.floor(cuLo), lvl < 20 and math.floor(cuHi) or nil,
-      n.bondWith and (lvl < 20 and (math.ceil(cuHi - n.bondCU) .. " bond XP until level " .. (lvl + 1)) or "bond full") or "partner up with someone you farm with (their profile: Partner up)", "xp_bar", { 0.27, 0.55, 0.96 }, "bond" },
-  }
+  -- 1.1.0 (Taylor: "people need to know exactly the numerical statistic they need"): every
+  -- track, its tier, and exactly what the next tier takes
+  local rowsP = {}
+  local PG = C.Progress
+  local ART = { ring = { "standing_bar", { 1, 0.69, 0.2 } }, stars = { "xp_bar", { 0.92, 0.55, 0.27 } }, bond = { "xp_bar", { 0.27, 0.55, 0.96 } },
+    cards = { "xp_bar", { 0.85, 0.35, 0.25 } }, banner = { "xp_bar", { 0.75, 0.2, 0.2 } }, hoard = { "standing_bar", { 1, 0.8, 0.25 } } }
+  local function nice(v, what)
+    if what == "gold" then return PG.ShortGold(v) end
+    if what == "hours" then return string.format("%.1f", v) end
+    v = math.floor(v + 0.5); return BreakUpLargeNumbers and BreakUpLargeNumbers(v) or tostring(v)
+  end
+  if PG then
+    for _, e in ipairs(PG.Tracks()) do
+      local nx = e.next
+      local needText
+      if nx then
+        needText = nice(nx.need, nx.what) .. " more" .. (nx.what == "gold" and "" or (" " .. nx.what))
+        if nx.mob then local m = C.Data.hotList and C.Data.hotList.mobs[nx.mob]; needText = needText .. " of " .. (m and m.nm or "a card mob") end
+        if nx.to then needText = needText .. " to " .. nx.to end
+        needText = "Next tier: " .. needText
+      else needText = "Top tier this season" end
+      local art = ART[e.id] or ART.ring
+      rowsP[#rowsP + 1] = { e.name, "tier " .. (e.level or 0) .. " of " .. (e.of or 0), e.level or 0, 0, e.of or 1, needText, art[1], art[2],
+        (e.id == "stars" and "recruits") or (e.id == "bond" and "bond") or nil }
+    end
+  end
   for _, r in ipairs(rowsP) do
     local nm = fs(f, nil, "GameFontNormal"); serif(nm, 15); nm:SetJustifyH("LEFT"); nm:SetPoint("TOPLEFT", 6, y)
     nm:SetText(r[1])
@@ -243,10 +261,12 @@ local function build(parent, w)
     if C.Cos and C.Cos.BarFrame then C.Cos.BarFrame(b, r[7]) end
     b:Set(r[5] and math.max(0, math.min(1, (r[3] - r[4]) / math.max(1, r[5] - r[4]))) or 1, "")
     local need = fs(f, 11); need:SetJustifyH("LEFT"); need:SetPoint("TOPLEFT", 14, y - 48); need:SetText((r[5] and RED or GREEN) .. r[6] .. "|r")
-    local det = CreateFrame("Button", nil, f); det:SetSize(70, 16); det:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, y - 46)
-    local dt = fs(det, 12, "GameFontNormal"); dt:SetPoint("RIGHT"); dt:SetText(BLUE .. "Details >|r")
     local key = r[9]
-    det:SetScript("OnClick", function(self) flyout(self, G.RULES[key][1], G.RULES[key][2]) end)
+    if key and G.RULES[key] then
+      local det = CreateFrame("Button", nil, f); det:SetSize(70, 16); det:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, y - 46)
+      local dt = fs(det, 12, "GameFontNormal"); dt:SetPoint("RIGHT"); dt:SetText(BLUE .. "Details >|r")
+      det:SetScript("OnClick", function(self) flyout(self, G.RULES[key][1], G.RULES[key][2]) end)
+    end
     y = y - 76
   end
   f:SetHeight(-y + 10)

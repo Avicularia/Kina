@@ -29,10 +29,10 @@ local function hideMain() if C.UI and C.UI.frame then C.UI.frame:Hide() end end
 
 local STEPS = {
   { id = "welcome", title = "Welcome to Kina",
-    body = "Kina is your farming partner for WoW Forever.\n\n"
-      .. "When you farm with other Kina users, every Kina keeps the " .. G .. "same record|r of the loot, splits it evenly, "
-      .. "and keeps track of who owes whom until it's paid.\n\n"
-      .. "Pay your share and be a good partner, and your " .. G .. "Kina level|r and " .. G .. "standing|r grow, for everyone to see.\n\n"
+    body = "Kina is your gold companion for WoW Forever.\n\n"
+      .. "It finds the " .. G .. "hot mobs|r worth farming, tracks your " .. G .. "gold per hour|r live, and when you farm with "
+      .. "other Kina users, every Kina keeps the " .. G .. "same record|r of the loot and shows each player's fair share.\n\n"
+      .. "Farm with other Kinas and your " .. G .. "Kina level|r and " .. G .. "Renown|r grow, with titles and cosmetics for everyone to see.\n\n"
       .. GR .. "This tour shows you every part of Kina. It takes about two minutes.|r" },
 
   { id = "minimap", title = "Your Kina button",
@@ -49,7 +49,7 @@ local STEPS = {
     body = "Press " .. G .. "Start|r when you begin farming. If other Kina users are in your group, they get an invite, "
       .. "and everyone who joins shares " .. G .. "one farm log|r: every widget shows the same numbers.\n\n"
       .. "Press " .. G .. "Stop|r when you're done. It stops the farm for everyone.",
-    rules = "- A farm counts for Kina level and standing after " .. G .. "15 minutes|r (paused time doesn't count).\n"
+    rules = "- A farm counts for Kina level and Renown after " .. G .. "15 minutes|r (paused time doesn't count).\n"
       .. "- If anyone in the farm is " .. R .. "under level 10|r, the farm gives no progression. The split still works.\n"
       .. "- A solo farm runs until you press Stop. A group farm stops itself " .. G .. "an hour after its last kill|r.",
     target = widget("go") },
@@ -62,22 +62,6 @@ local STEPS = {
       .. "Everyone in the farm sees the same numbers, from the same log.",
     target = widget("tNet", "tKills") },
 
-  { id = "pay", title = "Pay and Ask",
-    body = "When a group farm ends, Kina works out the even split. Whoever looted more owes the others their share.\n\n"
-      .. "If you owe, this button says " .. G .. "Pay|r: stand next to them and click it. Kina opens a trade with the exact amount. "
-      .. "If you're owed, it says " .. G .. "Ask|r. Right-click it for the Debts page: pay by mail, ask for more time, or forgive.",
-    rules = "- You have " .. G .. "2 hours of play time|r to pay (the clock only runs while one of you is online).\n"
-      .. "- Ask once for more time: the person owed can give 2 more hours (4 at most).\n"
-      .. "- Paying earns XP and standing; paying soon after the farm earns more XP.\n"
-      .. "- A debt that runs out costs " .. R .. "-50 standing|r. You can still pay it late from Collections for up to 80% of the XP and standing, instead of losing all of it.\n"
-      .. "- Offered the full amount and they didn't take it? Then the debt can't count against you.",
-    target = widget("pay"),
-    open = function()
-      local b = C.Widget and C.Widget.Part and C.Widget.Part("pay")
-      if b then b:SetText("Pay Triforce " .. (C.Money and C.Money(124000) or "12g 40s")); b:Enable(); b:Show() end
-    end,
-    close = function() if C.RefreshWidget then pcall(C.RefreshWidget) end end },
-
   { id = "sound", title = "Sound",
     body = "Kina plays a few short sounds: farm start and stop, payments, level ups, and its theme when a farm ends. "
       .. "Click the speaker for a volume slider; slide to the bottom to mute.\n\n"
@@ -85,7 +69,7 @@ local STEPS = {
     target = widget("snd") },
 
   { id = "party", title = "Your party",
-    body = "In a group, your party shows under the widget: each portrait in its owner's standing ring, with their Kina level.\n\n"
+    body = "In a group, your party shows under the widget: each portrait in its owner's ring, with their Kina level.\n\n"
       .. "Click a portrait to open that player's Kina profile.",
     target = function()
       local s = C.Widget and C.Widget.Part and C.Widget.Part("strip")
@@ -94,11 +78,10 @@ local STEPS = {
     end },
 
   { id = "price", title = "Price the loot",
-    body = "When a group farm with debts ends, Kina asks every Kina user to " .. G .. "scan the auction house|r, "
-      .. "so the split uses today's prices, not old ones.",
-    rules = "- The debts wait until every Kina user in the farm answers.\n"
-      .. "- If anyone scans, the farm leader re-prices the loot and everyone gets the same new split.\n"
-      .. "- If everyone skips, the split stands as it was. After a day it goes ahead anyway.\n"
+    body = "When a group farm ends and nobody's AH scan is fresh, Kina asks every Kina user to " .. G .. "scan the auction house|r, "
+      .. "so the farm is valued at today's prices.",
+    rules = "- A scan from any Kina on the realm in the last 15 minutes counts, so usually nobody is asked.\n"
+      .. "- If anyone scans, everyone's numbers update to the new prices.\n"
       .. "- You can turn the question off in Settings > Farming.",
     target = function() return C.PriceHold and C.PriceHold.Preview and C.PriceHold.Preview(true) end,
     close = function() if C.PriceHold and C.PriceHold.Preview then C.PriceHold.Preview(false) end end },
@@ -107,11 +90,9 @@ local STEPS = {
     body = "At the end of a qualifying farm, this window asks how your partners did. "
       .. "Give a " .. G .. "thumbs up|r to the ones who made it great, and a " .. R .. "thumbs down|r if someone was a problem.\n\n"
       .. "It stays open until you press Done; then that farm's commendations are closed.",
-    rules = "- Up to " .. G .. "2 thumbs up per farm|r: +10 standing each.\n"
-      .. "- Thumbs down for as many as deserve one: " .. R .. "-10 standing|r each. Never both to the same person.\n"
-      .. "- Never to yourself or your own characters.\n"
-      .. "- With positive standing, " .. R .. "10 thumbs down in 48 hours, or 15 in 7 days|r, drops you straight to -99. "
-      .. "Kina warns you at 5 and at 10.",
+    rules = "- Up to " .. G .. "2 thumbs up per farm|r: each gives that player +10% Renown and Kina XP for that farm.\n"
+      .. "- Thumbs down for as many as deserve one: it shows on their profile, nothing more. Never both to the same person.\n"
+      .. "- Never to yourself or your own characters.",
     target = function()
       if C.Vouch and C.Vouch.ShowPrompt then C.Vouch.ShowPrompt(true) end
       return _G.KinaCommend
@@ -121,44 +102,36 @@ local STEPS = {
   { id = "session", title = "The Session page",
     body = "Your farm in detail: every kill and item in the shared log, who looted it, and what it's worth.\n\n"
       .. "Right-click a partner's item to " .. G .. "leave it out|r of the farm, or " .. G .. "dispute|r its price.",
-    rules = "- You can't leave out your own loot: it would change what you owe. A partner can.\n"
+    rules = "- You can't leave out your own loot: it would change the split. A partner can.\n"
       .. "- A dispute counts the item at its vendor price for everyone, and it's logged.",
     open = mainTab("Session"), target = mainFrame, close = hideMain },
 
   { id = "ledger", title = "The Ledger",
-    body = "Every farm you've done, with its split. " .. G .. "Debts & Credits|r shows what's open, "
-      .. "and " .. G .. "Collections|r keeps every debt that was settled, forgiven or ran out.\n\n"
-      .. "A debt that ran out can still be paid late from Collections.",
+    body = "Every farm you've done, with what the group looted and each player's fair share. " .. G .. "Gold flow|r and "
+      .. G .. "XP|r show where your gold and Kina XP came from.",
     open = mainTab("Ledger"), target = mainFrame, close = hideMain },
 
   { id = "you", title = "Your profile",
-    body = "Your Kina " .. G .. "level|r (I to XX), your " .. G .. "standing|r, and your record: best and lowest standing, "
-      .. "days positive and negative. The Commendations and Farm stats pages show who you farm with most.\n\n"
+    body = "Your Kina " .. G .. "level|r (I to XX), your " .. G .. "Renown|r rank and title, the gold plate (gold farmed or gold "
+      .. "per hour: click it), and your farming record. The Commendations and Farm stats pages show who you farm with most.\n\n"
       .. "Other players' profiles look the same: click a party portrait or a name.",
-    rules = "Kina level comes from XP:\n"
-      .. "- Farming: 1 XP a minute (farms of 15 minutes or more).\n"
-      .. "- Paying a debt: 40 XP plus 10 per gold, up to 200 (more when paid quickly). Being paid: 10.\n"
-      .. "- Forgiving a debt: 15. Giving more time: 5. A thumbs up given: 5.",
+    rules = "Kina XP and Renown come from farms another Kina confirmed:\n"
+      .. "- 10 a minute while you're active, times your pace for your level (0.5x to 3x).\n"
+      .. "- Bonuses add up: party, daily streak, campfire, track levels, and +10% per commendation.\n"
+      .. "- Quest gold and XP never count.",
     open = mainTab("You", "you"), target = mainFrame, close = hideMain },
 
-  { id = "standing", title = "Standing",
-    body = "Standing is your reputation as a partner. Everyone you farm with can see it.\n\n"
-      .. GR .. "Unproven 0  ·  Vouched 100  ·  Reliable 300  ·  Trusted 600  ·  Honored 1000  ·  Revered 1600  ·  Exalted 2500|r\n"
-      .. R .. "Delinquent below 0  ·  Disgraced -100  ·  Oathbreaker -300  ·  Blacklisted -1000|r",
-    rules = "- Earn: paying a debt (10 + 2 per gold, up to 40; +5 if paid in full within 2 hours), being paid (the same), "
-      .. "a qualifying farm (+5), a thumbs up (+10).\n"
-      .. "- Lose: a thumbs down (-10), a debt that runs out (-50), turning down a full payment that then runs out (-50; -100 if again within 30 days).\n"
-      .. "- Below 0, gains are " .. R .. "halved|r. At -1000 you're " .. R .. "Blacklisted|r: gains count 1/4, your portrait is crossed out, "
-      .. "and your profile keeps a permanent mark.\n"
-      .. "- Back at 0 or above, gains count " .. G .. "x3|r until you reach your best ever.\n"
-      .. "- The first fall below 0 offers a " .. G .. "one-time pardon|r: back to 1, gains x3 until your best.\n"
-      .. "- 7+ days with no farm: positive standing loses 100 a week (not below 0); negative gains 50 a week (25 Blacklisted), up to -20.",
+  { id = "standing", title = "Renown",
+    body = "Renown is your farming rank: ten ranks from " .. G .. "the Wanderer|r to " .. G .. "the Everlasting|r, each a title "
+      .. "in its quality color, for everyone to see.",
+    rules = "- It only goes up: nothing you do loses Renown.\n"
+      .. "- Each season starts every track and its bonus over. Your titles and cosmetics stay.",
     open = mainTab("You", "you"), target = mainFrame, close = hideMain },
 
   { id = "settings", title = "Settings",
     body = "Switches for everything: data sharing with your group, farm options (the AH scan question, farm stats posted to party chat), "
       .. "sounds, the widget, and item tooltips.",
-    rules = "- Keep Kina up to date. When someone in your group runs a newer Kina, yours stops earning XP and standing "
+    rules = "- Keep Kina up to date. When someone in your group runs a newer Kina, yours stops earning XP and Renown "
       .. "until you update and /reload. It never happens in the middle of a farm.",
     open = mainTab("Settings"), target = mainFrame, close = hideMain },
 
@@ -200,11 +173,10 @@ local STEPS = {
     body = function() return "1.  Group up with other Kina users.\n"
       .. "2.  Press " .. G .. "Start|r and farm together for 15 minutes or more.\n"
       .. "3.  Press " .. G .. "Stop|r, and scan the auction house when asked.\n"
-      .. "4.  " .. G .. "Pay|r what you owe, or " .. G .. "Ask|r for what you're owed.\n"
-      .. "5.  Commend the partners who made it great.\n\n"
+      .. "4.  Commend the partners who made it great: each one is +10% for them.\n\n"
       .. "Good hunting!"
       .. ((T.Rewarded and not T.Rewarded()) and ("\n\n" .. G .. "One more thing: finishing the tour earns you " .. ((C.Rep and C.Rep.TOUR_XP) or 50)
-        .. " XP and " .. ((C.Rep and C.Rep.TOUR_REP) or 20) .. " standing. Press Finish to claim it!|r") or "") end },
+        .. " XP. Press Finish to claim it!|r") or "") end },
 }
 
 for _, s in ipairs(STEPS) do T.Add(s) end

@@ -216,9 +216,11 @@ do
     local users = 1
     local me = (UnitName and UnitName("player") or ""):match("^[^%-]+") or ""
     local seen = { [me] = true }
-    for _, a in pairs(C.Share and C.Share.DB and C.Share.DB().authors or {}) do
-      local k = a.name and a.name:match("^[^%-%s]+")
-      if k and not seen[k] and a.seen and C.Now() - a.seen < 1800 and C.InGroupName(a.name) then seen[k] = true; users = users + 1 end
+    local au = C.Share and C.Share.DB and C.Share.DB().authors
+    for _, a in pairs(type(au) == "table" and au or {}) do
+      -- (a damaged save can hold anything here)
+      local k = type(a) == "table" and type(a.name) == "string" and a.name:match("^[^%-%s]+")
+      if k and not seen[k] and type(a.seen) == "number" and C.Now() - a.seen < 1800 and C.InGroupName(a.name) then seen[k] = true; users = users + 1 end
     end
     return users
   end
@@ -440,6 +442,32 @@ function T.Vouched(from, kindName, rep, bad)
   show({ head = from .. " vouched for you!", sub = "|cffffc54a" .. (kindName or "") .. "|r", gains = "|cff4fc3f7+" .. (rep or 0) .. " rep|r" })
   if C.PlayCue then C.PlayCue("standing") end
   C.Print(string.format("|cff4fc3f7%s vouched for you: %s (+%d rep).|r", from, kindName or "", rep or 0))
+end
+-- 2.0: a commendation, with what it's worth now: +10% of that farm's Renown and Kina XP.
+-- A thumbs down only shows (no penalty).
+function T.Commended(from, kindName, bad, add, why)
+  if bad then
+    show({ head = from .. " gave you a thumbs down", sub = "|cffff8060" .. (kindName or "") .. "|r", gains = "|cff9d9d9dno penalty: it only shows on your record|r" })
+    C.Print(string.format("|cffff8060%s gave you a thumbs down: %s (no penalty).|r", from, kindName or ""))
+    return
+  end
+  local gains, line
+  if add and add > 0 then
+    gains = "|cff4fc3f7+" .. add .. " Renown and Kina XP|r  |cff9d9d9d(+10% of this farm)|r"
+    line = string.format("+%d Renown and Kina XP (+10%% of this farm)", add)
+  elseif why == "pending" then
+    gains = "|cff4fc3f7+10% of this farm's Renown and Kina XP|r |cff9d9d9dwhen Kina scores it|r"
+    line = "+10% of this farm's Renown and Kina XP once Kina scores the farm"
+  elseif why == "noearn" then
+    gains = "|cff9d9d9dthis farm earned no Renown (nobody else's Kina joined), so +10% adds nothing|r"
+    line = "this farm earned no Renown, so the +10% adds nothing"
+  else
+    gains = "|cff4fc3f7on your record|r"
+    line = "on your record"
+  end
+  show({ head = from .. " commended you!", sub = "|cffffc54a" .. (kindName or "") .. "|r", gains = gains })
+  if C.PlayCue then C.PlayCue("standing") end
+  C.Print(string.format("|cff4fc3f7%s commended you: %s. %s.|r", from, kindName or "", line))
 end
 -- 1.4.6: /kina preview levelup | repup | repdown | paid | settled: see and hear a toast
 -- without changing anything

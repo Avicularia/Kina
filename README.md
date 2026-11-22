@@ -2,11 +2,11 @@
 
 A gold companion for **World of Warcraft: Forever**.
 
-- **Hot Farms:** the mobs worth far more per kill than anything else at their level, lighting up on their nameplates at 30 of your kills.
+- **Hot Farms, live:** the mobs and gathering nodes paying far above their level right now, with a plain answer to "why": worth per kill, gold per hour at your pace, levelling fit, market depth and confidence.
 - **Gold per hour, live:** every item at its best price, with AH prices shared by every Kina on the realm.
-- **Farm with friends:** everyone sees the same totals; Kina works out the fair split and who owes whom.
-- Pay with one button (trade or mail); a debt closes only when both players' Kina saw the gold move.
-- Earn your Kina level (I to XX), standing and Season 1 cosmetics by farming with others and paying what you owe.
+- **Prices, anywhere:** browse the auction house from anywhere in the world, from your last scan and other Kinas'.
+- **Farm with friends:** everyone sees the same totals and the fair split. No debts, nothing to chase.
+- **Season 1:** earn Renown and Kina XP by farming with other Kinas, with streaks, commendations and cosmetics.
 
 **Status: released** on [CurseForge](https://www.curseforge.com/projects/1793386).
 
@@ -23,6 +23,12 @@ What we're building, checked off as it ships. Send ideas with the **Feedback** b
 - ✅ Feedback button on every tab and an "Update available" notice (1.0.7)
 - ✅ Scan bar that shows whose scan is coming in and how long is left (1.0.7)
 - ✅ Dungeon farms that end and start cleanly, and a live Network log (1.0.8)
+- ✅ Kina 2.0: Renown, Kina XP and Season 1 (2.0)
+- ✅ Hot Farms that rebuild live from prices, with a "why" page for every mob (2.0)
+- ✅ Gathering nodes on Hot Farms (2.0)
+- ✅ Auction house browser that works anywhere (2.0)
+- ✅ Account net worth (2.0)
+- ⬜ Leaderboards: gold per hour, total gold, best farm
 - ⬜ Hot mob card book: cards that level up with your kills and glow with your gold
 - ⬜ Mob drop data shared realm-wide, checked the same way as prices
 - ⬜ Gold rush alerts when a farm is paying far above normal

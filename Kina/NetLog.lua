@@ -22,7 +22,8 @@ local GROUP = { H = "hello (version, scan ages)", Q = "asks for data", B = "star
   J = "recruit claim", D = "Kina Partner request" }
 local NET = { P = "here (version)", O = "developer online", V = "version", F = "feedback", R = "feedback answer", K = "feedback receipt",
   H = "feedback hello", M = "feedback mute", PS = "has an AH scan to share", PQ = "asks for that scan",
-  PZB = "AH scan: start", PZ = "AH scan: part", PZE = "AH scan: done" }
+  PZB = "AH scan: start", PZ = "AH scan: part", PZE = "AH scan: done",
+  RN = "relay check-in", W = "note passed on by a relay" }
 local function describe(net, msg)
   if net then
     local k = msg:match("^([^|]+)") or "?"
@@ -38,6 +39,9 @@ local function now() return GetTime and GetTime() or 0 end
 L.peers = {}
 local function mine(name)
   local me = UnitName and UnitName("player") or ""
+  local full = C.Net and C.Net.meFull
+  if full and name:lower() == full:lower() then return true end
+  if full and name:find(" ", 1, true) then return false end -- someone else with your first name
   local first = (name:match("^([^%s%-]+)") or name):lower()
   if first == me:lower() then return true end
   return C.IsMyChar and C.IsMyChar(first) or false
@@ -50,7 +54,13 @@ local function notePeer(who, where, msg)
   local p = L.peers[key] or {}
   p.name = (#disp > #(p.name or "")) and disp or p.name
   p.t = time and time() or 0
-  p.via = where
+  -- 2.0: every way they were heard, not only the last
+  p.vias = p.vias or {}
+  p.vias[where] = true
+  local v = {}
+  for k in pairs(p.vias) do v[#v + 1] = k end
+  table.sort(v)
+  p.via = table.concat(v, " + ")
   local ver
   if type(msg) == "string" then
     if msg:sub(1, 2) == "H|" then
@@ -63,7 +73,19 @@ local function notePeer(who, where, msg)
   L.peers[key] = p
 end
 local function push(dir, where, who, what, bytes)
-  table.insert(lines, 1, { t = time and time() or 0, dir = dir, where = where or "", who = who or "", what = what or "" })
+  -- 2.0: a run of the same kind of message (a scan's parts, a data transfer) is one line
+  local top = lines[1]
+  local key = (what or ""):gsub("%d+", "#")
+  if top and top.dir == dir and top.where == (where or "") and top.who == (who or "") and top.key == key and dir ~= "note" then
+    top.n = (top.n or 1) + 1
+    top.t = time and time() or 0
+    top.what = (what or "") .. "  |cff9d9d9d(x" .. top.n .. ")|r"
+    if dir == "in" then totals.inN = totals.inN + 1; totals.inB = totals.inB + (bytes or 0)
+    else totals.outN = totals.outN + 1; totals.outB = totals.outB + (bytes or 0) end
+    if L.frame and L.frame:IsShown() then L.dirty = true end
+    return
+  end
+  table.insert(lines, 1, { t = time and time() or 0, dir = dir, where = where or "", who = who or "", what = what or "", base = what or "", key = key })
   if #lines > MAX then table.remove(lines) end
   if dir == "in" then totals.inN = totals.inN + 1; totals.inB = totals.inB + (bytes or 0)
   elseif dir == "out" then totals.outN = totals.outN + 1; totals.outB = totals.outB + (bytes or 0) end
@@ -74,7 +96,15 @@ end
 function C.NetLog(dir, channel, who, msg, net)
   if type(msg) ~= "string" then return end
   local what = describe(net, msg)
-  local where = net and (channel == "WHISPER" and "network, to one Kina" or "Kina network") or ((channel or ""):lower())
+  local where
+  if not net then where = (channel or ""):lower()
+  elseif channel == "WHISPER" then where = "network, to one Kina"
+  elseif channel == "RELAYED" then where = "network (relayed)"
+  elseif channel == "RELAY" then where = "relay channel"
+  else
+    local i = C.Net and C.Net.Which and C.Net.Which(channel)
+    where = (type(i) == "number" and i > 1) and ("Kina network " .. string.char(64 + i)) or "Kina network"
+  end
   local disp = who and (tostring(who):gsub("%-.*$", "")) or ""
   if dir == "in" then notePeer(disp, where, msg) end
   push(dir, where, disp, what, #msg)
@@ -94,7 +124,7 @@ local function summary()
   local on = N and N.Enabled and N.Enabled()
   local out = {}
   local joined = N and N.Joined and N.Joined()
-  out[#out + 1] = GOLD .. "Kina network:|r " .. (not on and ("|cffff6a50off|r (Settings > Kina network)") or (joined and (GREEN .. "on, joined|r") or ("|cffff6a50on, but not joined yet|r" .. GREY .. " (retrying every 30 s)|r")))
+  out[#out + 1] = GOLD .. "Kina network:|r " .. (not on and ("|cffff6a50off|r (Settings > Kina network)") or (joined and (GREEN .. "on, joined|r" .. GREY .. " (" .. tostring(N.CHANNEL) .. ((N.Relay and N.Relay.IsRelay()) and "; you're relaying it to the other Kina channels" or "") .. ")|r") or ("|cffff6a50on, but not joined yet|r" .. GREY .. " (retrying every 30 s)|r")))
   -- 1.0.8 (Taylor: "showing 1 person online but there's definitely more"): every other Kina
   -- heard on any channel in the last 30 minutes (it used to count only the network, and you)
   local list, t = {}, time and time() or 0
@@ -107,6 +137,9 @@ local function summary()
     parts[#parts + 1] = WHITE .. p.name .. "|r" .. GREY .. " (" .. (p.ver and ("v" .. p.ver .. ", ") or "") .. p.via .. ", " .. (ago < 1 and "now" or (ago .. "m")) .. ")|r"
   end
   out[#out + 1] = GOLD .. "Other Kinas heard (last 30 min):|r " .. (#list > 0 and (WHITE .. #list .. "|r  " .. table.concat(parts, ", ")) or (GREY .. "none yet|r"))
+  -- 2.0: whether the channel really carries your messages (the game sends each one back to you)
+  local echo = N and N.lastEcho
+  out[#out + 1] = GOLD .. "Channel check:|r " .. (not joined and (GREY .. "not joined|r") or (echo and (t - echo) < 900) and (GREEN .. "working|r" .. GREY .. " (your own messages come back " .. math.floor((t - echo) / 60) .. "m ago, so other Kinas on " .. tostring(N.CHANNEL) .. " hear you)|r") or ("|cffff6a50no echo yet|r" .. GREY .. " (your messages haven't come back: the channel may be refusing them)|r"))
   out[#out + 1] = GREY .. "On the Kina network: " .. onNet .. ". Only Kina 1.0.7 and newer join it (realm-wide prices); older Kinas talk over group and guild only.|r"
   out[#out + 1] = string.format("%sThis session:|r sent %d messages (%.1f KB), received %d (%.1f KB).  AH scans sent %d, received %d.",
     GOLD, totals.outN, totals.outB / 1024, totals.inN, totals.inB / 1024, totals.scansOut, totals.scansIn)
@@ -167,13 +200,13 @@ local function build()
   return f
 end
 
-local CHATTER = { ["a kill"] = true, ["farm log"] = true, ["farm numbers"] = true }
+local CHATTER = { ["a kill"] = true, ["farm log"] = true, ["farm numbers"] = true, ["relay check-in"] = true }
 function L.Draw()
   local f = L.frame
   if not f then return end
   f.sum:SetText(summary())
   local shown = {}
-  for _, l in ipairs(lines) do if not (L.quiet and CHATTER[l.what]) then shown[#shown + 1] = l end end
+  for _, l in ipairs(lines) do if not (L.quiet and CHATTER[l.base or l.what]) then shown[#shown + 1] = l end end
   for i = 1, ROWS do
     local l = shown[i + f.offset]
     if l then

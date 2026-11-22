@@ -49,7 +49,16 @@ function C.RaiseKina()
   if d and d:IsShown() and d.Raise then d:Raise() end
 end
 
+-- 2.0 (Taylor: the widget and window were drawn under other addons): "Keep Kina on top",
+-- on unless switched off, keeps Kina's window from stepping back and lifts the widget
+function C.KeepOnTop() return not (C.settings and C.settings.keepOnTop == false) end
+function C.ApplyKeepOnTop()
+  local w = _G.KinaWidget
+  if w then setStrata(w, C.KeepOnTop() and "HIGH" or "MEDIUM", 0) end
+  if C.KeepOnTop() then C.RaiseKina() end
+end
 function C.LowerKina()
+  if C.KeepOnTop() then return end
   onTop = false
   for _, f in ipairs(frames()) do
     if f:GetName() ~= "KinaMenu" then setStrata(f, BACK, 0) end

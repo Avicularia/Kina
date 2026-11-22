@@ -124,6 +124,54 @@ local function enqueue(msg, channel, target, urgent)
   if S.sender then S.sender:Show() end
 end
 S._queue = queue
+
+-- 2.0.5 (Taylor: "the scan is way too slow to be beneficial at all"): a scan goes out over
+-- 8 lanes at once. The game allows about one addon message a second under each message
+-- name (prefix), so 8 names carry 8 a second: a whole scan in a couple of minutes instead
+-- of 50. Used only when every Kina it goes to is on 2.0.5 or newer (older ones don't know
+-- the lane names and get it the old way, one lane).
+local LANE_MIN = "2.0.5"
+S.LANES = {}
+for i = 1, 7 do S.LANES[#S.LANES + 1] = PREFIX .. i end
+local isLane = {}
+for _, p in ipairs(S.LANES) do isLane[p] = true end
+S.IsLane = isLane
+local bulk = {}           -- lane messages waiting (any lane takes the next one)
+S._bulk = bulk
+local laneTokens = {}     -- per lane (main lane is the normal queue)
+for i = 1, #S.LANES do laneTokens[i] = 8 end
+local function vnum(v)
+  local a, b, c = tostring(v or ""):match("^(%d+)%.(%d+)%.(%d+)")
+  return a and (tonumber(a) * 1e6 + tonumber(b) * 1e3 + tonumber(c)) or 0
+end
+-- can everyone this goes to take lanes? (a whisper: that player; the group: every Kina in it)
+function S.LanesOK(channel, target)
+  local F = C.FarmSync
+  if not (F and F.KinaVersionOf) then return false end
+  local need = vnum(LANE_MIN)
+  if channel == "WHISPER" then return vnum(F.KinaVersionOf(target) or "") >= need end
+  if channel ~= "PARTY" and channel ~= "RAID" then return false end
+  local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+  local unitBase = (channel == "RAID") and "raid" or "party"
+  local any = false
+  for i = 1, (channel == "RAID") and n or math.max(0, n - 1) do
+    local nm = UnitName and UnitName(unitBase .. i)
+    if nm and not (UnitIsUnit and UnitIsUnit(unitBase .. i, "player")) then
+      local v = F.KinaVersionOf(nm)
+      if v then
+        if vnum(v) < need then return false end
+        any = true
+      end
+    end
+  end
+  return any
+end
+local function enqueueBulk(msg, channel, target)
+  if #msg > 255 then return end
+  bulk[#bulk + 1] = { msg = msg, channel = channel, target = target }
+  if S.sender then S.sender:Show() end
+end
+S._enqueueBulk = enqueueBulk
 -- 1.2.6: how a scan transfer is going, for the scan bar ("sending your scan 40%",
 -- "getting Tri's scan 40%")
 local peakQ = 0
@@ -143,7 +191,7 @@ function S.Progress()
     end
   end
   if best then return best end
-  local q = #queue
+  local q = #queue + #bulk
   if q == 0 then peakQ = 0; return nil end
   if S.dumping and S.dumping.M then
     if q > peakQ then peakQ = q end
@@ -155,10 +203,41 @@ end
 local sender = CreateFrame("Frame")
 S.sender = sender
 sender:Hide()
+local laneTick = 0
+local function sendLanes(dt)
+  if #bulk == 0 then return end
+  laneTick = laneTick + dt
+  if laneTick >= 1 then
+    laneTick = 0
+    for i = 1, #laneTokens do laneTokens[i] = math.min(8, laneTokens[i] + 1) end
+  end
+  if InCombatLockdown and InCombatLockdown() and IsInInstance and IsInInstance() then return end
+  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+  for i, lp in ipairs(S.LANES) do
+    if #bulk == 0 then break end
+    if laneTokens[i] >= 1 then
+      local it = table.remove(bulk, 1)
+      laneTokens[i] = laneTokens[i] - 1
+      local ok, result = pcall(C_ChatInfo.SendAddonMessage, lp, it.msg, it.channel, it.target)
+      if ok and THROTTLED and result == THROTTLED then table.insert(bulk, 1, it); laneTokens[i] = 0
+      else
+        S.sent = (S.sent or 0) + 1
+        if ok and C.NetLog then pcall(C.NetLog, "out", it.channel, it.target, it.msg) end
+      end
+    end
+  end
+  if #bulk == 0 and S.laneEnd then
+    -- the end marker goes once every part is out
+    local e = S.laneEnd; S.laneEnd = nil
+    enqueue(e.msg, e.channel, e.target, true)
+  end
+end
 C.GuardScript(sender, "OnUpdate", "Share:145", function(self, dt)
   tick = tick + dt
   if tick >= 1 then tick = 0; tokens = math.min(6, tokens + 1) end
-  if #queue == 0 then self:Hide(); return end
+  pcall(sendLanes, dt)
+  if #queue == 0 and #bulk == 0 then self:Hide(); return end
+  if #queue == 0 then return end
   if tokens < 1 then return end
   if InCombatLockdown and InCombatLockdown() then
     -- in dungeons and raids nothing goes out during combat (sent when combat ends);
@@ -259,7 +338,15 @@ local function hello(channel, target, force)
     rep >= 0 and b36(rep) or "x", (tostring(C.version or ""):gsub("[^%d%.]", "")), tostring(S.MyStanding and S.MyStanding() or ""), S.MyFlags and S.MyFlags() or "", tostring(C.BUILD or 0),
     b36(C.Mentor and C.Mentor.Count() or 0),
     -- 0.9.17 (Taylor): your XP, so your profile on their screen shows progress, not just the level
-    b36(S.MyXP and S.MyXP() or 0) .. "x" }, "|") -- ("x" ends it: a hello cut short at the length cap can't send a wrong number)
+    b36(S.MyXP and S.MyXP() or 0) .. "x",
+    -- 2.0.5 (Taylor: Scàrlet's profile still showed the old Kina I and standing): this
+    -- season's Kina XP, Renown and gold farmed, so profiles show the 2.0 numbers
+    (function()
+      local P = C.Progress
+      local ok, st = pcall(function() return P and P.State() end)
+      if not (ok and st) then return "" end
+      return b36(math.floor(st.xp or 0)) .. "." .. b36(math.floor(st.renown or 0)) .. "." .. b36(math.floor(st.gold or 0)) .. "s"
+    end)() }, "|") -- ("x" / "s" end their fields: a hello cut short can't send a wrong number)
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
   return true
@@ -323,7 +410,8 @@ local function sendMarket(ch, to, uid)
       -- under what a vendor pays (AH->Vendor flips). Keeps a full scan quick to send.
       local r = C.Item(id)
       local n = 0
-      if r and C.IsGear(r) and (r.q or 0) >= 2 then n = 8
+      -- 2.0.5: gear 3 price levels (was 8) and no sold ladder: a third less to send
+      if r and C.IsGear(r) and (r.q or 0) >= 2 then n = 3
       elseif r and r.cls == 7 then n = 3
       else
         local v = C.VendorPrice and C.VendorPrice(id, true) or 0
@@ -333,14 +421,31 @@ local function sendMarket(ch, to, uid)
       local trimmed = L and {} or nil
       if L then for i = 1, math.min(n, #L) do trimmed[i] = L[i] end end
       parts[#parts + 1] = table.concat({ b36(id), b36(mi.m or 0), b36(mi.d or mi.m or 0), b36(mi.q or 0), b36(mi.n or 0),
-        ladderOut(trimmed), (n == 8) and ladderOut(mi.sl) or "" }, ":")
+        ladderOut(trimmed), "" }, ":")
     end
   end
   local ver = m.scanTime or 0
   S.dumping.M = true
-  enqueue(table.concat({ "B", uid, "M", b36(ver), b36(#parts) }, "|"), ch, to)
+  local begin = table.concat({ "B", uid, "M", b36(ver), b36(#parts) }, "|")
+  local finish = table.concat({ "E", uid, "M", b36(ver), b36(#parts) }, "|")
+  if S.LanesOK(ch, to) then
+    -- the start goes now (before any part can arrive), the parts over the lanes, and the
+    -- end once the last part is out
+    local ok = C_ChatInfo and pcall(C_ChatInfo.SendAddonMessage, PREFIX, begin, ch, to)
+    if not ok then enqueue(begin, ch, to, true) end
+    local msg, fresh, head = "M|" .. uid .. "|", true, "M|" .. uid .. "|"
+    for _, p in ipairs(parts) do
+      if #msg + #p + 1 > MAX_LEN and not fresh then enqueueBulk(msg, ch, to); msg = head; fresh = true end
+      msg = msg .. (fresh and "" or ";") .. p; fresh = false
+    end
+    if not fresh then enqueueBulk(msg, ch, to) end
+    S.laneEnd = { msg = finish, channel = ch, target = to }
+    return
+  end
+  -- the old way: the scan ahead of other data (urgent keeps its order)
+  enqueue(begin, ch, to, true)
   packed("M|" .. uid .. "|", parts, ";", ch, to)
-  enqueue(table.concat({ "E", uid, "M", b36(ver), b36(#parts) }, "|"), ch, to)
+  enqueue(finish, ch, to)
 end
 
 local function itemParts(t)
@@ -462,7 +567,7 @@ end
 -- 1.5.4: flags others see on my profile: b = was Blacklisted once (the scar)
 function S.MyFlags()
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
-  return ((ok and m and m.everBlack) and "b" or "") .. (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
+  return (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
     .. ((C.TrackOnly and C.TrackOnly()) and "t" or "") -- 0.9.20: tracker only
     .. ((C.Unlocked and C.Unlocked() and C.PUBLIC) and "d" or "") -- 0.9.23: a team (dev) install
 end
@@ -536,7 +641,7 @@ function S.ProfileOf(name)
   local nt = S.Notable(name)
   return { stand = best.stand, kinaLv = best.rep and best.rep.lv, seen = best.seen, char = ch, ver = best.ver, build = best.build,
     scar = ((best.flags and best.flags:find("b")) or (nt and nt.scar)) and true or nil, reset = nt and nt.reset or nil,
-    recruits = best.recruits, xp = best.xp, dev = best.dev }
+    recruits = best.recruits, xp = best.xp, dev = best.dev, season = best.season }
 end
 function S.CharOf(name)
   local best, want = authorFor(name)
@@ -663,6 +768,8 @@ local function onHello(from, rest, channel)
   if f[18] then a.recruits = n36(f[18], 9999) or a.recruits end
   local xs = f[19] and f[19]:match("^(%w-)x$")
   if xs then a.xp = n36(xs, 99999999) or a.xp end
+  local sx, sr, sg = (f[20] or ""):match("^(%w+)%.(%w+)%.(%w+)s$")
+  if sx then a.season = { xp = n36(sx, 1e9) or 0, renown = n36(sr, 1e9) or 0, gold = n36(sg, 1e9) or 0, t = C.Now() } end
   if S.onHello then pcall(S.onHello, from, uid, a, channel) end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) and (tonumber(f[17]) or 0) <= (C.BUILD or 0) + BUILD_JUMP then
@@ -829,6 +936,16 @@ local function onEnd(from, rest)
   local key = uid and (from .. uid .. what)
   local b = key and incoming[key]
   if not b then return end
+  -- 2.0.5: over lanes the end can beat the last parts: wait while parts still arrive
+  if what == "M" and b.expect and b.expect > 0 and C.After then
+    local n = 0; for _ in pairs(b.rows) do n = n + 1 end
+    local now = GetTime and GetTime() or 0
+    b.endAt = b.endAt or now
+    if n < b.expect and now - (b.last or now) < 10 and now - b.endAt < 60 then
+      C.After(1, function() if incoming[key] == b then onEnd(from, rest) end end)
+      return
+    end
+  end
   incoming[key] = nil; requested[uid .. what] = nil
   ver = n36(ver) or 0
   local a = authorOf(uid, true)
@@ -1075,7 +1192,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
   if not db().opts.enabled and not (event == "CHAT_MSG_ADDON" and type(select(2, ...)) == "string" and (select(2, ...)):match("^T|")) then return end
   if event == "CHAT_MSG_ADDON" then
     local prefix, text, channel, from = ...
-    if prefix ~= PREFIX or type(text) ~= "string" or isMe(from) then return end
+    if (prefix ~= PREFIX and not isLane[prefix]) or type(text) ~= "string" or isMe(from) then return end
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
     if C.NetLog then pcall(C.NetLog, "in", channel, from, text) end -- (the full "First Surname" for the log)
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
@@ -1497,7 +1614,10 @@ end
 
 C.On("INIT", function()
   db()
-  if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix(PREFIX) end
+  if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+    C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
+    for _, lp in ipairs(S.LANES) do C_ChatInfo.RegisterAddonMessagePrefix(lp) end
+  end
   frame:RegisterEvent("CHAT_MSG_ADDON")
   frame:RegisterEvent("GROUP_ROSTER_UPDATE")
   groupSize = GetNumGroupMembers and GetNumGroupMembers() or 0

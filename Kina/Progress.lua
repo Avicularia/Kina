@@ -192,7 +192,7 @@ end
 local function lower(s) return ((tostring(s or "")):match("^([^%-]+)") or tostring(s)):lower() end
 function P.Members(s)
   local out, seen = {}, {}
-  if not (s and s.sync and s.sync.chain) then return out end
+  if not (s and s.sync and s.sync.chain) then return out, 0 end -- (2.0: was nil, which broke scoring)
   local others = {}
   for _, ev in ipairs(s.sync.chain) do
     local o = ev.origin and lower(ev.origin)
@@ -210,6 +210,14 @@ end
 function P.Score(s, level)
   local cfg = S()
   local members, confirmed = P.Members(s)
+  -- 2.0.6 (Taylor: "recheck all farms for progress enabling parameters and re-grant missed
+  -- exp/renown"): farms from the 2.0 betas, when the Kina network wasn't reaching anyone and
+  -- no shared log could form, count if you farmed them in a group and were together with
+  -- the group for at least a third of the time (Kina's own together/apart tracking).
+  if confirmed < 1 and s.rescore and (s.groupN or 0) >= 2 then
+    local tog, apart = s.togetherTicks or 0, s.apartTicks or 0
+    if tog > 0 and tog >= (tog + apart) / 3 then confirmed = 1 end
+  end
   if confirmed < 1 then return nil, "solo" end
   local mins = (s.prog and s.prog.act) or 0
   if mins < 1 then return nil, "idle" end
@@ -217,7 +225,10 @@ function P.Score(s, level)
   -- the whole group's loot (never quest rewards); everyone gets credit for all of it
   local groupLoot = (s.split and s.split.total) or (s.gview and s.gview.net) or 0
   local perHour = groupLoot / people / (mins / 60)
-  local pace = perHour / cfg.Target(level or (UnitLevel and UnitLevel("player")) or 1)
+  -- 2.0 (approved Nov 21): pace compares the whole group's gold per hour with the target, the
+  -- same way everyone gets credit for every drop
+  local groupPerHour = groupLoot / (mins / 60)
+  local pace = groupPerHour / cfg.Target(level or (UnitLevel and UnitLevel("player")) or 1)
   pace = math.max(cfg.pace.min, math.min(cfg.pace.max, pace))
   local base = cfg.perMinute * mins * pace
   local b = cfg.bonus
@@ -236,9 +247,10 @@ function P.Score(s, level)
 end
 
 -- credit one finished farm (once). Returns the score, or nil and why it didn't count.
-function P.Credit(s)
+function P.Credit(s, quiet)
   if not s or s.progCredited then return nil, "done" end
-  local sc, why = P.Score(s)
+  -- scored at the level you farmed it (2.0.6), not the level you are now
+  local sc, why = P.Score(s, s.maxLvl or s.lvl)
   s.progCredited = true
   if not sc then s.progWhy = why; return nil, why end
   local st = P.State()
@@ -252,6 +264,7 @@ function P.Credit(s)
   for id, n in pairs(s.groupKills or {}) do st.kills[id] = (st.kills[id] or 0) + n end
   local ref = (s.sync and s.sync.sid) or ("t" .. tostring(s.start))
   st.farms[ref] = { base = sc.base, t = C.Now(), commends = 0 }
+  pcall(applyPending, st, ref)
   -- bests for the leaderboards
   st.best.perHour = math.max(st.best.perHour or 0, sc.perHour)
   st.best.farm = math.max(st.best.farm or 0, sc.groupLoot)
@@ -260,26 +273,68 @@ function P.Credit(s)
   sc.rankUp = P.Rank(st.renown) > before.rank and P.Rank(st.renown) or nil
   sc.levelUp = P.Level(st.xp) > before.level and P.Level(st.xp) or nil
   s.prog = s.prog or {}; s.prog.score = sc
-  if C.FarmRecap and C.Season.live then pcall(C.FarmRecap, s, sc) end
+  -- 2.0.5 (Taylor: XP came in but the recap never showed): a failure is said, not hidden,
+  -- and /kina recap opens it again
+  if C.FarmRecap and not quiet then
+    local ok, e = pcall(C.FarmRecap, s, sc)
+    if not ok then
+      if C.LogError then C.LogError("farm recap", e) end
+      C.Print("|cffff8060the farm recap couldn't open (" .. tostring(e) .. "). /kina recap tries again; tell Claude what it says.|r")
+    end
+  end
   return sc
 end
 
 -- a commendation for one of your farms: +10% of that farm's base
+-- 2.0 (Taylor: "it only gave 10 rep and no multiplier that I can see"): each commendation
+-- is +10% of that farm's Renown and Kina XP. One that arrives before your Kina has scored
+-- the farm waits for it (st.pending) instead of being lost; a farm that earned nothing
+-- (nobody else's Kina joined) gives nothing, and the toast says so.
 function P.OnCommend(ref)
   local st = P.State()
-  local f = ref and st.farms[ref]
-  if not f then return end
+  if not ref or ref == "" then return nil, "nofarm" end
+  local f = st.farms[ref]
+  if not f then
+    -- was it scored and earned nothing, or not scored yet?
+    for _, s in ipairs(C.db.sessions or {}) do
+      local r = (s.sync and s.sync.sid) or ("t" .. tostring(s.start))
+      if r == ref and s.progCredited then return nil, "noearn" end
+    end
+    st.pending = st.pending or {}
+    st.pending[ref] = (st.pending[ref] or 0) + 1
+    return nil, "pending"
+  end
   local add = math.floor(f.base * S().bonus.commend + 0.5)
   f.commends = (f.commends or 0) + 1
   st.renown = st.renown + add; st.xp = st.xp + add
   return add
 end
+-- commendations that came before the farm was scored
+local function applyPending(st, ref)
+  local n = st.pending and st.pending[ref]
+  if not n then return 0 end
+  st.pending[ref] = nil
+  local total = 0
+  for _ = 1, n do total = total + (P.OnCommend(ref) or 0) end
+  if total > 0 and C.Print then C.Print(string.format("|cff4fc3f7commendations for this farm: +%d Renown and Kina XP (+10%% each).|r", total)) end
+  return total
+end
 
 -- hooks: farm end, kills of card mobs, commendations
 local origEnded = C.FarmEnded
 C.FarmEnded = function(s, ...)
-  if origEnded then origEnded(s, ...) end
-  pcall(P.Credit, s)
+  -- 2.0: an error in an older farm-end step never stops the season credit
+  if origEnded then local ok, e = pcall(origEnded, s, ...); if not ok and C.LogError then C.LogError("farm end", e) end end
+  local ok, sc, why = pcall(P.Credit, s)
+  if not ok and C.LogError then C.LogError("season credit", sc) end
+  -- no credit: say why, once, so a farm never quietly earns nothing
+  if ok and not sc and C.Print and why ~= "done" then
+    local msg = ({
+      solo = "no Kina XP or Renown for this farm: nobody else's Kina joined it. Farms count when at least one other Kina joins (they answer the join popup).",
+      idle = "no Kina XP or Renown for this farm: Kina saw no farming in it.",
+    })[why]
+    if msg then C.Print(msg) end
+  end
 end
 -- a kill: activity, and (shared farms) the group's card-mob tally
 function P.NoteKill(npcId)
@@ -294,9 +349,23 @@ if C.Vouch and C.Vouch.OnVouch then
   C.Vouch.OnVouch = function(from, kind, ref)
     local d = C.db.vouch and C.db.vouch.got
     local n = d and #d or 0
+    -- the toast is shown here, with what the commendation is worth in 2.0
+    C.Vouch.quietToast = true
     local r = orig(from, kind, ref)
+    C.Vouch.quietToast = nil
     local after = C.db.vouch and C.db.vouch.got
-    if after and #after > n and not C.Vouch.IsBad(kind) then pcall(P.OnCommend, ref) end
+    if after and #after > n then
+      local g = after[#after]
+      local bad = C.Vouch.IsBad(kind)
+      local add, why
+      if not bad then
+        local ok, a, w = pcall(P.OnCommend, ref)
+        if ok then add, why = a, w end
+      end
+      if C.Toast and C.Toast.Commended then
+        pcall(C.Toast.Commended, g.who, C.Vouch.KINDS[tonumber(kind) or 1], bad, add, why)
+      end
+    end
     return r
   end
 end
@@ -376,6 +445,13 @@ local function buildRecap()
   recap = f
   return f
 end
+-- the last scored farm's recap again
+function P.ShowLastRecap()
+  for _, s in ipairs(C.db.sessions or {}) do
+    if s.prog and s.prog.score then return C.FarmRecap(s, s.prog.score) end
+  end
+  C.Print("no farm has earned Kina XP yet, so there's no recap to show.")
+end
 function C.FarmRecap(s, sc)
   local f = buildRecap()
   f.title:SetText(GOLDC .. "Farm complete" .. (s and s.label and (": " .. s.label) or "") .. "|r")
@@ -417,4 +493,50 @@ if C.On then C.On("PLAYER_LOGIN", function()
   d.debtsRetired = C.Now and C.Now() or 0
   if d.forgive then d.forgive.pending = {}; d.forgive.asks = {} end
   if d.share then d.share.courier = {} end
+end) end
+
+-- 2.0 (Taylor: "it reset all of us back to level 1"): the Kina level you earned before 2.0
+-- carries into Season 1. Once per profile: your season XP starts at the start of the level
+-- you had (Kina level I to XX maps to 1 to 20). Never lowers anything.
+function P.CarryOldLevel()
+  local d = C.db
+  if not d or d.levelCarried or not (C.Rep and C.Rep.Mine) then return end
+  local ok, m = pcall(C.Rep.Mine)
+  if not ok or type(m) ~= "table" or not m.ok then return end
+  d.levelCarried = C.Now and C.Now() or 0
+  local lv = math.max(1, math.min(#S().levels, tonumber(m.level) or 1))
+  local st = P.State()
+  local at = S().levels[lv] or 0
+  if (st.xp or 0) < at then st.xp = at end
+  if lv > 1 then C.Print(string.format("|cffffc54aKina 2.0:|r your Kina level %d carries into Season 1.", lv)) end
+end
+-- 2.0.6: once per profile, every 2.0 farm that never got its Kina XP and Renown (the
+-- network wasn't reaching anyone, or a crash said "solo") is scored again under the rules
+-- above and paid, with any commendations waiting for it. A farm that already earned is
+-- never paid twice (it has a score). 2.0 farms are the ones with season activity (prog).
+function P.Rescore()
+  if C.realmPending then
+    if C.After then C.After(5, function() pcall(P.Rescore) end) end
+    return 0
+  end
+  local d = C.db
+  if not d or d.rescored206 then return 0 end
+  d.rescored206 = C.Now and C.Now() or 0
+  local n, total = 0, 0
+  for _, s in ipairs(d.sessions or {}) do
+    if s ~= C.session and type(s.prog) == "table" and not s.prog.score and (s.prog.act or 0) >= 1 then
+      s.progCredited, s.progWhy, s.rescore = nil, nil, true
+      local ok, sc = pcall(P.Credit, s, true)
+      if ok and sc then n = n + 1; total = total + (sc.earned or 0) end
+      s.rescore = nil
+    end
+  end
+  if n > 0 and C.Print then
+    C.Print(string.format("|cffffc54aKina 2.0.6:|r %d past farm%s scored again: +%d Renown and Kina XP that was missed.", n, n == 1 and "" or "s", total))
+  end
+  return n, total
+end
+if C.On then C.On("PLAYER_LOGIN", function()
+  local function go() pcall(P.CarryOldLevel); pcall(P.Rescore) end
+  if C.After then C.After(3, go) else go() end
 end) end

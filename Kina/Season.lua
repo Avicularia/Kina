@@ -46,21 +46,26 @@ C.Season = {
     { id = "ring",   name = "Portrait ring", stat = "renownRank" },
     { id = "stars",  name = "Mentor star",   stat = "recruits", tiers = { 1, 2, 3, 4, 5 } },
     { id = "bond",   name = "Bond crest",    stat = "bondLevel" },
-    { id = "cards",  name = "Hot mob cards", stat = "cardKills", tiers = { 30, 75, 150, 300, 600 } },
+    -- (Hot mob cards: not in Season 1 yet; 30 / 75 / 150 / 300 / 600 kills when they come)
     { id = "banner", name = "Farm banner",   stat = "hours", tiers = { 0.5, 2.5, 7.5, 15, 30, 50, 75, 100 } },
     -- PLACEHOLDER gold amounts until Kina's own farm data sets them (Taylor: normal 1-60,
     -- then steeply higher ranks)
-    { id = "hoard",  name = "Coin hoard",    stat = "gold", tiers = { 1, 10, 50, 150, 400, 1000, 2500, 5000, 10000, 15000 } },
+    { id = "hoard",  name = "Coin hoard",    stat = "gold", tiers = { 1, 3, 8, 20, 40, 65, 75, 100, 150, 200 } },
   },
   -- the season's 20 card mobs (a fixed list, so rotating the hot list never strands a
   -- card). Until Taylor picks them, the current hot list stands in.
   cardMobs = nil,
 }
 
--- gold per hour (copper) a typical player makes at a level: the pace target.
--- PLACEHOLDER curve until Kina's data sets it; level 60 is a fixed target.
+-- gold per hour (copper) a typical group earns at a level: the pace target (pace 1.0).
+-- Approved Nov 21 (tentative; reviewed every other Friday). Levels 1-44 from Wowhead
+-- Forever drop rates priced at the Realm 5 AH, checked against Taylor's 42 hours of farms
+-- (212c a kill, about 50 kills an hour): 1004 x level^0.726. No data above 44 yet: level 60
+-- is a set 10g/h, and 45-59 rise smoothly to it.
 function C.Season.Target(level)
   level = math.max(1, math.min(60, level or 1))
-  if level >= 60 then return 400000 end
-  return math.floor(600 * level ^ 1.6)
+  if level >= 60 then return 100000 end
+  if level <= 44 then return math.floor(1004 * level ^ 0.726) end
+  local c44 = 1004 * 44 ^ 0.726
+  return math.floor(c44 * (100000 / c44) ^ ((level - 44) / 16))
 end

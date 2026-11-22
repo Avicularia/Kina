@@ -170,7 +170,13 @@ function C.AHNet(id, qty)
     -- one or two listings of a piece of gear is an asking price: haircut it
     if (mi.n or 0) < 3 then price = math.floor(price * 0.75) end
   else
-    price = math.min(mi.d or mi.m, C.WeekMedian(id) or mi.d or mi.m)
+    -- 2.0.6 (Taylor: "kina is reading the wrong price for thundering charms while im
+    -- farming them": 384 listed at 22s, valued at the week's 13s): the week's median only
+    -- caps a THIN book, where a few listings could be an outlier. A deep market (20+
+    -- listed) is today's real price, so a price that jumps (the levelling crowd buying a
+    -- material up) counts the day it happens.
+    if (mi.q or mi.n or 0) >= 20 then price = mi.d or mi.m
+    else price = math.min(mi.d or mi.m, C.WeekMedian(id) or mi.d or mi.m) end
   end
   local cut = price * C.settings.ahCut
   -- deposit = a share of the vendor price (Econ.lua); ~30% of listings expire once

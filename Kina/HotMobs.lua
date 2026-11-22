@@ -119,22 +119,67 @@ local function crowdMob(npc, rec)
     loots = looted, items = rec.items or {}, zoneName = rec.zone, crowd = true }
 end
 
-local function evaluate(npc, m)
+-- 2.0.6 (Taylor: "if specific materials like thundering charm are having a hot streak
+-- moment"): how today's AH price compares with the item's own last two weeks (the median of
+-- its daily prices before today). Returns the ratio, that baseline and how many days it had;
+-- nil without 3+ earlier days.
+local function dayOf(t) return math.floor(t / 86400) end
+function H.Spike(id)
+  local h = C.market and C.market.history and C.market.history[id]
+  local mi = C.MarketItem and C.MarketItem(id)
+  local now = mi and (mi.m or mi.p)
+  if not (h and now and now > 0) then return nil end
+  local today, vals = dayOf(C.Now()), {}
+  for d = today - 14, today - 1 do
+    local p = h[d]; local v = p and (p[2] or p[1])
+    if v and v > 0 then vals[#vals + 1] = v end
+  end
+  if #vals < 3 then return nil end
+  table.sort(vals)
+  local base = vals[math.ceil(#vals / 2)]
+  return now / base, base, #vals
+end
+H.SPIKE = 1.5        -- today's price this many times its two-week median = a hot streak
+H.SPIKE_SHARE = 0.3  -- ...and that item is at least this share of the mob's gold per kill
+
+-- your skinning skill (nil without the profession)
+local function skinSkill()
+  local p = C.char and C.char.prof
+  return p and tonumber(p.Skinning) or nil
+end
+
+local function evaluate(npc, m, rec)
   local coin, coinHow = coinFor(npc, m)
   local det = { { kind = "coin", value = coin, how = coinHow } }
   local total = coin
-  for id, c in pairs(m.items or {}) do
-    local rate = c / m.loots
-    if rate >= H.RATE_MIN then
-      local v, how, sold, listed = H.ItemValue(id)
-      if v > 0 then
-        det[#det + 1] = { kind = "item", id = id, rate = rate, price = v, value = rate * v, how = how, sold = sold, listed = listed }
-        total = total + rate * v
-      end
-    end
+  local function item(id, rate, kind)
+    if rate < H.RATE_MIN then return end
+    local v, how, sold, listed = H.ItemValue(id)
+    if v <= 0 then return end
+    local sp = H.Spike(id)
+    det[#det + 1] = { kind = kind, id = id, rate = rate, price = v, value = rate * v, how = how, sold = sold, listed = listed, spike = sp }
+    total = total + rate * v
+  end
+  for id, c in pairs(m.items or {}) do item(id, c / m.loots, "item") end
+  -- 2.0.6: skins count the same way (a drop rate per kill) once you can skin it
+  rec = rec or (C.LootRecord and C.LootRecord(npc))
+  local sk = skinSkill()
+  if rec and rec.skinItems and (rec.skins or 0) >= 5 and sk and C.SkinSkillNeeded and sk >= C.SkinSkillNeeded(m.lvl or 1) then
+    for id, c in pairs(rec.skinItems) do item(id, c / rec.skins, "skin") end
   end
   table.sort(det, function(a, b) return a.value > b.value end)
   return total, det
+end
+-- the hottest streaking drop of a mob: { id, ratio, share } or nil
+local function streakOf(total, det)
+  local best
+  for _, d in ipairs(det) do
+    if d.kind ~= "coin" and d.how == "AH" and d.spike and d.spike >= H.SPIKE and total > 0 then
+      local share = d.value / total
+      if share >= H.SPIKE_SHARE and (not best or share > best.share) then best = { id = d.id, ratio = d.spike, share = share } end
+    end
+  end
+  return best
 end
 
 function H.List()
@@ -156,12 +201,12 @@ function H.List()
     if m.crowd and looted < H.CROWD_MIN then return end
     local sp = spawnsOf(npc)
     if sp and (sp.n or 0) < H.MIN_SPAWNS then return end -- a named rare or quest mob, not a farm
-    local total, det = evaluate(npc, m)
+    local total, det = evaluate(npc, m, rec)
     local area = sp and sp.area or m.loc
     rows[#rows + 1] = { npc = npc, name = m.nm, lvl = m.lvl, elite = m.elite and true or false, type = m.type,
       area = area, zone = (area and H.ZoneName(area)) or m.zoneName or "?", value = total, det = det, loots = m.loots,
       source = m.crowd and "Kina" or "Wowhead",
-      kinaKills = rec and math.max(rec.kills or 0, rec.looted or 0) or 0, spawn = sp }
+      kinaKills = rec and math.max(rec.kills or 0, rec.looted or 0) or 0, spawn = sp, streak = streakOf(total, det) }
   end
   local seen = {}
   -- the newer Wowhead pull (levels 30-44) wins over the October snapshot
@@ -196,70 +241,76 @@ function H.List()
     local zoneOK = (r.zoneN or 0) >= 4
     if zoneOK and r.rank == 1 and r.xMed >= H.HOT_MED and r.xTop >= H.HOT_TOP then r.tier = "hot"
     elseif zoneOK and r.rank <= 3 and r.xMed >= H.KOS_MED and r.xTop >= H.KOS_TOP then r.tier = "kos" end
+    -- 2.0.6: a drop on a hot streak makes a mob hot while it lasts, if the mob is already
+    -- worth more than the usual mob of its level (the levelling crowd buying it up)
+    if r.streak and r.xMed >= 1.5 then r.tier = "hot" end
   end
-  -- 1.0.6 (Taylor): the hot list that ships with Kina decides which mobs are hot (it's made
-  -- from Taylor's scans, refreshed as often as we can). A listed mob shows the grey logo
-  -- until YOU have killed it 30 times; then it lights up for you, a collectible. Its gold
-  -- per kill stays hidden until then, and after that comes only from your own kills and
-  -- loot, so it keeps changing as you farm. A mob taken off the list loses its logo.
+  -- 2.0.6 (Taylor: "Hot list needs to rebuild live based on character level and mob loot
+  -- table... Show the details now and leave the logo and creature cards as the
+  -- collectibles"): tiers come from the live ranking above, every time it's rebuilt (each
+  -- AH scan and every 10 minutes). The curated list that ships with Kina only adds mobs:
+  -- a listed mob is at least its listed tier. Gold per kill always shows; once you have
+  -- 30 kills of a mob it comes from your own kills and loot. The logo stays grey until your
+  -- 30th kill, and the cards grow with your kills, as collectibles.
   local HL = C.Data and C.Data.hotList
-  if HL and HL.mobs and next(HL.mobs) and not H.ignoreList then
-    -- 1.0.6: remember every listed mob, so one taken off the list goes to your archive
-    C.db.hotSeen = type(C.db.hotSeen) == "table" and C.db.hotSeen or {}
-    local hs = C.db.hotSeen
-    for npc, e in pairs(HL.mobs) do
-      local s = hs[npc] or {}
-      s.nm, s.lvl, s.area, s.tier, s.elite, s.type = e.nm, e.lvl, e.area, e.tier, e.elite, e.type
-      if not s.first then
-        -- kills from before Kina knew it was hot count (it was hot then too)
-        local own = C.db.loot and C.db.loot[npc]
-        s.first, s.hk = C.Now(), type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
-      end
-      s.removed, s.frozenG = nil, nil -- (back on the list: its card grows again)
-      hs[npc] = s
+  local listed = (HL and HL.mobs and not H.ignoreList) and HL.mobs or {}
+  local have = {}
+  for _, r in ipairs(rows) do
+    local e = listed[r.npc]
+    have[r.npc] = true
+    if e then
+      r.listed = true
+      if r.tier ~= "hot" then r.tier = e.tier or r.tier end
     end
-    for npc, s in pairs(hs) do
-      if not HL.mobs[npc] and not s.removed then
-        -- off the list: its card freezes where it is
-        s.removed = C.Now()
-        s.frozenG = H.HotGold(npc, s)
-      end
-    end
-    local have = {}
-    for _, r in ipairs(rows) do
-      local e = HL.mobs[r.npc]
-      have[r.npc] = true
-      r.tier, r.listed = e and e.tier or nil, e and true or nil
-    end
-    for npc, e in pairs(HL.mobs) do
-      if not have[npc] then
-        local area = e.area
-        rows[#rows + 1] = { npc = npc, name = e.nm or ("mob " .. npc), lvl = e.lvl or 1, elite = e.elite and true or false, type = e.type,
-          area = area, zone = (area and H.ZoneName(area)) or "?", value = 0, det = {}, loots = 0, source = "you",
-          tier = e.tier, listed = true }
-      end
-    end
-    for _, r in ipairs(rows) do
-      if r.listed then
-        local own = C.db.loot and C.db.loot[r.npc]
-        local mine = type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
-        r.kinaKills, r.mine = mine, mine
-        if mine >= H.KINA_KILLS then
-          local m = crowdMob(r.npc, own)
-          local total, det = evaluate(r.npc, m)
-          -- coin: what you actually looted per kill
-          local coin = (own.coin or 0) / math.max(own.looted or 0, 1)
-          total = total - ((det[1] and det[1].kind == "coin") and det[1].value or 0) + coin
-          for _, d in ipairs(det) do if d.kind == "coin" then d.value, d.how = coin, "your kills" end end
-          r.value, r.det, r.loots, r.source, r.hideValue = total, det, own.looted or 0, "you", nil
-        else
-          r.value, r.det, r.hideValue = 0, {}, true
-        end
-      end
+  end
+  for npc, e in pairs(listed) do
+    if not have[npc] then
+      local area = e.area
+      rows[#rows + 1] = { npc = npc, name = e.nm or ("mob " .. npc), lvl = e.lvl or 1, elite = e.elite and true or false, type = e.type,
+        area = area, zone = (area and H.ZoneName(area)) or "?", value = 0, det = {}, loots = 0, source = "you",
+        tier = e.tier, listed = true }
     end
   end
   for _, r in ipairs(rows) do
-    r.grey = r.tier and r.kinaKills < H.KINA_KILLS or false
+    if r.tier then
+      local own = C.db.loot and C.db.loot[r.npc]
+      local mine = type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
+      r.kinaKills, r.mine = math.max(r.kinaKills or 0, mine), mine
+      if mine >= H.KINA_KILLS and (own.looted or 0) >= H.KINA_KILLS then
+        local m = crowdMob(r.npc, own)
+        m.lvl = r.lvl
+        local total, det = evaluate(r.npc, m, own)
+        -- coin: what you actually looted per kill
+        local coin = (own.coin or 0) / math.max(own.looted or 0, 1)
+        total = total - ((det[1] and det[1].kind == "coin") and det[1].value or 0) + coin
+        for _, d in ipairs(det) do if d.kind == "coin" then d.value, d.how = coin, "your kills" end end
+        r.value, r.det, r.loots, r.source = total, det, own.looted or 0, "you"
+        r.streak = streakOf(total, det) or r.streak
+      end
+    end
+  end
+  -- remember every mob that has been hot, for its card; one that stops being hot freezes
+  -- its card (the archive) until it's hot again
+  C.db.hotSeen = type(C.db.hotSeen) == "table" and C.db.hotSeen or {}
+  local hs, now = C.db.hotSeen, {}
+  for _, r in ipairs(rows) do
+    if r.tier then
+      now[r.npc] = true
+      local s = hs[r.npc] or {}
+      s.nm, s.lvl, s.area, s.tier, s.elite, s.type = r.name, r.lvl, r.area, r.tier, r.elite, r.type
+      if not s.first then
+        local own = C.db.loot and C.db.loot[r.npc]
+        s.first, s.hk = C.Now(), type(own) == "table" and math.max(own.kills or 0, own.looted or 0) or 0
+      end
+      s.removed, s.frozenG = nil, nil
+      hs[r.npc] = s
+    end
+  end
+  for npc, s in pairs(hs) do
+    if not now[npc] and not s.removed then s.removed = C.Now(); s.frozenG = H.HotGold(npc, s) end
+  end
+  for _, r in ipairs(rows) do
+    r.grey = r.tier and (r.mine or 0) < H.KINA_KILLS or false
   end
   cache, cacheAt = rows, C.Now()
   H.byNpc = {}
@@ -464,6 +515,54 @@ local function npcOf(unit)
   local id = g and select(6, strsplit("-", g))
   return tonumber(id)
 end
+-- 2.0 (Taylor: with a nameplate addon the logo sat on the health bar): beside the name the
+-- player actually sees. Blizzard's plate: its name. Another addon's plate (Blizzard's is
+-- hidden but still there): that addon's name text, found by the mob's name; failing that,
+-- just left of its health bar.
+local function visible(r)
+  if not (r and r.IsVisible and r:IsVisible()) then return false end
+  local a = (r.GetEffectiveAlpha and r:GetEffectiveAlpha()) or (r.GetAlpha and r:GetAlpha()) or 1
+  return a > 0.05
+end
+local function findOnPlate(plate, uf, want)
+  local best, bestW, nameFS
+  local function walk(fr, depth)
+    if depth > 5 or fr == uf or not visible(fr) then return end
+    if fr.GetRegions then
+      for _, r in ipairs({ fr:GetRegions() }) do
+        if r.GetObjectType and r:GetObjectType() == "FontString" and visible(r) and want and r:GetText() == want then
+          -- several: the highest on screen (the name above the bar, not one inside it)
+          if not nameFS or ((r.GetTop and r:GetTop() or 0) > (nameFS.GetTop and nameFS:GetTop() or 0)) then nameFS = r end
+        end
+      end
+    end
+    if fr.GetObjectType and fr:GetObjectType() == "StatusBar" then
+      local w = fr.GetWidth and fr:GetWidth() or 0
+      if w > (bestW or 0) then best, bestW = fr, w end
+    end
+    if fr.GetChildren then for _, ch in ipairs({ fr:GetChildren() }) do walk(ch, depth + 1) end end
+  end
+  walk(plate, 0)
+  return nameFS, best
+end
+-- the badge's right edge just left of where a font string's text starts
+local function besideText(f, fs)
+  local w = fs.GetStringWidth and fs:GetStringWidth() or 0
+  local j = fs.GetJustifyH and fs:GetJustifyH() or "CENTER"
+  if j == "LEFT" then f:SetPoint("RIGHT", fs, "LEFT", -2, 0)
+  elseif j == "RIGHT" then f:SetPoint("RIGHT", fs, "RIGHT", -w - 2, 0)
+  else f:SetPoint("RIGHT", fs, "CENTER", -w / 2 - 2, 0) end
+end
+function H.Anchor(f, plate, unit)
+  f:ClearAllPoints()
+  local uf = plate.UnitFrame
+  -- a nameplate addon's own name first: Blizzard's may be kept "visible" under it
+  local nameFS, bar = findOnPlate(plate, uf, UnitName and UnitName(unit))
+  if nameFS then return besideText(f, nameFS) end
+  if uf and visible(uf) and uf.name and visible(uf.name) then return besideText(f, uf.name) end
+  if bar then return f:SetPoint("RIGHT", bar, "LEFT", -3, 0) end
+  f:SetPoint("BOTTOM", plate, "TOP", 0, 2)
+end
 local function show(unit)
   release(unit)
   if C.settings and C.settings.hotPlates == false then return end
@@ -481,11 +580,10 @@ local function show(unit)
   local ok = pcall(function()
     f:SetParent(plate)
     f:SetFrameLevel((plate:GetFrameLevel() or 0) + 5)
-    local uf = plate.UnitFrame
-    local nameText = uf and uf.name
-    if nameText and nameText.GetLeft then f:SetPoint("RIGHT", nameText, "LEFT", -2, 0)
-    else f:SetPoint("BOTTOM", plate, "TOP", 0, 2) end
+    H.Anchor(f, plate, unit)
   end)
+  -- (a nameplate addon may build or name its plate just after this: place it again)
+  if ok and C.After then C.After(0.2, function() if active[unit] == f then pcall(H.Anchor, f, plate, unit) end end) end
   if not ok then f:Hide(); pool[#pool + 1] = f; return end
   f.logo:SetDesaturated(grey and true or false)
   f.fire:SetDesaturated(grey and true or false)

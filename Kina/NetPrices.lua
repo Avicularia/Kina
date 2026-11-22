@@ -167,7 +167,7 @@ end
 -- minutes per scan. Items that sell go first, then the rest of the scan.
 NP.RESEND_GAP = 30 * 60
 local lastSent = { t = 0, at = 0 }
-local MAXP = 255 - 20
+local MAXP = 255 - 50 -- 2.0: room for a relay to wrap it (W|who|...)
 function NP.SendScan()
   local m = C.market
   if not (NP.Enabled() and m and m.scanTime and m.items) then return false end

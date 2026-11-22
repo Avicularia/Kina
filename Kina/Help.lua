@@ -12,10 +12,10 @@ local TOPICS = {
     .. "They carry a grey logo on their nameplates that lights up for you at 30 kills, with what they pay you.\n\n"
     .. G .. "Your gold per hour.|r Press Start and the widget tracks gold, loot, kills and XP per hour, "
     .. "every item at its best price, with AH prices shared by every Kina on the realm.\n\n"
-    .. G .. "Farming with friends.|r Kina users who join a farm share one log, split it evenly, "
-    .. "and keep track of who owes whom until it's paid.\n\n"
-    .. G .. "Your name.|r Your " .. G .. "Kina level|r (I to XX) shows how much you've farmed and settled; your " .. G .. "standing|r "
-    .. "shows what kind of partner you are. Both are on your profile, with the cosmetics you've earned.\n\n"
+    .. G .. "Farming with friends.|r Kina users who join a farm share one log, and everyone gets credit for the whole "
+    .. "group's loot. Kina shows each player's fair share.\n\n"
+    .. G .. "Your name.|r Your " .. G .. "Kina level|r (I to XX) and " .. G .. "Renown|r rank grow as you farm with other "
+    .. "Kinas. Both are on your profile, with your title and the cosmetics you've earned.\n\n"
     .. GR .. "Kina is free. It never asks for money and never sells anything.|r" },
 
   { "Hot mobs",
@@ -38,7 +38,7 @@ local TOPICS = {
     .. "without clicking Join. A roster shows who's in, who said no and who hasn't answered. Everyone who joins shares one "
     .. "farm log, so every widget shows the same numbers. Anyone in the farm can end it for everyone.\n"
     .. "- Said no? Your widget doesn't track the group's farm, and you can't start your own until it ends.\n"
-    .. H("What counts") .. "- A farm counts for Kina level and standing after " .. G .. "15 minutes|r. Paused time doesn't count.\n"
+    .. H("What counts") .. "- A farm counts for Kina level and Renown after " .. G .. "15 minutes|r. Paused time doesn't count.\n"
     .. "- If anyone in the farm is " .. R .. "under level 10|r at any point, the farm gives no progression. The split still works.\n"
     .. "- A solo farm runs until you press Stop (time logged off doesn't count). A group farm stops itself "
     .. G .. "an hour after its last kill|r, and counts as ending at that kill.\n"
@@ -47,39 +47,33 @@ local TOPICS = {
 
   { "The split",
     "When a group farm ends, Kina shows each player's fair share of what the group looted, so you can split it however "
-    .. "you like. Nobody owes anybody: Kina no longer keeps debts (1.0.9).\n\n"
-    .. "Each item counts at its best price: auction house, vendor or disenchant. Coin isn't part of it: the game already splits coin." },
+    .. "you like. Nobody owes anybody: Kina doesn't keep debts.\n\n"
+    .. "Each item counts at its best price: auction house, vendor or disenchant. Coin isn't part of it: the game already "
+    .. "splits coin.\n"
+    .. H("Your credit") .. "Everyone in the farm gets credit for " .. G .. "everything the group looted|r: Renown, Kina XP, "
+    .. "gold farmed, card kills and the leaderboards all count the whole group's loot." },
 
   { "Commendations",
     "At the end of a qualifying farm a window asks how your partners did. It stays until you press Done; then that farm's "
     .. "commendations are closed.\n\n"
-    .. "- Up to " .. G .. "2 thumbs up|r per farm: +10 standing each.\n"
-    .. "- " .. R .. "Thumbs down|r for as many as deserve one: -10 standing each.\n"
+    .. "- Up to " .. G .. "2 thumbs up|r per farm. Each one gives that player " .. G .. "+10% Renown and Kina XP|r for that farm.\n"
+    .. "- " .. R .. "Thumbs down|r for as many as deserve one. They show on the player's profile.\n"
     .. "- Never both to the same person, never to yourself or your own characters.\n"
-    .. "- Only players who were in that farm with you can commend you for it.\n"
-    .. H("The breakpoint") .. "With positive standing, " .. R .. "10 thumbs down in 48 hours, or 15 in 7 days|r, drops your standing "
-    .. "straight to -99 (Delinquent). Kina warns you at 5 and at 10. Each thumbs down counts toward this for 7 days." },
+    .. "- Only players who were in that farm with you can commend you for it." },
 
-  { "Standing",
-    G .. "Unproven|r 0   " .. G .. "Vouched|r 100   " .. G .. "Reliable|r 300   " .. G .. "Trusted|r 600   "
-    .. G .. "Honored|r 1000   " .. G .. "Revered|r 1600   " .. G .. "Exalted|r 2500\n"
-    .. R .. "Delinquent|r below 0   " .. R .. "Disgraced|r -100   " .. R .. "Oathbreaker|r -300   " .. R .. "Blacklisted|r -1000\n"
-    .. H("Earning") .. "- Paying a debt: 10 + 2 per gold, up to 40; +5 when paid in full within 2 hours.\n"
-    .. "- Being paid: the same as the payer earns.\n"
-    .. "- A qualifying farm: +5.   A thumbs up: +10.\n"
-    .. H("Losing") .. "- A thumbs down: -10.   A debt that runs out: -50.\n"
-    .. "- Turning down a full payment that then runs out: -50 (-100 if again within 30 days).\n"
-    .. H("Falling and climbing back") .. "- Below 0, every gain is " .. R .. "halved|r.\n"
-    .. "- At -1000 you're " .. R .. "Blacklisted|r: gains count 1/4, your portrait is crossed out, and your profile keeps a "
-    .. "permanent mark, even after you climb back.\n"
-    .. "- Back at 0 or above, gains count " .. G .. "x3|r until you reach your best ever.\n"
-    .. "- The first time you fall below 0, Kina offers a " .. G .. "one-time pardon|r: back to 1, gains x3 until your best. "
-    .. "There is never a second one. Put it off? " .. G .. "/kina pardon|r brings it back.\n"
-    .. "- Penalties always count in full.\n"
-    .. H("Idle weeks") .. "After 7 days with no farm on any of your characters: positive standing loses 100 a week (never below 0); "
-    .. "negative standing gains 50 a week (25 while Blacklisted), up to -20." },
+  { "Renown",
+    "Renown and Kina XP come from farming with other Kinas. A farm counts only when another Kina confirmed it: "
+    .. "solo farms track your gold but earn nothing.\n"
+    .. H("Earning") .. "- " .. G .. "10 points a minute|r while you're active (a kill, loot or gather in the last 3 minutes).\n"
+    .. "- Times your " .. G .. "pace|r: the group's gold per person per hour against the usual for your level, 0.5x to 3x.\n"
+    .. "- Plus your bonuses, which all add up: party (+5% per other Kina, up to +20%), streak (+2% a day in a row, up to "
+    .. "+20%), campfire (+10% while Camp Benefits is on you), +1% for every track level this season, and +10% for each "
+    .. "commendation for that farm.\n"
+    .. "- Quest gold, quest XP and quest items never count.\n"
+    .. H("Streak") .. "Miss a day and it's halved; miss the next one too and it's gone. Two days in a row at half brings it back.\n"
+    .. H("Ranks") .. "Ten ranks from the Wanderer to the Everlasting, each a title in its quality color. Each season starts "
+    .. "every track and its bonus over; your cosmetics and titles stay." },
 
-  -- 1.0.5: the season's cosmetics, drawn (SeasonGuide.lua builds the page)
   { "Season 1 Cosmetics", "", guide = true },
   -- 1.0.6: write to the developer (Feedback.lua builds the page)
   { "Feedback", "", feedback = true },
@@ -98,19 +92,17 @@ local TOPICS = {
     .. "Turn the controller part off in Settings if you use another controller addon." },
 
   { "Kina level",
-    "Kina level goes from I to XX. It comes from XP, and XP never goes down.\n\n"
-    .. "- Farming: 1 XP a minute, for farms of 15 minutes or more.\n"
-    .. "- Paying a debt: 40 XP + 10 per gold, up to 200 (full within 5 minutes of the farm, half after an hour).\n"
-    .. "- Being paid: 10.   Forgiving a debt: 15.   Giving more time: 5.   A thumbs up given: 5.\n\n"
-    .. "Below 0 standing, XP gains are halved too (1/4 Blacklisted), and x3 on the way back to your best." },
+    "Kina level goes from I to XX. It comes from Kina XP, which never goes down.\n\n"
+    .. "Kina XP and Renown are earned together, from farms another Kina confirmed: 10 a minute while you're active, "
+    .. "times your pace for your level, plus your bonuses. See Renown for the details." },
 
   { "Profiles",
-    "Your profile (the You tab) shows your portrait in your standing ring, your Kina level, standing and record: "
-    .. "best and lowest standing, days positive and negative. Commendations and Farm stats show who you farm with most.\n\n"
+    "Your profile (the You tab) shows your portrait in your ring, your Kina level, Renown rank and title, the gold plate "
+    .. "and your farming record. Commendations and Farm stats show who you farm with most.\n\n"
     .. "Click a party portrait under the widget, or any name, for that player's profile: the same layout, with "
     .. "what their Kina last told yours.\n\n"
-    .. H("One profile per realm") .. "Each realm is its own community, so each has its own Kina profile: Kina level, standing, "
-    .. "record and debts. All your characters on a realm share it. On a new realm you start fresh; your other realm's profile "
+    .. H("One profile per realm") .. "Each realm is its own community, so each has its own Kina profile: Kina level, Renown "
+    .. "and record. All your characters on a realm share it. On a new realm you start fresh; your other realm's profile "
     .. "is kept and comes back when you play there.\n"
     .. H("Installs shared") .. "When a new player installs Kina because of you, it counts on your profile and earns you a "
     .. G .. "mentor star|r (1, 5, 10, 20 and 50 installs). It counts once their Kina has done its first farm of "
@@ -121,19 +113,19 @@ local TOPICS = {
     .. "party and those they met in the last 7 days (whoever shared the link is highlighted). Your own characters never count, "
     .. "and each new player counts once.\n"
     .. H("Tracker only") .. "Just want the gold-per-hour tracker? Turn on " .. G .. "Tracker only|r in Settings. Kina still tracks "
-    .. "every farm, but you're left out of group farms, splits and debts, and earn no Kina XP or standing. Every Kina in your group "
-    .. "is told. Debts you already have still need settling.\n"
+    .. "every farm, but you don't join group farms, so you earn no Kina XP or Renown. Every Kina in your group "
+    .. "is told.\n"
     .. H("Partners") .. "Pick one Kina user as your Partner (it takes both of you: one asks, the other accepts). Partners earn "
-    .. G .. "+10% Kina XP and standing|r on farms together (your partner in the farm when it ends) and on payments between you. "
+    .. G .. "+10% Kina XP and Renown|r on farms together (your partner in the farm when it ends). "
     .. "The bond grows with the " .. G .. "gold you farm together|r (scaled to your level, longer farms count a bit extra), up to " .. G .. "+20%|r in about 20 hours: Your partner's portrait shows a bond crest: Uncommon, Rare, Epic, then Legendary, with 1 to 5 gems for the level (20 levels, +0.5% each). Your bond with each person is "
     .. "kept, so going back to an old partner picks up where you left off. Kina asks when a Kina user joins your party and you have "
     .. "no partner; end it from their profile or " .. G .. "/kina partner end|r.\n\n"
-    .. GR .. "Other players' standing is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "
+    .. GR .. "Other players' Renown is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "
     .. "wiped or swapped, and their profile says so.|r" },
 
   { "Staying up to date",
     "When a newer Kina is out, the widget shows " .. G .. "Update available|r. Click it for the link.\n\n"
-    .. "When someone in your group runs a newer Kina, yours stops earning (and losing) XP and standing until you update "
+    .. "When someone in your group runs a newer Kina, yours stops earning XP and Renown until you update "
     .. "and /reload. It never happens in the middle of a farm.\n\n"
     .. "To update: update Kina in the CurseForge app (or download it from CurseForge and replace the Kina folder in "
     .. "Interface\\AddOns), then /reload." },
@@ -141,11 +133,11 @@ local TOPICS = {
   { "Fair play",
     "Kina only believes what it can check:\n"
     .. "- A commendation only counts from someone who was in that farm with you.\n"
-    .. "- Only the farm leader can re-price a farm; only your debt partner can change your debt's clock.\n"
-    .. "- Loot put in your name that you never looted is spotted, and Kina records no debt for you from that farm.\n"
+    .. "- Only the farm leader can re-price a farm.\n"
+    .. "- A farm only earns Renown when another Kina confirmed it.\n"
     .. "- Shared auction prices that are far from your own scan are ignored.\n"
-    .. "- An edited or damaged Kina file shows standing 0 at best (lower if it was lower), and Kina level I.\n\n"
-    .. GR .. "No add-on can be completely cheat-proof. Standing on other players' profiles is what their Kina reports.|r" },
+    .. "- An edited or damaged Kina file shows Kina level I.\n\n"
+    .. GR .. "No add-on can be completely cheat-proof. Renown on other players' profiles is what their Kina reports.|r" },
 
   { "Commands",
     G .. "/kina|r  open or close Kina\n"

@@ -30,13 +30,27 @@ W.MAJOR = {
     { "Feedback, front and center", "A Feedback button now sits on the bottom bar of every tab, and the Kina button pulses green when an answer is waiting." },
     { "Updates and scans", "When a newer Kina is out, the widget shows Update available. The scan bar now says whose AH scan is coming in, how far along it is and about how long is left." },
   } },
+  { ver = "1.0.8", pages = {
+    { "Dungeon farms fixed", "Walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts, and your partners get into the new one." },
+    { "See the Kina network", "Settings > Network log (or /kina net) shows what Kina sends and receives, who it's talking to and which AH scans came in." },
+  } },
   { ver = "1.0.9", pages = {
     { "The Kina network works", "AH scans now reach every Kina on the realm, on every layer, including people who log in later. Your scan plus one other Kina is enough for a shared price. See it live: /kina net." },
     { "No more debts", "Splits now just show each player's fair share of what the group looted. Nobody owes anybody, and there's nothing to pay or chase." },
   } },
-  { ver = "1.0.8", pages = {
-    { "Dungeon farms fixed", "Walking into a dungeon mid-farm now ends the old farm properly (split, commendations) before the new one starts, and your partners get into the new one." },
-    { "See the Kina network", "Settings > Network log (or /kina net) shows what Kina sends and receives, who it's talking to and which AH scans came in." },
+  { ver = "2.0.0", pages = {
+    { "Kina 2.0: Renown", "Farm with other Kinas to earn Renown and Kina XP: ten ranks from the Wanderer to the Everlasting, each a title in its quality color. Everyone in the farm gets credit for the whole group's loot." },
+    { "Bonuses that stack", "Party, daily streak, campfire (Camp Benefits), your season track levels and +10% for every commendation all add up. Solo farms and quest gold don't count." },
+    { "Your gold plate", "Your profile shows gold farmed under your portrait. Click it to switch to gold per hour." },
+    { "Net worth", "Your You page shows your account's net worth: every character's gold plus the items in their bags and bank that aren't soulbound, at today's prices. Log in on each character (and open its bank once) to count it." },
+    { "Commendations pay", "Each commendation adds 10% of that farm's Renown and Kina XP, and its toast shows how much. One that arrives before Kina has scored the farm waits for it." },
+    { "Hot Farms, live", "The hot list now rebuilds from live prices near your level: a drop on a price streak (selling 1.5x its usual) makes a mob HOT. Gold per kill always shows, and a mob's page explains why: worth per kill, per hour at your pace, levelling fit, the market, and how sure Kina is. The logo and cards still light up with your own kills." },
+    { "Gathering", "Hot Farms > Gathering lists every node your Mining or Herbalism can gather, each material per gather (Iron Ore: 300% = 3 a node) and what a gather is worth, with HOT when a material's price spikes." },
+    { "Missed farms paid", "Farms from the 2.0 betas that never paid their Kina XP and Renown are scored again once, and paid." },
+    { "Prices, anywhere", "The Prices button (bottom bar) or /kina prices opens an auction house browser that works away from the AH: search, level and rarity filters, categories, sortable columns, and each item's cheapest listings, from your last scan and other Kinas'. Research only." },
+    { "Two big boxes", "The widget now shows Net looted (everything you gained: loot, coin and quests) and XP / hour in two big boxes, so it stays readable scaled right down (drag its corner; it now goes to 40%)." },
+    { "A smaller widget", "The - button by the widget's X shrinks it to the rate, timer and four boxes (right-click it for Start, Pause, Log, Kina). The party portraits can be hidden or resized." },
+    { "A stronger network", "When the Kina channel is too busy to let you in, Kina moves to a backup channel, and relays pass news between the channels, so every Kina still hears every other. /kina net shows which channel you're on." },
   } },
 }
 

@@ -54,7 +54,7 @@ function C.LoadItems(ids, done, progress)
   local i = 1
   C.Job(function()
     local n = 0
-    while i <= #ids and n < 40 do
+    while i <= #ids and n < 150 do -- (2.0.5: 40 a step was slow)
       C.Item(ids[i]); i = i + 1; n = n + 1
     end
     if progress then progress(i - 1) end

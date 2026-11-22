@@ -4,10 +4,10 @@
 local ADDON, C = ...
 C.Dialogs = C.Dialogs or {} -- 1.0.4: Kina's own question definitions (never the game's popup table)
 C.name = "Kina"
-C.version = "1.0.9"
+C.version = "2.0.8"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 183
+C.BUILD = 191
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -265,10 +265,69 @@ end
 local PROFILE_KEYS = { "log", "sessions", "activeSession", "settles", "forgive", "payout", "vouch",
   "mentor", "mark", "farmIn", "seenMail", "share", "pair", "parked" }
 C.PROFILE_KEYS = PROFILE_KEYS
+-- 2.0 (Taylor: "it reset all of us back to level 1", farms missing): on Nov 20 the game
+-- gave Kina a blank realm name while loading. Kina took that for a new realm, put the whole
+-- profile away under the real realm's name and started an empty one. Now a blank name never
+-- switches anything (Kina checks again once you're in the world), and a profile made under a
+-- blank name is folded back into the real realm's profile, keeping what was done since.
+local function blank(r) return r == nil or r == "" or r == "?" end
+-- fold what was made under the blank profile (now) into the real one (back)
+local function foldBlank(back, now)
+  for _, k in ipairs(PROFILE_KEYS) do
+    local b, n = back[k], now[k]
+    if k == "sessions" and type(b) == "table" and type(n) == "table" then
+      local seen, all = {}, {}
+      for _, x in ipairs(b) do if type(x) == "table" then seen[x.start or 0] = true; all[#all + 1] = x end end
+      for _, x in ipairs(n) do if type(x) == "table" and not seen[x.start or 0] then seen[x.start or 0] = true; all[#all + 1] = x end end
+      table.sort(all, function(x, y) return (x.start or 0) > (y.start or 0) end)
+      while #all > 50 do table.remove(all) end
+      back[k] = all
+    elseif k == "log" then
+      -- the real profile's record stands (Kina level and record come from it; the blank one
+      -- holds only logins since); an empty real record takes the newer one
+      if type(b) ~= "table" or type(b.lines) ~= "table" or #b.lines == 0 then back[k] = n end
+    elseif type(b) == "table" and type(n) == "table" then
+      -- keep everything from both (two levels deep: commendations given and got, mentor lists)
+      local function sig(x)
+        if type(x) ~= "table" then return tostring(x) end
+        return tostring(x.t) .. "|" .. tostring(x.who) .. "|" .. tostring(x.ref) .. "|" .. tostring(x.start) .. "|" .. tostring(x.kind)
+      end
+      local function mergeInto(dst, src)
+        if dst[1] ~= nil or src[1] ~= nil then -- lists (commendations given and got): add the missing ones
+          local have = {}
+          for _, x in ipairs(dst) do have[sig(x)] = true end
+          for _, x in ipairs(src) do if not have[sig(x)] then dst[#dst + 1] = x; have[sig(x)] = true end end
+        else
+          for k3, v3 in pairs(src) do if dst[k3] == nil then dst[k3] = v3 end end
+        end
+      end
+      for kk, vv in pairs(n) do
+        if b[kk] == nil then b[kk] = vv
+        elseif type(b[kk]) == "table" and type(vv) == "table" then mergeInto(b[kk], vv) end
+      end
+    elseif b == nil then back[k] = n end
+  end
+end
 function C.RealmProfile(db, cur)
-  cur = cur or (GetRealmName and GetRealmName()) or "?"
+  cur = cur or (GetRealmName and GetRealmName()) or ""
   if type(db.realms) ~= "table" then db.realms = {} end
+  if blank(cur) then C.realmPending = true; return end
+  C.realmPending = nil
   local was = db.profileRealm
+  if type(was) == "string" and blank(was) then
+    local back = db.realms[cur]
+    if type(back) == "table" then
+      local now = {}
+      for _, k in ipairs(PROFILE_KEYS) do now[k] = db[k] end
+      foldBlank(back, now)
+      for _, k in ipairs(PROFILE_KEYS) do db[k] = back[k] end
+      db.realms[cur] = nil
+      C.realmRestored = true
+    end
+    db.realms[""] = nil; db.realms["?"] = nil
+    db.profileRealm = cur
+    return
+  end
   if type(was) ~= "string" then
     -- data from before 0.9.11 belongs to the realm it was made on: the one whose auction
     -- house Kina knows best (a brand-new install has none, and simply starts here)
@@ -310,6 +369,21 @@ function C.InitDB()
     end
   end
   C.RealmProfile(KinaDB)
+  -- 2.0: the realm name wasn't known yet: settle the profile once it is
+  if C.realmPending and CreateFrame then
+    local rf = CreateFrame("Frame")
+    rf:RegisterEvent("PLAYER_LOGIN"); rf:RegisterEvent("PLAYER_ENTERING_WORLD")
+    rf:SetScript("OnEvent", function(self)
+      if not C.realmPending then self:UnregisterAllEvents(); return end
+      C.RealmProfile(KinaDB)
+      if C.realmPending then return end
+      self:UnregisterAllEvents()
+      fill(KinaDB, defaults)
+      if C.realmRestored and C.Print then
+        C.Print("|cff40ff40your farms and Kina level are back.|r A blank realm name on Nov 20 had hidden them; Kina has put them back with everything since.")
+      end
+    end)
+  end
   -- damaged or very old saved data: drop whatever has the wrong shape (Schema.lua)
   if C.Sanitize then
     local n = C.Sanitize(KinaDB)
@@ -396,7 +470,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         -- first time ever: one line on what Kina is for
         if C.PUBLIC and not C.settings.welcomed then
           C.settings.welcomed = C.Now()
-          C.Print("|cffffc54aWelcome!|r Press Start on the Kina widget when you farm. Group with other Kina users and everyone's widget shows the same totals, the split and who owes whom; pay with one click and your Kina level grows.")
+          C.Print("|cffffc54aWelcome!|r Press Start on the Kina widget when you farm. Group with other Kina users: everyone's widget shows the same totals and split, and farming together earns Renown and Kina XP.")
         end
         if C.dataRepaired then C.Print("|cffff8040some of Kina's saved data was damaged and has been cleaned up (" .. C.dataRepaired .. " entries).|r") end
         if C.migrated then C.Print("your Kina Scout C data was moved over. You can delete the old KinaScoutC folder after this session.") end
@@ -565,7 +639,8 @@ end
 -- follows how far you drag from that press point: no reading back positions the
 -- game hasn't updated yet (that fed back on itself and made windows run away).
 local SCALE_MIN, SCALE_MAX = 0.6, 1.5
-function C.ScaleGrip(f, key)
+function C.ScaleGrip(f, key, minScale)
+  local SCALE_MIN = minScale or SCALE_MIN
   local saved = C.settings.pos[key]
   if type(saved) == "number" then f:SetScale(math.max(SCALE_MIN, math.min(SCALE_MAX, saved))) end
   local grip = CreateFrame("Button", nil, f)
@@ -611,19 +686,37 @@ end
 
 -- Small cooperative job runner so long work never stalls a frame.
 local jobs = {}
+local urgentSet
 local runner = CreateFrame("Frame")
 runner:Hide()
+-- 2.0.5 (Taylor: the AH scan takes over a minute): steps run for up to 6 ms a frame
+-- (not one step a frame), and an urgent job (the scan) goes ahead of the rest
+local clock = debugprofilestop
 C.GuardScript(runner, "OnUpdate", "Core:615", function(self)
-  local job = jobs[1]
-  if not job then self:Hide(); return end
-  local ok, done = pcall(job)
-  if not ok then
-    if C.debug then C.Print("job error: " .. tostring(done)) end
-    done = true
-  end
-  if done then table.remove(jobs, 1) end
+  local t0 = clock and clock() or 0
+  local steps = 0
+  repeat
+    steps = steps + 1
+    local job = jobs[1]
+    if not job then self:Hide(); return end
+    local ok, done = pcall(job)
+    if not ok then
+      if C.debug then C.Print("job error: " .. tostring(done)) end
+      done = true
+    end
+    if done then table.remove(jobs, 1) end
+  until not clock or (clock() - t0) > 6 or steps >= 40 -- (a job that's only waiting can't spin)
 end)
-function C.Job(fn) table.insert(jobs, fn); runner:Show() end
+function C.Job(fn, urgent)
+  if urgent then
+    -- ahead of everything but other urgent jobs (they keep their order)
+    local pos = 1
+    while jobs[pos] and urgentSet and urgentSet[jobs[pos]] do pos = pos + 1 end
+    table.insert(jobs, pos, fn)
+    urgentSet = urgentSet or setmetatable({}, { __mode = "k" }); urgentSet[fn] = true
+  else table.insert(jobs, fn) end
+  runner:Show()
+end
 
 function C.After(sec, fn)
   -- 0.9.22: a timer can never throw into the game

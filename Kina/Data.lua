@@ -62,10 +62,8 @@ end
 D.launchDecay = {}
 
 -- Seed stockpile ideas (editable with /kina stock). Prices in copper.
-D.stockSeeds = {
-  [249428] = { buyUnder = 600, sellAt = 9000,
-    note = "Pristine Hide: unusable until Leatherworking 175-225; dumped near vendor price early, needed by every LW leveling the Merchant's Favor sets." },
-}
+-- 2.0 (Taylor: "remove all watch items"): no preset watch items
+D.stockSeeds = {}
 
 -- Forever "Scarce" materials (icy-veins.com/wow-forever news; warcrafttavern.com/forever
 -- herbalism and skinning guides): a bonus chance when gathering or skinning. No source

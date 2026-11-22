@@ -166,7 +166,7 @@ local function build()
   o.note = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); o.note:SetPoint("BOTTOMLEFT", 16, 44); o.note:SetWidth(288); o.note:SetJustifyH("LEFT")
   -- 1.5.2: thumbs up (commend) and thumbs down (bad commendation, red)
   o.up = C.Vouch.ThumbButton(card, false, 100, 26, "Commend"); o.up:SetPoint("BOTTOMLEFT", 12, 12)
-  o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Disgraced"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
+  o.down = C.Vouch.ThumbButton(card, true, 100, 26, "Thumbs down"); o.down:SetPoint("LEFT", o.up, "RIGHT", 6, 0)
   o.whisper = CreateFrame("Button", nil, card, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(o.whisper) end; o.whisper:SetSize(82, 24); o.whisper:SetPoint("BOTTOMRIGHT", -12, 13)
   o.whisper:SetText("Whisper")
   if UISpecialFrames then table.insert(UISpecialFrames, "KinaProfile") end
@@ -236,7 +236,6 @@ function P.ShowCard(name)
     or (b.owed >= 1 and (GOLD .. "they owe you " .. C.Money(math.floor(b.owed)) .. "|r")) or (GREEN .. "all settled|r")
   local rows = {
     { "Farms together", b.farms .. (b.hours > 0 and (GREY .. string.format("  (%.1f h)", b.hours) .. "|r") or "") },
-    { "Open now", open },
     { "You commended them", tostring(b.gave) .. (b.gaveBad > 0 and ("  " .. C.Vouch.RED .. b.gaveBad .. " bad|r") or "") },
     { "They commended you", tostring(b.got) .. (b.gotBad > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
   }
