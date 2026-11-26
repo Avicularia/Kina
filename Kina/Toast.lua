@@ -100,7 +100,7 @@ do
     local lv = m.level or 1
     local was = tonumber(C.settings.lastKinaLv)
     C.settings.lastKinaLv = lv
-    if was and lv > was then
+    if false and was and lv > was then -- 2.0.14: the old debt-era Kina level; Renown has its own rank toast
       show({ head = "Kina level " .. (C.Rep.Roman and C.Rep.Roman(lv) or lv) .. "!", sub = GREY .. "keep paying fast and farming together|r", gains = GREEN .. m.xp .. " XP|r" })
       if C.PlayCue then C.PlayCue("level") end
     end
@@ -110,7 +110,7 @@ do
     if stWas and m.standing and stWas ~= m.standing and (m.rep or 0) > 0 then
       local up = false
       for i, x in ipairs(C.Rep.STANDING) do if x[2] == m.standing then for j = 1, i - 1 do if C.Rep.STANDING[j][2] == stWas then up = true end end end end
-      if up then
+      if false and up then -- 2.0.14: standing is gone in 2.0
         show({ head = "Standing: " .. m.standing .. "!", sub = GREY .. "people can see you settle your debts|r", gains = "|cff4fc3f7" .. m.rep .. " rep|r" })
         if C.PlayCue then C.PlayCue("standing") end
       end
@@ -260,7 +260,9 @@ do
     if best and best.v and best.v >= 1 then
       local link = (C.ItemLink and C.ItemLink(best.id)) or nil
       local name = link or ("item " .. best.id)
-      local cand = msg .. ", best drop " .. name .. (best.n > 1 and (" x" .. best.n) or "") .. " " .. plain(best.v)
+      -- 2.0.15 (Taylor): who got it, in parentheses after the item
+      local whoGot = best.who and best.who ~= "?" and ((tostring(best.who):match("^([^%-%s]+)")) or best.who) or (UnitName and UnitName("player")) or nil
+      local cand = msg .. ", best drop " .. name .. (best.n > 1 and (" x" .. best.n) or "") .. (whoGot and (" (" .. whoGot .. ")") or "") .. " " .. plain(best.v)
       if #cand + 40 <= 255 then msg = cand end
     end
     for _, t in ipairs(tail) do if #msg + #t + 2 <= 255 then msg = msg .. ", " .. t end end
@@ -446,6 +448,14 @@ end
 -- 2.0: a commendation, with what it's worth now: +10% of that farm's Renown and Kina XP.
 -- A thumbs down only shows (no penalty).
 function T.Commended(from, kindName, bad, add, why)
+  -- 2.0.15: with the Farm complete window open, it's listed there, not a separate toast
+  if C.RecapCommended then
+    local ok, took = pcall(C.RecapCommended, from, kindName, bad, add, why)
+    if ok and took then
+      C.Print(string.format("%s %s you: %s%s", from, bad and "gave a thumbs down to" or "commended", kindName or "", (add and add > 0) and (" (+" .. add .. " Renown)") or ""))
+      return
+    end
+  end
   if bad then
     show({ head = from .. " gave you a thumbs down", sub = "|cffff8060" .. (kindName or "") .. "|r", gains = "|cff9d9d9dno penalty: it only shows on your record|r" })
     C.Print(string.format("|cffff8060%s gave you a thumbs down: %s (no penalty).|r", from, kindName or ""))
@@ -453,11 +463,11 @@ function T.Commended(from, kindName, bad, add, why)
   end
   local gains, line
   if add and add > 0 then
-    gains = "|cff4fc3f7+" .. add .. " Renown and Kina XP|r  |cff9d9d9d(+10% of this farm)|r"
-    line = string.format("+%d Renown and Kina XP (+10%% of this farm)", add)
+    gains = "|cff4fc3f7+" .. add .. " Renown|r  |cff9d9d9d(+10% of this farm)|r"
+    line = string.format("+%d Renown (+10%% of this farm)", add)
   elseif why == "pending" then
-    gains = "|cff4fc3f7+10% of this farm's Renown and Kina XP|r |cff9d9d9dwhen Kina scores it|r"
-    line = "+10% of this farm's Renown and Kina XP once Kina scores the farm"
+    gains = "|cff4fc3f7+10% of this farm's Renown|r |cff9d9d9dwhen Kina scores it|r"
+    line = "+10% of this farm's Renown once Kina scores the farm"
   elseif why == "noearn" then
     gains = "|cff9d9d9dthis farm earned no Renown (nobody else's Kina joined), so +10% adds nothing|r"
     line = "this farm earned no Renown, so the +10% adds nothing"

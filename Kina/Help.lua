@@ -24,7 +24,12 @@ local TOPICS = {
     .. H("Lighting one up") .. "A hot mob's logo stays grey until you've killed it " .. G .. "30 times|r. Then it lights up, "
     .. "with your own gold per kill on its nameplate.\n"
     .. H("The archive") .. "Mobs that come off the list wait in Hot Farms > Archive with your kills, gold per kill, "
-    .. "total gold and card. Cards only level up while the mob is hot." },
+    .. "total gold and card. Cards only level up while the mob is hot.\n"
+    .. H("Why it's hot") .. "The list shows the drop that pays most and its " .. G .. "drop chance|r (\"Tiger Meat: 57% drop chance\"). "
+    .. "Click a mob for the full story, including " .. G .. "What changed|r: when it became hot, the top drop's price today "
+    .. "against its usual price over the last two weeks (a " .. G .. "price spike|r, or a steady price), and the recipes it's used in.\n"
+    .. H("The nameplate badge") .. "Hot mobs carry the Kina logo beside their name. It works with Blizzard's nameplates and with "
+    .. "nameplate addons such as Threat Plates, and finds its place again when you hover or target the mob. Turn it off in Settings." },
 
   { "AH prices",
     "Kina prices every item from auction house scans: yours, your group's and guild's, and every Kina on the realm.\n\n"
@@ -42,6 +47,10 @@ local TOPICS = {
     .. "- If anyone in the farm is " .. R .. "under level 10|r at any point, the farm gives no progression. The split still works.\n"
     .. "- A solo farm runs until you press Stop (time logged off doesn't count). A group farm stops itself "
     .. G .. "an hour after its last kill|r, and counts as ending at that kill.\n"
+    .. H("Leaving and coming back") .. "Leave the group, reload, or disconnect mid-farm and you stay in the farm. Back in the group, "
+    .. "your widget shows " .. G .. "SYNCING|r while it catches up, then the same numbers as everyone else. What you looted while "
+    .. "out counts once. If you were away " .. G .. "2+ minutes|r, loot from that time isn't shared either way. If whoever started "
+    .. "the farm leaves, the next player takes over and nothing is lost.\n"
     .. H("Fixing the log") .. "Right-click a partner's item on the Session page to leave it out, or to dispute its price "
     .. "(it then counts at its vendor price for everyone; disputes are logged). You can't leave out your own loot: a partner can." },
 
@@ -50,19 +59,19 @@ local TOPICS = {
     .. "you like. Nobody owes anybody: Kina doesn't keep debts.\n\n"
     .. "Each item counts at its best price: auction house, vendor or disenchant. Coin isn't part of it: the game already "
     .. "splits coin.\n"
-    .. H("Your credit") .. "Everyone in the farm gets credit for " .. G .. "everything the group looted|r: Renown, Kina XP, "
+    .. H("Your credit") .. "Everyone in the farm gets credit for " .. G .. "everything the group looted|r: Renown, "
     .. "gold farmed, card kills and the leaderboards all count the whole group's loot." },
 
   { "Commendations",
     "At the end of a qualifying farm a window asks how your partners did. It stays until you press Done; then that farm's "
     .. "commendations are closed.\n\n"
-    .. "- Up to " .. G .. "2 thumbs up|r per farm. Each one gives that player " .. G .. "+10% Renown and Kina XP|r for that farm.\n"
+    .. "- Up to " .. G .. "2 thumbs up|r per farm. Each one gives that player " .. G .. "+10% Renown|r for that farm.\n"
     .. "- " .. R .. "Thumbs down|r for as many as deserve one. They show on the player's profile.\n"
     .. "- Never both to the same person, never to yourself or your own characters.\n"
     .. "- Only players who were in that farm with you can commend you for it." },
 
   { "Renown",
-    "Renown and Kina XP come from farming with other Kinas. A farm counts only when another Kina confirmed it: "
+    "Renown come from farming with other Kinas. A farm counts only when another Kina confirmed it: "
     .. "solo farms track your gold but earn nothing.\n"
     .. H("Earning") .. "- " .. G .. "10 points a minute|r while you're active (a kill, loot or gather in the last 3 minutes).\n"
     .. "- Times your " .. G .. "pace|r: the group's gold per person per hour against the usual for your level, 0.5x to 3x.\n"
@@ -70,7 +79,8 @@ local TOPICS = {
     .. "+20%), campfire (+10% while Camp Benefits is on you), +1% for every track level this season, and +10% for each "
     .. "commendation for that farm.\n"
     .. "- Quest gold, quest XP and quest items never count.\n"
-    .. H("Streak") .. "Miss a day and it's halved; miss the next one too and it's gone. Two days in a row at half brings it back.\n"
+    .. H("Streak") .. "Miss a day and it's halved; miss the next one too and it's gone. Two days in a row at half brings it back. "
+    .. "Your streak carries into every new season: a season never resets it.\n"
     .. H("Ranks") .. "Ten ranks from the Wanderer to the Everlasting, each a title in its quality color. Each season starts "
     .. "every track and its bonus over; your cosmetics and titles stay." },
 
@@ -91,13 +101,13 @@ local TOPICS = {
     .. H("Window size") .. "Settings has Window size buttons, so you never have to drag the corner. "
     .. "Turn the controller part off in Settings if you use another controller addon." },
 
-  { "Kina level",
-    "Kina level goes from I to XX. It comes from Kina XP, which never goes down.\n\n"
-    .. "Kina XP and Renown are earned together, from farms another Kina confirmed: 10 a minute while you're active, "
+  { "Your rank",
+    "Your rank is your Renown rank, 1 to 10: it's the number on the plate under your portrait ring and the title after your name. "
+    .. "Renown never goes down and comes from farms another Kina confirmed: 10 a minute while you're active, "
     .. "times your pace for your level, plus your bonuses. See Renown for the details." },
 
   { "Profiles",
-    "Your profile (the You tab) shows your portrait in your ring, your Kina level, Renown rank and title, the gold plate "
+    "Your profile (the You tab) shows your portrait in your ring (its number is your Renown rank), your rank title, the gold plate "
     .. "and your farming record. Commendations and Farm stats show who you farm with most.\n\n"
     .. "Click a party portrait under the widget, or any name, for that player's profile: the same layout, with "
     .. "what their Kina last told yours.\n\n"
@@ -113,15 +123,104 @@ local TOPICS = {
     .. "party and those they met in the last 7 days (whoever shared the link is highlighted). Your own characters never count, "
     .. "and each new player counts once.\n"
     .. H("Tracker only") .. "Just want the gold-per-hour tracker? Turn on " .. G .. "Tracker only|r in Settings. Kina still tracks "
-    .. "every farm, but you don't join group farms, so you earn no Kina XP or Renown. Every Kina in your group "
+    .. "every farm, but you don't join group farms, so you earn no Renown. Every Kina in your group "
     .. "is told.\n"
     .. H("Partners") .. "Pick one Kina user as your Partner (it takes both of you: one asks, the other accepts). Partners earn "
-    .. G .. "+10% Kina XP and Renown|r on farms together (your partner in the farm when it ends). "
-    .. "The bond grows with the " .. G .. "gold you farm together|r (scaled to your level, longer farms count a bit extra), up to " .. G .. "+20%|r in about 20 hours: Your partner's portrait shows a bond crest: Uncommon, Rare, Epic, then Legendary, with 1 to 5 gems for the level (20 levels, +0.5% each). Your bond with each person is "
+    .. G .. "+10% Renown|r on farms together (your partner in the farm when it ends). "
+    .. "The bond grows with the " .. G .. "gold you farm together|r (scaled to your level, longer farms count a bit extra), up to " .. G .. "+20%|r. Your partner's portrait shows a bond crest: Uncommon, Rare, Epic, then Legendary, with 1 to 5 gems for the level (20 levels, +0.5% each). Your bond with each person is "
     .. "kept, so going back to an old partner picks up where you left off. Kina asks when a Kina user joins your party and you have "
     .. "no partner; end it from their profile or " .. G .. "/kina partner end|r.\n\n"
     .. GR .. "Other players' Renown is what their Kina reports. If someone's Kina level ever goes DOWN, their record was "
     .. "wiped or swapped, and their profile says so.|r" },
+
+  { "Your record",
+    "The Record box on your profile. Hover a row for the details.\n"
+    .. H("Your name") .. "Profiles and the leaderboard show full WoW Forever names, " .. G .. "first name and surname|r. Kina learns "
+    .. "yours the first time your Kina hears itself on the Kina network, and other players' from their Kina messages; until then "
+    .. "it shows the first name.\n"
+    .. H("Hours farmed") .. "Every farm of " .. G .. "15 minutes|r or more that Kina logged, clock time minus pauses: all time, "
+    .. "and this season in brackets. Hover it for group and solo hours.\n"
+    .. H("Gold per hour") .. "One number: " .. G .. "your own share|r (what you looted and were paid) per hour, on your best farm "
+    .. "of 15+ minutes this season. It's the banner's number too.\n"
+    .. H("Kina high score") .. "Your best farm ever, marked " .. G .. "(solo)|r or " .. G .. "(group)|r. Click it to open that farm.\n"
+    .. H("Bonus now") .. "The Renown bonus you have right now: your streak plus +1% per track level. Hover it for the full list, "
+    .. "including the bonuses a farm adds (party, campfire, your Kina Partner, commendations).\n"
+    .. H("Track levels") .. "Levels reached across every track this season, out of the total (\"12 / 28\"). Every one is +1% "
+    .. "Renown; all of them earns the season's " .. G .. "Master of Coin|r title." },
+
+  { "Professions",
+    "Hover a profession on your profile to see what it has earned: all time, this season, how many farms and your best farm.\n\n"
+    .. "Kina counts what " .. G .. "gathering|r brings in during your farms: mining, herbalism, skinning, fishing, lockpicking "
+    .. "and pick pocketing, at today's prices. Crafting isn't counted yet.\n\n"
+    .. "Each farm has its own split: the " .. G .. "Professions|r column on the Session tab, and a line per profession in "
+    .. "the farm's log. Type a profession in the search box to find every farm it earned in." },
+
+  { "Leaderboard",
+    "You > " .. G .. "Leaderboard|r lists every Kina player any Kina has heard of, with the last numbers seen for them: "
+    .. "Renown, gold per hour and gold farmed this season.\n"
+    .. H("How it fills in") .. "Every Kina says its own numbers on the Kina network every 10 minutes, and passes on a few "
+    .. "it knows about others. So players you've never met still show up, and the newest numbers always win.\n"
+    .. H("Who said it") .. "\"Numbers from\" says how old they are and where they came from: " .. G .. "their Kina|r (first-hand) "
+    .. "or " .. G .. "via|r another player (passed on). Passed-on numbers can't be checked.\n"
+    .. H("Using it") .. "Click a column title to rank by it. Type a name or title in the search box. Click a row for "
+    .. "that player's profile.\n"
+    .. H("Leaving it") .. "Turn data sharing off in Settings and your Kina tells the others to hide you." },
+
+  { "Prices",
+    "The Prices window is an auction house browser that works anywhere, from every Kina's latest scan. "
+    .. "Open it with the Prices button, or type " .. G .. "/kp|r. " .. G .. "/kp copper ore|r (or /kp and a shift-clicked item) "
+    .. "opens it searching for that. It always opens in front of Kina's window.\n\n"
+    .. GR .. "Kaydee's Pockets also uses /kp. Kina takes it over when you log in; Kaydee's Pockets keeps /pockets.|r" },
+
+  { "Shared drop data",
+    "Every Kina records what each mob drops for its player (kills, coin, every item, skins) and shares it with every other "
+    .. "Kina: with your party and guild, and realm-wide on the " .. G .. "Kina network|r. Kina adds everyone's kills together, "
+    .. "and passes on what it heard, so you get data from players who were never online with you.\n"
+    .. H("What it changes") .. "Once a mob has 100+ looted kills between all Kina players, the hot list uses those drop chances "
+    .. "instead of Wowhead's; a mob with no Wowhead data is ranked from 30.\n"
+    .. H("Which drops count") .. "Materials and other drops count toward a mob's gold per kill at an " .. G .. "8%+|r drop chance. "
+    .. "Recipes count at " .. G .. "2%+|r, or at 1.5%+ when the recipe is worth 10 gold or more. Gear and crates never count. "
+    .. "Mobs where a recipe matters say " .. G .. "recipe|r in \"Why it's hot\".\n"
+    .. GR .. "Turn data sharing off in Settings and Kina neither records nor shares your drops.|r" },
+
+  { "Two auction houses",
+    "WoW Forever has two auction houses: your faction's (Stormwind, Ironforge) and the cross-faction one in " .. G .. "Booty Bay|r "
+    .. "(Gadgetzan and Everlook count as the same one). Kina keeps their prices apart: a scan goes into the book of the house "
+    .. "you scanned at, and Kinas share Booty Bay scans on the Kina network too.\n"
+    .. H("Which price counts") .. "While a Booty Bay scan is under " .. G .. "30 minutes|r old, an item's auction price everywhere "
+    .. "(tooltips, the widget, farms) is the better of the two houses, after each house's cut. After that, your faction's house "
+    .. "only. Booty Bay takes 15% (until a sale shows otherwise), so Kina counts a sale there " .. G .. "10% lower|r.\n"
+    .. H("Tooltips") .. G .. "Auction price (Booty Bay)|r or " .. G .. "(Stormwind)|r: what a sale keeps at the winning house, "
+    .. "after its cut and the deposit you'd lose if it doesn't sell." },
+
+  { "My bags",
+    "Prices > " .. G .. "My bags|r lists everything in your bags with your faction's AH, Booty Bay's AH, the vendor and "
+    .. "disenchanting side by side. The best one is " .. G .. "green|r. A gold line says when an item is worth carrying to the "
+    .. "other house (\"buy up to 1s 09c in SW > BB\"). The button at the top switches between one house and both.\n"
+    .. H("Selling") .. "At an auctioneer, press " .. G .. "Sell to Stormwind|r (or " .. G .. "Sell to Booty Bay|r at Booty Bay), "
+    .. "then " .. G .. "Post next|r. Kina asks the auction house for the item's lowest price right now and posts at exactly "
+    .. "that, then moves down the list. Click any row to start there. Type in the box to post fewer than you have. "
+    .. "2h, 8h and 24h set how long it's listed.\n"
+    .. H("Safe by design") .. "Kina never posts an item for less than the vendor or disenchanting would pay; it says "
+    .. "\"won't post\" and moves on. Every post is your click.\n"
+    .. GR .. "ForeverForge Auction also posts through the auction house window, so use one or the other: Settings > Auction "
+    .. "house selling turns Kina's off.|r" },
+
+  { "Transport",
+    "When both houses have a scan under 30 minutes old (yours or another Kina's), Kina says " .. G .. "Transport tab available|r. "
+    .. "Prices > " .. G .. "Transport|r then lists what's worth carrying from one house to the other: \"Copper Ore  SW > BB  buy "
+    .. "under 1s 09c\". Hover a line for the details.\n"
+    .. H("Buy under") .. "The most to pay and still make 10% after the other house's cut.\n"
+    .. H("Only a few worth it") .. "Fewer than 20 are listed cheaply enough; hover to see each price step and where it stops paying.\n"
+    .. H("Sells slowly") .. "Items that make money on paper but sell under 1.5 an hour there are kept on their own list.\n"
+    .. H("How long") .. "The tab stays open for 30 minutes from the older of the two scans. Scanning both again keeps it open." },
+
+  { "The window",
+    "Drag Kina's " .. G .. "right edge|r to make it wider and its " .. G .. "bottom edge|r to make it taller: everything stays "
+    .. "the same size and you see more (long text stops being cut off). The corner grip still scales everything together. "
+    .. "Kina remembers the size.\n"
+    .. H("The farm widget") .. "Settings > Window > " .. G .. "Widget opacity|r makes the widget see-through (20% to 100%). "
+    .. "It turns solid while your mouse is over it." },
 
   { "Staying up to date",
     "When a newer Kina is out, the widget shows " .. G .. "Update available|r. Click it for the link.\n\n"
@@ -149,7 +248,8 @@ local TOPICS = {
     .. G .. "/kina share|r  post Kina's download link in party chat\n"
     .. G .. "/kina partner|r  your Kina Partner (name to ask, end to stop)\n"
     .. G .. "/kina start|r, " .. G .. "/kina stop|r  start or stop a farm\n"
-    .. G .. "/kina scan|r  scan the auction house" },
+    .. G .. "/kina scan|r  scan the auction house\n"
+    .. G .. "/kp|r  open Prices (" .. G .. "/kp name|r to search)" },
 }
 C.HelpTopics = TOPICS
 

@@ -197,7 +197,7 @@ function P.ShowCard(name)
   P.SetPortrait(o.portrait, name)
   local stand = pr and pr.stand
   local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
-  local klv = pr and pr.kinaLv
+  local klv = (C.Progress and C.Progress.RingOf and C.Progress.RingOf(pr)) or (pr and pr.kinaLv) -- 2.0.14: Renown rank
   if o.cos and C.Cos then
     C.Cos.UpdatePortrait(o.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
     if C.Cos.SetFounder then C.Cos.SetFounder(o.cos, pr and pr.dev) end
@@ -215,7 +215,8 @@ function P.ShowCard(name)
   if pr then
     o.line2:SetText(sname and ((C.Cos and C.Cos.StandingColor(sname) or "") .. sname .. "|r  " .. GREY .. stand .. " rep|r") or (GREY .. "standing not shared yet|r"))
     local ago = pr.seen and math.floor((C.Now() - pr.seen) / 60)
-    o.line3:SetText(GOLD .. "Kina " .. ((klv == -1) and "|cffff8040log damaged|r" or (C.Rep.Roman((klv and klv > 0) and klv or 1))) .. "|r" .. GREY
+    local rkText = (C.Progress and pr.season and pr.season.renown and C.Progress.RankText) and C.Progress.RankText(pr.season) -- 2.0.14
+    o.line3:SetText((rkText or (GOLD .. "Kina " .. ((klv == -1) and "|cffff8040log damaged|r" or (C.Rep.Roman((klv and klv > 0) and klv or 1))) .. "|r")) .. GREY
       .. (pr.ver and ("   v" .. pr.ver) or "") .. (ago and (ago < 2 and "   seen just now" or (ago < 120 and ("   seen " .. ago .. " min ago") or ("   seen " .. math.floor(ago / 60) .. " h ago"))) or "") .. "|r")
   else
     o.line2:SetText(GREY .. "No Kina heard from them yet|r")

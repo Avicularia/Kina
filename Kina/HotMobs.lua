@@ -1,7 +1,8 @@
 -- Kina: hot mobs (1.0.5). Which mobs you should never skip.
 -- Taylor's rules (locked 2026-11-15):
 --   * value = average gold PER KILL, never per hour: coin (only creatures that drop coin)
---     plus every drop that drops 15% or more x its price. Gear and crates never count.
+--     plus every drop that drops 8% or more (recipes 2%, or 1.5% at 10g+) x its price. Gear
+--     and crates never count.
 --     An AH price only counts when 5+ are listed and it sells at least 20 an hour (a
 --     market you can actually farm into; Taylor: "one an hour shouldn't make the hot
 --     list"); otherwise the vendor price.
@@ -22,7 +23,14 @@ local _, C = ...
 local H = {}
 C.Hot = H
 
-H.RATE_MIN = 0.15
+-- 2.1.2 (Taylor, Nov 25: "The only drops we need are drops that have an 8% or higher chance
+-- of dropping such as crafting materials, and also recipes that have a 2% drop chance or
+-- higher. Unless 1.5% or something close to 2% is very expensive"): was 15% and any recipe
+-- seen 3+ times
+H.RATE_MIN = 0.08
+H.RECIPE_MIN = 0.02
+H.RECIPE_NEAR = 0.015 -- a recipe this close to 2% still counts when it's worth...
+H.RECIPE_PRICEY = 100000 -- ...10 gold or more
 H.HOT_MED, H.HOT_TOP = 2.5, 1.5
 H.KOS_MED, H.KOS_TOP = 2.5, 1.3
 H.BAND = 3
@@ -152,20 +160,33 @@ local function evaluate(npc, m, rec)
   local coin, coinHow = coinFor(npc, m)
   local det = { { kind = "coin", value = coin, how = coinHow } }
   local total = coin
-  local function item(id, rate, kind)
-    if rate < H.RATE_MIN then return end
-    local v, how, sold, listed = H.ItemValue(id)
+  -- 2.1.1 (Taylor: "roll in recipes that are target farmable to a specific mob"): a recipe
+  -- counts at any drop chance once it has dropped 3+ times in the data (rare drops are where
+  -- recipes live; one lucky drop isn't a rate)
+  local function item(id, rate, kind, count)
+    local v, how, sold, listed
+    if kind == "recipe" then
+      if rate < H.RECIPE_NEAR then return end
+      v, how, sold, listed = H.ItemValue(id)
+      if rate < H.RECIPE_MIN and v < H.RECIPE_PRICEY then return end
+    else
+      if rate < H.RATE_MIN then return end
+      v, how, sold, listed = H.ItemValue(id)
+    end
     if v <= 0 then return end
     local sp = H.Spike(id)
     det[#det + 1] = { kind = kind, id = id, rate = rate, price = v, value = rate * v, how = how, sold = sold, listed = listed, spike = sp }
     total = total + rate * v
   end
-  for id, c in pairs(m.items or {}) do item(id, c / m.loots, "item") end
+  for id, c in pairs(m.items or {}) do
+    local isRecipe = (m.rc and m.rc[id]) or (C.Item and C.Item(id) or {}).cls == 9
+    item(id, c / m.loots, isRecipe and "recipe" or "item", c)
+  end
   -- 2.0.6: skins count the same way (a drop rate per kill) once you can skin it
   rec = rec or (C.LootRecord and C.LootRecord(npc))
   local sk = skinSkill()
   if rec and rec.skinItems and (rec.skins or 0) >= 5 and sk and C.SkinSkillNeeded and sk >= C.SkinSkillNeeded(m.lvl or 1) then
-    for id, c in pairs(rec.skinItems) do item(id, c / rec.skins, "skin") end
+    for id, c in pairs(rec.skinItems) do item(id, c / rec.skins, "skin", c) end
   end
   table.sort(det, function(a, b) return a.value > b.value end)
   return total, det
@@ -476,11 +497,32 @@ local LOGO = "Interface\\AddOns\\Kina\\Media\\KinaLogo"
 local FIRE = "Interface\\AddOns\\Kina\\Media\\UI\\hot_fire"
 local pool, active = {}, {}
 local FRAMES, FPS = 16, 16
+local visible -- (defined with the anchoring code below)
 local driver = CreateFrame("Frame")
 local clock = 0
 driver:Hide()
+local watch = 0
 driver:SetScript("OnUpdate", function(_, dt)
   clock = clock + dt
+  -- 2.0.19 (Taylor: "the kina hot icon is on these young panthers, but only for a split
+  -- second when i first hover over them, then it disappears"): a nameplate addon (Threat
+  -- Plates) rebuilds or rescales its plate on mouseover and target, and the name the badge
+  -- sat beside went away under it. Four times a second the badge checks it still has a
+  -- place on screen and finds one again if not.
+  watch = watch + dt
+  if watch >= 0.25 then
+    watch = 0
+    for unit, f in pairs(active) do
+      local plate = f:GetParent()
+      local lost = not f:GetLeft() or (f.anchorFS and not visible(f.anchorFS))
+      if lost and plate and plate.IsShown and plate:IsShown() then
+        pcall(H.Anchor, f, plate, unit)
+        if not f:GetLeft() then f:ClearAllPoints(); f:SetPoint("BOTTOM", plate, "TOP", 0, 2) end
+      end
+      if not f:IsShown() then f:Show() end
+      if plate and plate.GetFrameLevel and f:GetFrameLevel() <= (plate:GetFrameLevel() or 0) + 40 then f:SetFrameLevel(math.min(9000, (plate:GetFrameLevel() or 0) + 50)) end
+    end
+  end
   local k = math.floor(clock * FPS) % FRAMES
   local u, v = (k % 4) / 4, math.floor(k / 4) / 4
   for _, f in pairs(active) do if f.fire:IsShown() then f.fire:SetTexCoord(u, u + 0.25, v, v + 0.25) end end
@@ -519,7 +561,7 @@ end
 -- player actually sees. Blizzard's plate: its name. Another addon's plate (Blizzard's is
 -- hidden but still there): that addon's name text, found by the mob's name; failing that,
 -- just left of its health bar.
-local function visible(r)
+visible = function(r)
   if not (r and r.IsVisible and r:IsVisible()) then return false end
   local a = (r.GetEffectiveAlpha and r:GetEffectiveAlpha()) or (r.GetAlpha and r:GetAlpha()) or 1
   return a > 0.05
@@ -547,6 +589,7 @@ local function findOnPlate(plate, uf, want)
 end
 -- the badge's right edge just left of where a font string's text starts
 local function besideText(f, fs)
+  f.anchorFS = fs
   local w = fs.GetStringWidth and fs:GetStringWidth() or 0
   local j = fs.GetJustifyH and fs:GetJustifyH() or "CENTER"
   if j == "LEFT" then f:SetPoint("RIGHT", fs, "LEFT", -2, 0)
@@ -554,7 +597,7 @@ local function besideText(f, fs)
   else f:SetPoint("RIGHT", fs, "CENTER", -w / 2 - 2, 0) end
 end
 function H.Anchor(f, plate, unit)
-  f:ClearAllPoints()
+  f:ClearAllPoints(); f.anchorFS = nil
   local uf = plate.UnitFrame
   -- a nameplate addon's own name first: Blizzard's may be kept "visible" under it
   local nameFS, bar = findOnPlate(plate, uf, UnitName and UnitName(unit))
@@ -579,7 +622,8 @@ local function show(unit)
   local f = acquire()
   local ok = pcall(function()
     f:SetParent(plate)
-    f:SetFrameLevel((plate:GetFrameLevel() or 0) + 5)
+    -- (2.0.19: well above the plate's own parts, which an addon may raise on mouseover)
+    f:SetFrameLevel(math.min(9000, (plate:GetFrameLevel() or 0) + 50))
     H.Anchor(f, plate, unit)
   end)
   -- (a nameplate addon may build or name its plate just after this: place it again)
@@ -606,6 +650,15 @@ function H.RefreshPlates()
 end
 C.On("NAME_PLATE_UNIT_ADDED", function(_, unit) pcall(show, unit) end)
 C.On("NAME_PLATE_UNIT_REMOVED", function(_, unit) release(unit) end)
+-- 2.0.19: mouseover and target change what a nameplate addon shows: place the badges again
+local function replace()
+  for unit, f in pairs(active) do
+    local plate = f:GetParent()
+    if plate then pcall(H.Anchor, f, plate, unit) end
+  end
+end
+C.On("UPDATE_MOUSEOVER_UNIT", function() if C.After then C.After(0.05, replace) end end)
+C.On("PLAYER_TARGET_CHANGED", function() if C.After then C.After(0.05, replace) end end)
 -- prices change after a scan, kill counts change as the guild farms
 C.On("INIT", function()
   if C_Timer and C_Timer.NewTicker then

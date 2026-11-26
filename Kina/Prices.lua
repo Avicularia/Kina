@@ -307,7 +307,7 @@ local function build()
   f.detail = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   f.detail:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 16, 94); f.detail:SetWidth(W - 32); f.detail:SetJustifyH("LEFT"); f.detail:SetSpacing(3)
   local hint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); hint:SetPoint("BOTTOMRIGHT", -16, 10)
-  hint:SetText("Click an item for its listings  |  Shift-click links it in chat  |  research only: buy and post at the AH  |  /kina prices")
+  hint:SetText("Click an item for its listings  |  Shift-click links it in chat  |  research only: buy and post at the AH  |  /kp to open, /kp name to search")
 
   tinsert(UISpecialFrames, "KinaPrices")
   f:Hide()
@@ -418,10 +418,18 @@ function P.ScrollCats(d)
   P.Draw()
 end
 
-function P.Open()
+function P.Open(text)
   build()
   P.Invalidate()
-  f:Show(); f:Raise()
+  f:Show()
+  -- 2.0.20: in front of Kina's main window (Layers.lua raises it after the main window)
+  if C.RaiseKina then C.RaiseKina() else f:Raise() end
+  if type(text) == "string" and f.search then f.search:SetText(text) end
+  -- 2.1.0: the My bags and Transport tabs (PricesBags.lua)
+  if C.PricesBags then
+    pcall(C.PricesBags.Attach, f)
+    if type(text) == "string" and text ~= "" then C.PricesBags.Show("browse") else C.PricesBags.Draw() end
+  end
   P.Draw()
 end
 function P.Toggle()
@@ -429,4 +437,4 @@ function P.Toggle()
   if f:IsShown() then f:Hide() else P.Open() end
 end
 P.Frame = function() return f end
-if C.OnMarket then C.OnMarket(function() P.Invalidate(); if f and f:IsShown() then P.Draw() end end) end
+if C.OnMarket then C.OnMarket(function() P.Invalidate(); if f and f:IsShown() then P.Draw(); if C.PricesBags then C.PricesBags.Draw() end end end) end

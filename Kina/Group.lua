@@ -27,7 +27,7 @@ function C.GroupMemberName(name)
     if UnitExists and UnitExists(unit) then
       local nm, realm = UnitName(unit)
       if nm and firstName(nm) == want then
-        return nm .. "-" .. ((realm and realm ~= "" and realm or (GetRealmName and GetRealmName() or "")):gsub("%s", ""))
+        return nm .. "-" .. ((realm and realm ~= "" and realm or (C.Realm() or "")):gsub("%s", ""))
       end
     end
   end
@@ -64,10 +64,57 @@ function C.GuildOnline(name)
   end
   return false
 end
+-- 2.0.9 (Taylor: Scàrlet's chat filled with "No player named 'Deputize' is currently
+-- playing" while he was offline): the game tells us when an add-on whisper went to
+-- someone offline. Kina hides that line when it was Kina's own whisper, marks the player
+-- gone, and sends them nothing more until their Kina speaks again.
+C.gone = {}            -- [first name] = GetTime() the game said they're offline
+C.kinaWhispered = {}   -- [first name] = GetTime() of Kina's last add-on whisper to them
+function C.IsGone(name)
+  local k = firstName(name)
+  local g = C.gone[k]
+  if not g then return false end
+  local h = C.heardAt[name] or C.heardAt[k]
+  if h and h > g then C.gone[k] = nil; return false end -- they've spoken since
+  return true
+end
+function C.MarkGone(name)
+  local k = firstName(name)
+  if k == "" then return end
+  C.gone[k] = GetTime and GetTime() or 0
+  if C.Net and C.Net.Gone then pcall(C.Net.Gone, name) end
+end
+if hooksecurefunc and C_ChatInfo and C_ChatInfo.SendAddonMessage then
+  pcall(hooksecurefunc, C_ChatInfo, "SendAddonMessage", function(prefix, _, kind, target)
+    if kind == "WHISPER" and type(prefix) == "string" and prefix:sub(1, 4) == "Kina" and type(target) == "string" then
+      C.kinaWhispered[firstName(target)] = GetTime and GetTime() or 0
+    end
+  end)
+end
+do
+  local fmt = ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing."
+  local esc = fmt:gsub("[%(%)%.%-%+%*%?%[%]%^%$]", "%%%0")
+  local pat = "^" .. esc:gsub("%%s", "(.+)") .. "$"
+  local function filter(_, _, msg)
+    local who = type(msg) == "string" and msg:match(pat)
+    if not who then return false end
+    local k = firstName(who)
+    local t = C.kinaWhispered[k]
+    if t and (GetTime and GetTime() or 0) - t < 20 then
+      if (C.gone[k] or 0) < t then C.MarkGone(who) end
+      return true
+    end
+    return false
+  end
+  C.OfflineFilter = filter
+  if ChatFrame_AddMessageEventFilter then ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", filter) end
+end
+
 function C.CanWhisper(name)
   if type(name) ~= "string" or name == "" then return false end
   local want = firstName(name)
   if want == "" then return false end
+  if C.IsGone(name) then return false end
   if UnitName and want == firstName(UnitName("player") or "") then return true end
   if IsInGroup and IsInGroup() then
     local raid = IsInRaid and IsInRaid()
@@ -117,9 +164,9 @@ function C.SetTrackOnly(v)
   C.settings.trackOnly = v or nil
   C.Log("track", v and "on" or "off")
   if v then
-    C.Print("|cffffc54aTracker only:|r Kina tracks your farms, but you're not part of group farms, splits or debts, and earn no Kina XP or standing. Your group's Kinas have been told. Debts you already have still need settling.")
+    C.Print("|cffffc54aTracker only:|r Kina tracks your farms, but you're not part of group farms, splits or debts, and earn no Renown. Your group's Kinas have been told. Debts you already have still need settling.")
   else
-    C.Print("|cff33ff66Tracker only is off:|r you're back in group farms, splits and debts, and earning Kina XP and standing.")
+    C.Print("|cff33ff66Tracker only is off:|r you're back in group farms, splits and debts, and earning Renown.")
   end
   if C.Share and C.Share.Announce then pcall(C.Share.Announce, true) end
   if C.Refresh then pcall(C.Refresh) end

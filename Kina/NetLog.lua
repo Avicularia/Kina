@@ -23,7 +23,9 @@ local GROUP = { H = "hello (version, scan ages)", Q = "asks for data", B = "star
 local NET = { P = "here (version)", O = "developer online", V = "version", F = "feedback", R = "feedback answer", K = "feedback receipt",
   H = "feedback hello", M = "feedback mute", PS = "has an AH scan to share", PQ = "asks for that scan",
   PZB = "AH scan: start", PZ = "AH scan: part", PZE = "AH scan: done",
-  RN = "relay check-in", W = "note passed on by a relay" }
+  RN = "relay check-in", W = "note passed on by a relay",
+  LX = "drop data for a mob", LB = "leaderboard numbers", LD = "leaderboard: passed on",
+  TS = "has a Booty Bay scan", TQ = "asks for that Booty Bay scan", TZB = "Booty Bay scan: start", TZ = "Booty Bay scan: part", TZE = "Booty Bay scan: done" }
 local function describe(net, msg)
   if net then
     local k = msg:match("^([^|]+)") or "?"
@@ -167,26 +169,34 @@ local function build()
   f.sum:SetWidth(650); f.sum:SetJustifyH("LEFT"); f.sum:SetSpacing(3)
   local rule = f:CreateTexture(nil, "ARTWORK"); rule:SetColorTexture(0.52, 0.35, 0.11, 0.9); rule:SetHeight(1)
   rule:SetPoint("TOPLEFT", 12, -124); rule:SetPoint("TOPRIGHT", -12, -124)
-  f.rows = {}
-  for i = 1, ROWS do
-    local r = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    r:SetPoint("TOPLEFT", 14, -130 - (i - 1) * 15); r:SetWidth(650); r:SetJustifyH("LEFT")
-    if r.SetWordWrap then r:SetWordWrap(false) end
-    f.rows[i] = r
-  end
+  -- 2.0.15 (Taylor: "the network log needs a very smooth scroll bar"): every line sits in a
+  -- scroll frame with a real scroll bar; the wheel glides there instead of jumping 3 lines
+  local sf = CreateFrame("ScrollFrame", "KinaNetLogScroll", f, "UIPanelScrollFrameTemplate")
+  sf:SetPoint("TOPLEFT", 12, -128); sf:SetPoint("BOTTOMRIGHT", -32, 36)
+  local child = CreateFrame("Frame", nil, sf); child:SetSize(630, 15); sf:SetScrollChild(child)
+  f.sf, f.child, f.rows = sf, child, {}
   f.offset = 0
-  f:EnableMouseWheel(true)
-  f:SetScript("OnMouseWheel", function(self, d)
-    self.offset = math.max(0, math.min(math.max(0, #lines - ROWS), self.offset - d * 3)); L.Draw()
+  sf.target = 0
+  sf:EnableMouseWheel(true)
+  sf:SetScript("OnMouseWheel", function(self, d)
+    local maxS = self:GetVerticalScrollRange() or 0
+    self.target = math.max(0, math.min(maxS, (self.target or self:GetVerticalScroll()) - d * 60))
+  end)
+  sf:HookScript("OnUpdate", function(self, el)
+    local t = self.target
+    if not t then return end
+    local cur = self:GetVerticalScroll() or 0
+    if math.abs(t - cur) < 0.5 then if cur ~= t then self:SetVerticalScroll(t) end; self.target = nil; return end
+    self:SetVerticalScroll(cur + (t - cur) * math.min(1, el * 14))
   end)
   -- hide the farm chatter (kills, farm log) to see the rest
   local quiet = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate"); quiet:SetSize(22, 22)
   quiet:SetPoint("BOTTOMLEFT", 10, 8)
   local ql = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); ql:SetPoint("LEFT", quiet, "RIGHT", 2, 0)
   ql:SetText("Hide farm chatter (kills, farm log)")
-  quiet:SetScript("OnClick", function(self) L.quiet = self:GetChecked() and true or false; f.offset = 0; L.Draw() end)
+  quiet:SetScript("OnClick", function(self) L.quiet = self:GetChecked() and true or false; f.sf.target = nil; f.sf:SetVerticalScroll(0); L.Draw() end)
   local tip = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); tip:SetPoint("BOTTOMRIGHT", -14, 13)
-  tip:SetText("newest first  |  scroll for older  |  /kina net")
+  tip:SetText("newest first  |  scroll or drag the bar for older  |  /kina net")
   tinsert(UISpecialFrames, "KinaNetLog")
   local acc = 0
   f:SetScript("OnUpdate", function(_, el)
@@ -207,8 +217,19 @@ function L.Draw()
   f.sum:SetText(summary())
   local shown = {}
   for _, l in ipairs(lines) do if not (L.quiet and CHATTER[l.base or l.what]) then shown[#shown + 1] = l end end
-  for i = 1, ROWS do
-    local l = shown[i + f.offset]
+  -- one row per line, made as needed and reused
+  for i = 1, math.max(#shown, 1) do
+    if not f.rows[i] then
+      local r = f.child:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      r:SetPoint("TOPLEFT", 2, -(i - 1) * 15); r:SetWidth(626); r:SetJustifyH("LEFT")
+      if r.SetWordWrap then r:SetWordWrap(false) end
+      f.rows[i] = r
+    end
+  end
+  for i = #shown + 1, #f.rows do f.rows[i]:SetText("") end
+  f.child:SetHeight(math.max(15, #shown * 15))
+  for i = 1, math.max(#shown, 1) do
+    local l = shown[i]
     if l then
       local arrow = (l.dir == "out" and (BLUE .. "sent|r")) or (l.dir == "in" and (GREEN .. "got |r")) or (GOLD .. "  * |r")
       local when = date and date("%H:%M:%S", l.t) or ""
@@ -222,5 +243,5 @@ end
 
 function L.Toggle()
   local f = build()
-  if f:IsShown() then f:Hide() else f.offset = 0; f:Show(); f:Raise(); L.Draw() end
+  if f:IsShown() then f:Hide() else f.sf.target = nil; f.sf:SetVerticalScroll(0); f:Show(); f:Raise(); L.Draw() end
 end

@@ -164,6 +164,9 @@ function F.Node()
       me = me(),
       now = function() return C.Now() end,
       send = function(msg, to) if C.Share and C.Share.SendSync then C.Share.SendSync(msg, to) end end,
+      -- 2.1.2: catch-up batches over the fast lanes (nil when nobody can take them)
+      sendBulk = function(msg) if C.Share and C.Share.SendSyncBulk then C.Share.SendSyncBulk(msg) end end,
+      grouped = function() return IsInGroup and IsInGroup() and true or false end,
       price = function(id, suffix) return C.SplitValue and (C.SplitValue(id, suffix)) or 0 end, -- the split price (thin greens at their floor)
       leaderGone = leaderGone,
       inGroup = function(name) return unitOf(name) ~= nil end,
@@ -278,7 +281,20 @@ function F.View()
   local t = Core.Totals(s)
   return { secs = node:Elapsed(), net = t.net, coin = t.coin, items = t.items, used = t.used, kills = t.kills,
     paused = t.paused, byLooter = t.byLooter, heldBy = t.heldBy, members = t.members, noSplit = t.noSplit,
-    behind = (s.leaderHead or 0) > s.head or next(s.outbox) ~= nil }, s.leader
+    behind = F.Behind(s) }, s.leader
+end
+-- 2.1.2 (Taylor: "the widget syncs over and over and sometimes works, sometimes doesn't"):
+-- SYNCING only when this copy really is behind: missing entries for 4+ seconds, or a
+-- report of ours not in the log after 10 seconds. Every loot used to flash it for the
+-- second its report took to come back.
+function F.Behind(s)
+  local now = C.Now()
+  if (s.leaderHead or 0) > s.head then s.lagSince = s.lagSince or now else s.lagSince = nil end
+  if s.lagSince and now - s.lagSince >= 4 then return true end
+  for _, o in pairs(s.outbox or {}) do
+    if now - (o.q or o.at or o.t or now) >= 10 then return true end
+  end
+  return false
 end
 function F.Totals(s, reprice) return Core.Totals(s, reprice) end
 function F.Split(by) return Core.Split(by) end

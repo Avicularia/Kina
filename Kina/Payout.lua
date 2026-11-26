@@ -1060,7 +1060,7 @@ local function mailName(who)
   local name, realm = full:match("^%s*([^%s%-]+)[^%-]*%-?(.*)$")
   if not name or name == "" then return nil end
   realm = (realm or ""):gsub("%s", "")
-  local mine = ((GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""):gsub("%s", "")
+  local mine = (C.Realm() or ""):gsub("%s", "")
   if realm == "" or realm:lower() == mine:lower() then return name end
   return name .. "-" .. realm
 end
@@ -1075,7 +1075,7 @@ local function wholeName(who)
   if not name then name, realm = full:match("^%s*(.-)%s*$"), "" end
   name = (name or ""):gsub("%s+", " ")
   if name == "" then return nil end
-  local mine = ((GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""):gsub("%s", "")
+  local mine = (C.Realm() or ""):gsub("%s", "")
   realm = (realm or ""):gsub("%s", "")
   if realm == "" or realm:lower() == mine:lower() then return name end
   return name .. "-" .. realm

@@ -381,7 +381,8 @@ function M.ShowPicker()
       if C.Profile and C.Profile.SetPortrait then pcall(C.Profile.SetPortrait, c.portrait, e.name) end
       local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(e.name)
       local sname = pr and type(pr.stand) == "number" and C.Rep and C.Rep.StandingOf(pr.stand) or "Unproven"
-      C.Cos.UpdatePortrait(c.cos, sname, (pr and pr.kinaLv and pr.kinaLv > 0) and pr.kinaLv or 1, pr and pr.recruits)
+      local ring = (C.Progress and C.Progress.RingOf and C.Progress.RingOf(pr)) or (pr and pr.kinaLv) -- 2.0.14: Renown rank
+      C.Cos.UpdatePortrait(c.cos, sname, (ring and ring > 0) and ring or 1, pr and pr.recruits)
       if C.Cos.SetFounder then C.Cos.SetFounder(c.cos, pr and pr.dev) end
       c.name:SetText((e.shared and "|cff6ef08c" or "|cffffffff") .. e.name .. "|r")
       local ago = math.floor((C.Now() - (e.seen or C.Now())) / 86400)

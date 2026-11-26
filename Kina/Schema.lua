@@ -65,7 +65,7 @@ local split = { t = T, f = { total = N, each = N, transfers = list(transfer), pa
   received = map({ number = true, boolean = true }), incomes = NUMMAP, held = NUMMAP, fair = NUMMAP, forgiven = NUMMAP, ext = NUMMAP, plea = map(B), pleaFrom = map(B), lapsed = map(B), offered = NUMMAP, refusedSeen = NUMMAP, clock = NUMMAP, pclock = NUMMAP, clockAt = NUMMAP } }
 local chainEv = { t = T, f = { seq = N, origin = S, oseq = N, kind = S, t = N, hash = S, data = S }, req = { "seq", "origin", "kind", "hash" } }
 local sync = { t = T, f = { sid = S, leader = S, head = N, hash = S, oseq = N, closed = B, chain = map(chainEv),
-  outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }), aways = map(list({ t = T, f = { from = N, to = N } })), gone = NUMMAP, lastAway = N },
+  outbox = map({ t = T, f = { kind = S, data = S, t = N, at = N, q = N } }), seenOrig = NUMMAP, buf = map(T), pauses = list({ t = T, f = { from = N, to = N } }), aways = map(list({ t = T, f = { from = N, to = N } })), gone = NUMMAP, lastAway = N },
   req = { "sid" } }
 local session = { t = T, f = { start = N, stop = N, last = N, label = S, kills = N, money = NUMMAP, items = NUMMAP, byNpc = NUMMAP,
   party = list({ t = T, f = { name = S } }), split = split, sync = sync, log = list(T), g = T, posted = NUMMAP, startCounts = NUMMAP,
@@ -132,6 +132,8 @@ local DB = { t = T, f = { blocked = list({ t = T, f = { t = N, ev = S, fn = S, v
   ledger = { t = T, f = { seen = T, seenN = NUMMAP, entries = list(T), transfers = T } },
   pockets = T, recipes = map(T), boxes = T, deObs = map({ t = T, f = { n = N, mats = NUMMAP } }), offers = T,
   lastReplicate = N, lastSnapshotSeen = N, profileRealm = S, realms = map(T),
+  farmHist = map(T), streak = T, lastRealm = S, sendLog = list(T), board = map(T), -- 2.0.19 / 2.0.20
+  surnames = map(S), meFull = map(S), -- 2.1.2
   pair = { t = T, f = { snooze = NUMMAP } },
   mentor = { t = T, f = { eligible = B, born = N, named = S, target = S, targetUid = S, pickDismissed = N, pickShown = N, qualified = N, done = N, asked = N, recruits = map({ t = T, f = { name = S, t = N } }) } },
   vouch = { t = T, f = { given = list({ t = T, f = { who = S, kind = N, t = N, ref = S } }), got = list({ t = T, f = { who = S, kind = N, t = N, ref = S, rep = N } }), closed = NUMMAP } },

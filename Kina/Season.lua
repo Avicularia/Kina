@@ -6,6 +6,7 @@
 local _, C = ...
 C.Season = {
   id = "S1", name = "Season 1", year = 2026,
+  startAt = 1795154400,             -- Nov 20, 2026 (Kina 2.0), midnight Central
   hours = 100,                      -- full-bonus target for the whole season
   masterTitle = "Master of Coin 2026",
 
@@ -36,21 +37,25 @@ C.Season = {
     streakDay = 0.02, streakMax = 0.20,       -- days in a row
     campfire = 0.10,                          -- while "Camp Benefits" is on you
     commend = 0.10,                           -- each commendation for that farm
+    -- 2.0.15: your Kina Partner in the farm adds the bond (+10%, growing to +20%, Rep.lua)
     trackLevel = 0.01,                        -- every level of every track, this season
   },
   campfireAuras = { [1229741] = true },       -- Camp Benefits (as Happy Camper knows it)
   campfireNames = { "camp benefits" },
 
   -- tracks (each: one number, and a ladder). Gold is in gold, not copper.
+  -- 2.0.15 (Taylor, Nov 22): three tracks, all reset each season: Renown (gold x time x
+  -- commendations x bond) is the ring; the best gold per hour is the banner; total gold
+  -- farmed is the coin hoard. Mentor stars and the bond crest are no longer tracks.
+  -- (Hot mob cards: a fourth track once they're drawn; kills per mob are counted now.)
+  -- Banner tiers: gold per hour of your best farm this season (the whole group's, the way
+  -- the pace counts it), PROPOSED by Claude, not yet confirmed by Taylor.
   tracks = {
-    { id = "ring",   name = "Portrait ring", stat = "renownRank" },
-    { id = "stars",  name = "Mentor star",   stat = "recruits", tiers = { 1, 2, 3, 4, 5 } },
-    { id = "bond",   name = "Bond crest",    stat = "bondLevel" },
-    -- (Hot mob cards: not in Season 1 yet; 30 / 75 / 150 / 300 / 600 kills when they come)
-    { id = "banner", name = "Farm banner",   stat = "hours", tiers = { 0.5, 2.5, 7.5, 15, 30, 50, 75, 100 } },
+    { id = "ring",   name = "Renown",          stat = "renownRank" },
+    { id = "banner", name = "Best gold / hour", stat = "bestGph", tiers = { 1, 2, 3, 5, 7.5, 10, 15, 20 } },
     -- PLACEHOLDER gold amounts until Kina's own farm data sets them (Taylor: normal 1-60,
     -- then steeply higher ranks)
-    { id = "hoard",  name = "Coin hoard",    stat = "gold", tiers = { 1, 3, 8, 20, 40, 65, 75, 100, 150, 200 } },
+    { id = "hoard",  name = "Gold farmed",     stat = "gold", tiers = { 1, 3, 8, 20, 40, 65, 75, 100, 150, 200 } },
   },
   -- the season's 20 card mobs (a fixed list, so rotating the hot list never strands a
   -- card). Until Taylor picks them, the current hot list stands in.

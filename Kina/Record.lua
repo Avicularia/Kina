@@ -35,7 +35,7 @@ function REC.MyHighScore()
   end
   if not best then return nil end
   return { gph = math.floor(best.perHour), total = math.floor(best.total or 0), secs = math.floor(best.secs), kills = best.kills or 0,
-    label = bs.label or bs.zone or "farm", t = bs.start, s = bs }
+    label = bs.label or bs.zone or "farm", t = bs.start, s = bs, group = (bs.groupN or 1) >= 2 }
 end
 
 local REASON = { lapsed = "a debt ran out", unlapsed = "a lapsed debt was cleared", farm = "group farm", pay = "paid a debt",
@@ -87,6 +87,7 @@ function REC.Encode(r)
   if r.hs then
     p[#p + 1] = "h=" .. table.concat({ b36(r.hs.gph), b36(r.hs.total), b36(r.hs.secs), b36(r.hs.kills), clean(r.hs.label, 20), b36(r.hs.t or 0) }, ",")
   end
+  if r.hs and r.hs.group ~= nil then p[#p + 1] = "q=" .. (r.hs.group and "1" or "0") end
   local e = {}
   for _, x in ipairs(r.recent or {}) do e[#e + 1] = b36(x.t or 0) .. ":" .. (x.rep < 0 and "-" or "") .. b36(x.rep) .. ":" .. clean(x.kind, 10) end
   if #e > 0 then p[#p + 1] = "e=" .. table.concat(e, ",") end
@@ -105,12 +106,14 @@ function REC.Decode(s)
     elseif k == "h" then
       local a, b, c, d, lab, t = v:match("^(%w+),(%w+),(%w+),(%w+),([^,]*),(%w+)$")
       if a then r.hs = { gph = n36(a), total = n36(b), secs = n36(c), kills = n36(d), label = lab, t = n36(t) } end
+    elseif k == "q" then r.hsGroup = (v == "1") -- 2.0.19: high score solo / group (one letter: older Kinas skip it)
     elseif k == "e" then
       for t, neg, rep, kind in v:gmatch("(%w+):(%-?)(%w+):(%a+)") do
         r.recent[#r.recent + 1] = { t = n36(t), rep = (n36(rep) or 0) * (neg == "-" and -1 or 1), kind = kind }
       end
     end
   end
+  if r.hs and r.hsGroup ~= nil then r.hs.group = r.hsGroup end
   return r
 end
 
@@ -150,7 +153,9 @@ local GOLD, GREY, GREEN, RED, ORANGE = "|cffffc54a", "|cff9d9d9d", "|cff6ee678",
 local function day(t) return t and date and date("%b %d", t) or "?" end
 function REC.HighScoreText(r)
   if not (r and r.hs and r.hs.gph) then return GREY .. "no farm yet|r" end
-  return GOLD .. C.Money(r.hs.gph) .. "/hr|r  " .. GREY .. clean(r.hs.label, 20) .. "|r"
+  -- 2.0.19 (Taylor): say whether it was a solo or a group farm
+  local kind = r.hs.group == true and " (group)" or (r.hs.group == false and " (solo)" or "")
+  return GOLD .. C.Money(r.hs.gph) .. "/hr|r" .. kind .. "  " .. GREY .. clean(r.hs.label, 20) .. "|r"
 end
 -- 1.0.5 (Taylor: "asking their Kina" never changed): say why there's no record yet.
 -- Kina 1.0.4 and older can't answer, and an answer needs them in your group or online

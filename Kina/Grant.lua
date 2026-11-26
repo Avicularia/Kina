@@ -69,7 +69,7 @@ function G.Send(to, amount, reason)
   local g = { id = newId(), to = to, xp = amount, reason = reason ~= "" and reason or "Kina team grant", t = C.Now() }
   outbox()[g.id] = g
   local sent = send(g)
-  C.Print(string.format("|cff4fc3f7Kina grant %s:|r +%d Renown and Kina XP to %s (%s). %s", g.id, amount, to, g.reason,
+  C.Print(string.format("|cff4fc3f7Kina grant %s:|r +%d Renown to %s (%s). %s", g.id, amount, to, g.reason,
     sent and "Waiting for their Kina to confirm." or "They're not reachable now (group up, or both online in the guild): it goes when they are, for 14 days."))
 end
 
@@ -80,13 +80,13 @@ function G.Receive(msg, sender)
     local g = outbox()[id or ""]
     if g then
       outbox()[id] = nil
-      C.Print(string.format("|cff7CFC00Kina grant %s landed:|r %s got +%d Renown and Kina XP%s.", id, g.to, g.xp, a == "dup" and " (already had it)" or ""))
+      C.Print(string.format("|cff7CFC00Kina grant %s landed:|r %s got +%d Renown%s.", id, g.to, g.xp, a == "dup" and " (already had it)" or ""))
     end
     return
   end
   if kind ~= "G" or not id or id == "" then return end
   if not G.IsTeam(sender) then return end
-  local myRealm = GetRealmName and GetRealmName() or ""
+  local myRealm = C.Realm() or ""
   local r = realmOf(sender)
   if r and myRealm ~= "" and norm(r) ~= norm(myRealm) then return end
   local used = store()
@@ -102,8 +102,8 @@ function G.Receive(msg, sender)
     st.renown = (st.renown or 0) + amount
     st.xp = (st.xp or 0) + amount
     local why = (b and b ~= "") and b or "Kina team grant"
-    C.Print(string.format("|cffffc54aKina team grant:|r +%d Renown and Kina XP (%s).", amount, why))
-    if C.Toast and C.Toast.Notice then pcall(C.Toast.Notice, string.format("+%d Renown and Kina XP", amount), why) end
+    C.Print(string.format("|cffffc54aKina team grant:|r +%d Renown (%s).", amount, why))
+    if C.Toast and C.Toast.Notice then pcall(C.Toast.Notice, string.format("+%d Renown", amount), why) end
   end
   if C_ChatInfo and C_ChatInfo.SendAddonMessage then
     pcall(C_ChatInfo.SendAddonMessage, G.PREFIX, "A|" .. id .. "|" .. reply, "WHISPER", sender)

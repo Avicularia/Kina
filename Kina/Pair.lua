@@ -31,6 +31,7 @@ local function db()
   C.db.pair = C.db.pair or {}
   local d = C.db.pair
   d.snooze = d.snooze or {}
+  d.offered = d.offered or {} -- 2.0.9: [Kina ID] = when Kina offered to pair you (once, ever)
   return d
 end
 local function S() return C.Share end
@@ -71,6 +72,11 @@ local function send(op, uid)
 end
 
 local function pct(b) return math.floor((b or 0) * 100 + 0.5) end
+-- 2.0.9 (Taylor: "I don't know what happens when I say no, or when they say no"): every
+-- outcome of a partner request shows on screen, not just in chat
+local function notice(head, sub)
+  if C.Toast and C.Toast.Notice then pcall(C.Toast.Notice, head, sub) end
+end
 
 local function begin(uid)
   local cur = P.Partner()
@@ -80,6 +86,7 @@ local function begin(uid)
   local b = P.Bonus()
   C.Print(string.format("%s%s is your Kina Partner|r (every character on their account). Farms and payments together earn +%d%% XP and standing; the bond grows the longer you stay partners (up to +%d%%).",
     GREEN, P.PartnerName() or "?", pct(b), pct(C.Rep.PAIR_MAX)))
+  notice("Kina Partners", string.format("You and %s are now Kina Partners.", P.PartnerName() or "?"))
   if C.Refresh then pcall(C.Refresh) end
 end
 local function finish(uid)
@@ -99,9 +106,19 @@ function P.Ask(name)
   end
   if P.Partner() == uid then C.Print(tostring(first(name)) .. " is already your partner."); return false end
   if not (C.InGroupName and C.InGroupName(name)) then C.Print("partner up with someone in your party."); return false end
-  pending[uid] = GetTime and GetTime() or 0
+  local t0 = GetTime and GetTime() or 0
+  pending[uid] = t0
   send("ask", uid)
   C.Print(string.format("asked %s to be your Kina Partner.", first(name)))
+  notice("Partner request sent", string.format("Waiting for %s to answer.", first(name) or "them"))
+  -- no answer within 2.5 minutes: say so (their popup closes itself after 2)
+  if C.After then C.After(150, function()
+    if pending[uid] == t0 then
+      pending[uid] = nil
+      C.Print(string.format("%s didn't answer your partner request. Ask again from their profile.", first(name) or "They"))
+      notice("No answer", string.format("%s didn't answer your partner request.", first(name) or "They"))
+    end
+  end) end
   return true
 end
 function P.End()
@@ -124,20 +141,21 @@ local function extraText(uid)
 end
 local function popups()
   if not C.Dialogs or C.Dialogs.KINA_PAIR then return end
-  local why = "Partners earn |cff33ff66+10%% Kina XP and standing|r on farms and payments together, on any of your characters, and the bond grows with the gold you farm together (up to |cff33ff66+20%%|r after about 20 hours)."
+  local why = "Partners share a |cff33ff66bond crest|r on every character of their accounts. It grows with the gold you farm together."
   C.Dialogs.KINA_PAIR = {
     text = "%s runs Kina.\n\nMake them your Kina Partner?\n\n" .. why .. "%s",
     button1 = "Partner up", button2 = "Not now",
     timeout = 90, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     OnAccept = function(_, d) if d then P.Ask(d.name) end end,
-    OnCancel = function(_, d, reason) if d and reason == "clicked" then db().snooze[d.uid] = C.Now() end end,
+    OnCancel = function(_, d, reason) if d and reason == "clicked" then db().snooze[d.uid] = C.Now()
+      C.Print("no problem. To partner up later, click their portrait and use Partner up on their profile.") end end,
   }
   C.Dialogs.KINA_PAIR_ASK = {
     text = "%s wants you as their Kina Partner.\n\n" .. why .. "%s",
     button1 = "Accept", button2 = "No thanks",
     timeout = 120, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     OnAccept = function(_, d) if d then send("yes", d.uid); begin(d.uid) end end,
-    OnCancel = function(_, d) if d then send("no", d.uid) end end,
+    OnCancel = function(_, d) if d then send("no", d.uid); C.Print(string.format("you said no thanks to %s. They've been told.", d.name or "them")) end end,
   }
 end
 
@@ -158,9 +176,16 @@ local function onPair(from, rest)
   elseif op == "yes" then
     if pending[uid] and now - pending[uid] < 300 then pending[uid] = nil; begin(uid) end
   elseif op == "no" then
-    if pending[uid] then pending[uid] = nil; C.Print(who .. " said no thanks to partnering up.") end
+    if pending[uid] then
+      pending[uid] = nil
+      C.Print(who .. " said no thanks to partnering up.")
+      notice("Partner request declined", who .. " said no thanks.")
+    end
   elseif op == "end" then
-    if finish(uid) then C.Print(string.format("%s ended your Kina partnership. Your bond is kept if you partner up again.", who)) end
+    if finish(uid) then
+      C.Print(string.format("%s ended your Kina partnership. Your bond is kept if you partner up again.", who))
+      notice("Partnership ended", who .. " ended your Kina partnership. Your bond is kept.")
+    end
   end
 end
 
@@ -177,6 +202,11 @@ function P.OnKinaMate(name)
     return
   end
   if cur then return end -- one partner at a time: no nagging
+  -- 2.0.9 (Taylor: "The partner question keeps popping up in a party with no changes"):
+  -- Kina offers to pair you with someone once, ever. After that, and to change partners,
+  -- it's the Partner up button on their profile.
+  if db().offered[uid] then return end
+  db().offered[uid] = C.Now()
   if C.TrackOnly and C.TrackOnly() then return end -- 0.9.20: no XP to share while tracker only
   if C.settings and C.settings.noPairAsk then return end
   local sn = db().snooze[uid]

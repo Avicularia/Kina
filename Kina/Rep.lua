@@ -543,7 +543,7 @@ function C.RepDetail()
   local m = R.Mine()
   local out = {}
   if not m.ok then
-    out[1] = "|cffff8040Your Kina log doesn't check out (the saved file was changed), so your Kina XP counts as 0.|r"
+    out[1] = "|cffff8040Your Kina log doesn't check out (the saved file was changed), so your Renown counts as 0.|r"
     return out
   end
   if m.level >= R.MAX_LEVEL then out[1] = string.format("Kina level %s: %d XP (top level).", R.Roman(m.level), m.xp)

@@ -221,7 +221,7 @@ tabs["Hot Farms"] = function()
     end
     for _, d in ipairs(why == "" and r.det or {}) do
       if d.kind == "item" or d.kind == "skin" then
-        why = string.format("%s %d%%%s", itemName(d.id), math.floor(d.rate * 100 + 0.5),
+        why = string.format("%s%s: %s drop chance%s", d.kind == "recipe" and "|cffffc54arecipe|r " or "", itemName(d.id), C.Pct(d.rate), -- 2.0.19 (Taylor)
           d.how == "AH" and string.format(" |cff9d9d9d(sells ~%d/hr)|r", math.floor((d.sold or 0) + 0.5)) or " |cff9d9d9d(vendor)|r")
         break
       elseif d.kind == "coin" and d.value > 0 then why = "coin" end
@@ -242,8 +242,9 @@ tabs["Hot Farms"] = function()
     head = all and "No hot mobs yet. Prices come from AH scans and kill data from Kina users: scan the AH and farm, and it fills in."
       or string.format("No hot mobs from level %d to %d. Press All levels to see the rest.", math.max(1, L - 2), L + 4)
   else
-    head = string.format("%s, gold per kill. |cffff7a1aHOT|r = best in its zone and far above its level, or a drop on a price streak. |cff9d9d9dGrey|r logo = fewer than %d of your kills (it lights up as a collectible).",
-      all and "Every level" or string.format("Top 10 from level %d to %d (where you're headed)", math.max(1, L - 2), L + 4), H.KINA_KILLS)
+    -- 2.0.11: short enough to fit beside the Gathering / All levels / Archive buttons
+    head = string.format("%s, gold per kill. |cffff7a1aHOT|r = best in its zone, or a drop on a price streak.",
+      all and "Every level" or string.format("Levels %d to %d", math.max(1, L - 2), L + 4))
       .. (C.HotNudge and C.HotNudge.TodayText() and ("   " .. C.HotNudge.TodayText()) or "")
   end
   return head, { "", "Mob", "Zone", "Lvl", "Per kill", "Why it's hot" }, { 0, 44, 270, 420, 460, 560 }, out
@@ -956,6 +957,14 @@ local function farmLog(s, live)
     row("", "|cffffc54aYour net|r", "coin you looted + items you looted (today's price) - consumables you used", "", signedMoney(sum.total))
     row("", "   coin looted", ((s.money.pickpocket or 0) > 0) and ("incl. " .. C.Money(s.money.pickpocket) .. " pick pocketed") or "", "", signedMoney(sum.cash))
     row("", "   items looted", "every drop, skin and pick at today's farm price (rolls at their own price)", "", signedMoney(sum.items))
+    -- 2.0.19: what each gathering profession brought in (part of the items above)
+    do
+      local pi = C.Progress and C.Progress.ProfIncome and C.Progress.ProfIncome(s) or {}
+      local pl = {}
+      for pr, v in pairs(pi) do if v > 0 then pl[#pl + 1] = { pr, v } end end
+      table.sort(pl, function(a, b) return a[2] > b[2] end)
+      for _, x in ipairs(pl) do row("", "      " .. x[1], "what " .. x[1]:lower() .. " brought in (part of items looted)", "", signedMoney(x[2])) end
+    end
     if (sum.used or 0) > 0 then row("", "   consumables used", "", "", signedMoney(-sum.used)) end
     if s.excl and ((s.excl.coin or 0) > 0 or next(s.excl.items)) then
       row("", "   |cff9d9d9dleft out (paused or right-clicked)|r", "coin " .. C.Money(s.excl.coin or 0) .. ", items " .. C.Money(C.ExcludedItemValue(s)), "", "")
@@ -1207,7 +1216,7 @@ if C.PUBLIC then
     if r.farmGain then
       local g = r.farmGain
       row("", string.format("shared farm, %d min", math.floor((g.secs or 0) / 60)), "", g.paused and (ORANGE .. "0 (sharing was off)|r") or ("+" .. g.xp .. (g.xp < g.want and (GREY .. " (daily cap)|r") or "") .. GREY .. string.format("  %d XP/h", math.floor(g.xp * 3600 / math.max(60, g.secs or 60))) .. "|r"))
-    elseif s.minLvl and s.minLvl > 0 and s.minLvl < (C.PROG_MIN_LEVEL or 10) then row("", "someone in the farm was under level 10", "", GREY .. "no Kina XP or standing|r")
+    elseif s.minLvl and s.minLvl > 0 and s.minLvl < (C.PROG_MIN_LEVEL or 10) then row("", "someone in the farm was under level 10", "", GREY .. "no Renown|r")
     elseif s.sync and r.shortWhy == "gold" then row("", "the farm made less than its gold target (" .. C.Money(C.Rep.FarmNeeds(s.maxLvl, s.groupN)) .. ")", "", GREY .. "no farm XP|r")
     elseif s.sync then row("", "shared farm under 15 minutes", "", GREY .. "no farm XP|r")
     else row("", "solo farm", "", GREY .. "no XP (farm with Kina users)|r") end
@@ -1340,9 +1349,9 @@ if C.PUBLIC then
     return GOLDC .. "Farms, " .. period() .. "|r  " .. GREY .. "click a farm for its details|r", { "Date", "Farm", "Players", "Farmed", "Your share", "Collected", "To collect", "Paid", "You owe", "XP" },
       { 0, 46, 210, 260, 345, 430, 515, 600, 680, 760 }, out,
       { empty = GOLDC .. "No farms yet|r\n\nPress " .. GOLDC .. "Start|r on the Kina widget when you go farming, alone or with friends.\n"
-          .. "Every farm shows up here: what it made, your share, any debts, and the Kina XP it earned.",
+          .. "Every farm shows up here: what it made, your share, any debts, and the Renown it earned.",
         tiles = { { "Farmed", GOLDC .. money(tot.farmed) .. "|r" }, { "Your share", GOLDC .. money(share) .. "|r" }, { "Collected", GREEN .. money(tot.collected) .. "|r" },
-          { "Paid", money(tot.paid) }, { "Open", open }, { "Kina XP", "|cff4fc3f7+" .. (tot.xp or 0) .. "|r", (tot.waiting or 0) > 0 and (tot.waiting .. " waiting") or nil } } }
+          { "Paid", money(tot.paid) }, { "Open", open }, { "Renown", "|cff4fc3f7+" .. (tot.xp or 0) .. "|r", (tot.waiting or 0) > 0 and (tot.waiting .. " waiting") or nil } } }
   end
 end
 
@@ -1369,10 +1378,18 @@ tabs.Session = function()
     -- 1.0.2b (Taylor: "the vendor/items are not lining up"): coin, vendor and items each
     -- get their own column, and XP per hour its own, so nothing wraps into the next one
     local xph = ref and C.GameXPPerHour and C.GameXPPerHour(ref)
+    -- 2.0.19 (Taylor: each farm's profession money, searchable): "Skinning 1g 20s, Mining 40s"
+    local ps = live and C.session or (type(ref) == "table" and ref) or nil
+    local pi = ps and C.Progress and C.Progress.ProfIncome and C.Progress.ProfIncome(ps) or {}
+    local pl, ptot = {}, 0
+    for pr, v in pairs(pi) do if v > 0 then pl[#pl + 1] = { pr, v }; ptot = ptot + v end end
+    table.sort(pl, function(a, b) return a[2] > b[2] end)
+    local ptxt = {}
+    for _, x in ipairs(pl) do ptxt[#ptxt + 1] = x[1] .. " " .. C.Money(x[2]) end
     out[#out + 1] = { slog = ref, cols = { (live and "|cff7CFC00" or "") .. label .. (live and "|r" or ""), string.format("%d min", math.floor(r.secs / 60)),
       C.Money(r.total), C.Money(r.perHour), C.Money((r.coin or 0) + (r.pickpocket or 0)), C.Money(r.vendor or 0), C.Money(r.items or 0),
-      tostring(r.kills or 0), (xph and xph > 0) and C.FmtXPH(xph) or "-" },
-      sort = { label, r.secs, r.total, r.perHour, (r.coin or 0) + (r.pickpocket or 0), r.vendor or 0, r.items or 0, r.kills or 0, xph or 0 } }
+      tostring(r.kills or 0), (xph and xph > 0) and C.FmtXPH(xph) or "-", #ptxt > 0 and table.concat(ptxt, ", ") or "|cff9d9d9d-|r" },
+      sort = { label, r.secs, r.total, r.perHour, (r.coin or 0) + (r.pickpocket or 0), r.vendor or 0, r.items or 0, r.kills or 0, xph or 0, ptot } }
   end
   local s = C.SessionSummary()
   if s then add("Current", s, true, "current") end
@@ -1392,7 +1409,7 @@ tabs.Session = function()
     { "Earned", "|cffffc54a" .. C.Money(math.floor(tot)) .. "|r" }, { "Average per hour", "|cffffc54a" .. C.Money(secs > 0 and math.floor(tot * 3600 / secs) or 0) .. "|r" },
     { "Best farm", best and ("|cffffc54a" .. C.Money(math.floor(best.result.perHour or 0)) .. "/h|r") or "-", best and best.label or nil } }
   return "|cffffc54aFarms|r  |cff9d9d9dclick a farm to open its log|r",
-    { "Farm", "Length", "Total", "Per hour", "|cffe6c85aCoin|r", "|cff9d9d9dVendor|r", "|cff6ec27aItems|r", "Kills", "XP/h" }, { 0, 200, 270, 360, 460, 560, 660, 760, 820 }, out, { tiles = tiles }
+    { "Farm", "Length", "Total", "Per hour", "|cffe6c85aCoin|r", "|cff9d9d9dVendor|r", "|cff6ec27aItems|r", "Kills", "XP/h", "Professions" }, { 0, 170, 220, 290, 360, 430, 500, 570, 610, 670 }, out, { tiles = tiles }
 end
 
 ------------------------------------------------------------------ column help
@@ -2008,6 +2025,50 @@ function C.ShowHotMob(npc)
     string.format("Level %d   %s   %s", r.lvl, H.TYPE_NAME[r.type] or "?", r.zone or "?"),
     tierText,
   }
+  -- 2.0.19 (Taylor: "I want to see what makes it hot all of a sudden ... Did the price of tiger
+  -- meat spike out of nowhere? Is it used in a raid cooking recipe"): what changed, and when
+  if r.tier then
+    local seen = C.db.hotSeen and C.db.hotSeen[npc]
+    if seen and seen.first then
+      local age = C.Now() - seen.first
+      lines[#lines + 1] = age < 86400 and "|cffff7a1aWhat changed:|r new on the hot list today"
+        or string.format("|cffffc54aWhat changed:|r hot since %s (%d days)", date and date("%b %d", seen.first) or "?", math.floor(age / 86400))
+    end
+    -- the drop that pays most, and its price against the last two weeks
+    local top
+    for _, d in ipairs(r.det) do if d.kind ~= "coin" and (not top or d.value > top.value) then top = d end end
+    if top then
+      local ratio, base, nDays = H.Spike and H.Spike(top.id)
+      if ratio and base then
+        local pct = math.floor((ratio - 1) * 100 + 0.5)
+        local col = pct >= 50 and "|cffff7a1a" or (pct >= 0 and "|cff6ee678" or "|cffff6060")
+        lines[#lines + 1] = string.format("   %s today %s, usual %s (%d-day median): %s%+d%%|r%s", itemCell(top.id),
+          C.Money(math.floor(base * ratio + 0.5)), C.Money(math.floor(base + 0.5)), nDays or 14, col, pct,
+          pct >= 50 and "  |cffff7a1aprice spike|r" or (math.abs(pct) < 15 and "  |cff9d9d9dsteady price: hot for its drops, not a spike|r" or ""))
+      elseif top.how == "AH" then
+        lines[#lines + 1] = "   " .. itemCell(top.id) .. "  |cff9d9d9dnot enough price history yet to say if it spiked (needs 3 days of scans)|r"
+      else
+        lines[#lines + 1] = "   " .. itemCell(top.id) .. "  |cff9d9d9dsells to a vendor: a steady price, hot for its drop rate|r"
+      end
+      -- what it's used in (your recipe data)
+      local used, names = 0, {}
+      for _, rc in pairs(C.Data and C.Data.recipes or {}) do
+        local rg = type(rc) == "table" and rc[10]
+        if type(rg) == "table" then
+          for j = 1, #rg, 2 do
+            if rg[j] == top.id then
+              used = used + 1
+              if #names < 3 then names[#names + 1] = (C.Data.profs and C.Data.profs[rc[1]] or "") .. ": " .. tostring(rc[11]) end
+              break
+            end
+          end
+        end
+      end
+      if used > 0 then
+        lines[#lines + 1] = "   used in " .. used .. " recipe" .. (used == 1 and "" or "s") .. ": " .. table.concat(names, ", ") .. (used > #names and ", ..." or "")
+      end
+    end
+  end
   local coin, drops = 0, 0
   for _, d in ipairs(r.det) do if d.kind == "coin" then coin = coin + d.value else drops = drops + d.value end end
   if r.value > 0 then
@@ -2022,7 +2083,7 @@ function C.ShowHotMob(npc)
     if d.kind ~= "coin" and shown < 5 then
       shown = shown + 1
       local streak = (d.spike and d.spike >= H.SPIKE and d.how == "AH") and string.format(" |cffff7a1a%.1fx usual|r", d.spike) or ""
-      lines[#lines + 1] = string.format("   %s%s  %d%% x %s = %s%s", d.kind == "skin" and "skin: " or "", itemCell(d.id), math.floor(d.rate * 100 + 0.5),
+      lines[#lines + 1] = string.format("   %s%s  %s drop chance x %s = %s%s", d.kind == "skin" and "skin: " or (d.kind == "recipe" and "|cffffc54arecipe:|r " or ""), itemCell(d.id), C.Pct and C.Pct(d.rate) or (math.floor(d.rate * 100 + 0.5) .. "%"),
         C.Money(math.floor(d.price + 0.5)), C.Money(math.floor(d.value + 0.5)), streak)
     end
   end
@@ -2715,7 +2776,38 @@ end
 -- 1.5.2: the You tab has three pages: Overview, Commendations, Farm stats
 tabs.You = function()
   local v = ui.youView or "you"
+  if v == "youBoard" then return tabs.Board() end
   return "", {}, {}, {}, { panel = v }
+end
+-- 2.0.20 (Taylor: "fast track the leaderboard, it should list everyone that everyone else has
+-- seen ever, and the last stats they saw it at"; "a search bar to see what people have going
+-- on"): every Kina player anyone has heard of. Click a column to rank by it; the search box
+-- finds a name or title; click a row for their profile.
+tabs.Board = function()
+  local Bd, PG = C.Board, C.Progress
+  if not (Bd and PG) then return "", {}, {}, {}, {} end
+  local q = ui.search["You"]
+  local out = {}
+  local all = Bd.Ranked("r")
+  for _, x in ipairs(all) do
+    local _, cur = PG.Rank(x.r or 0)
+    local title = (PG.QCOLOR[cur.q] or "") .. cur.title .. "|r"
+    local cc = x.c and RAID_CLASS_COLORS and RAID_CLASS_COLORS[x.c]
+    local full = C.FullName and (x.me and C.FullName(nil) or C.FullName(x.n)) or tostring(x.n)
+    local nm = (cc and cc.colorStr and ("|c" .. cc.colorStr) or "|cffffffff") .. full .. "|r" .. (x.me and " |cff9d9d9d(you)|r" or "")
+    local from = x.me and "|cff6ee678you, now|r" or (Bd.Ago(x.t) .. (x.via and ("|cff9d9d9d via " .. x.via .. "|r") or "|cff9d9d9d, their Kina|r"))
+    if not (q and q:find("%S")) or C.LooseMatch(q, tostring(x.n)) or C.LooseMatch(q, full) or C.LooseMatch(q, cur.title) then
+      out[#out + 1] = { who = x.n, me = x.me,
+        tip = x.me and "You (your numbers right now)." or ((x.via and ("Passed on by " .. x.via .. ": these are the numbers " .. x.via .. "'s Kina last heard, from " .. Bd.Ago(x.t) .. ".")
+          or ("From their own Kina, " .. Bd.Ago(x.t) .. ".")) .. (x.v and ("  Kina " .. x.v .. ".") or "")),
+        cols = { "#" .. x.rank, nm, title, BreakUpLargeNumbers and BreakUpLargeNumbers(x.r or 0) or tostring(x.r or 0),
+          (x.ng and (x.g or 0) == 0) and "|cff808080-|r" or (C.Money(x.g or 0) .. "/hr"), C.Money(math.floor((x.f or 0) * 100)), from },
+        sort = { x.rank, tostring(x.n), x.r or 0, x.r or 0, x.g or 0, x.f or 0, x.t or 0 } }
+    end
+  end
+  if not ui.sort.You then ui.sort.You = { col = 4, desc = true } end
+  local empty = (#all <= 1) and "Nobody else yet. Kina fills this in from the Kina network: every Kina says its own numbers every 10 minutes and passes on what it knows of others." or nil
+  return "", { "#", "Name", "Title", "Renown", "Gold / hour", "Gold farmed", "Numbers from" }, { 0, 40, 180, 340, 430, 540, 650 }, out, { top = 6, empty = empty }
 end
 -- 0.9.4 (Taylor): someone else's profile, in its own tab ("Tri's Profile", with an X)
 tabs.Profile = function()
@@ -2838,7 +2930,7 @@ local function buildSettings(f)
   -- 0.9.20 (Taylor): just the farm tracker
   header("Groups")
   toggle("Tracker only (stay out of group farms)", function() return C.TrackOnly() end, function(v) C.SetTrackOnly(v) end,
-    "Kina keeps tracking your own farms (gold per hour, loot, kills), but you don't join group farms, so you earn no Renown or Kina XP. Every Kina in your group is told.")
+    "Kina keeps tracking your own farms (gold per hour, loot, kills), but you don't join group farms, so you earn no Renown. Every Kina in your group is told.")
   y = y + 4
   -- 1.0.8 (Taylor: clean up Settings): every sharing switch in one place, with the log
   header("Network and sharing")
@@ -2868,6 +2960,10 @@ local function buildSettings(f)
   toggle("Keep scanning every 15 min after I click Scan", function() return st.autoScan ~= false end, function(v) st.autoScan = v; if not v then C.scanLoop = false end end,
     "One full scan per 15 minutes is the game's limit. Kina also reads scans ForeverForge starts.")
   toggle("Prices on item tooltips", function() return st.tooltip ~= false end, function(v) st.tooltip = v end)
+  -- 2.1.0 (Taylor: "Foreverforge will be an incompatible addon with this feature, so we can
+  -- toggle off 'auction house' in the settings")
+  toggle("Auction house selling (Prices > My bags)", function() return not st.ahSellOff end, function(v) st.ahSellOff = (not v) or nil; if C.PricesBags then C.PricesBags.Draw() end end,
+    "Sell to Stormwind / Booty Bay and Post next in the Prices window. Turn it off if you post with another addon (ForeverForge Auction posts through the same window).")
   action("Scan the AH now", function() C.StartScanLoop() end)
   local durB = action("", function() st.postDuration = ((st.postDuration or 1) % 3) + 1 end)
   controls[#controls + 1] = function()
@@ -2999,6 +3095,36 @@ local function buildSettings(f)
     action("Window size: default", function() C.SetWindowScale(1) end)
     action("Window size: large", function() C.SetWindowScale(1.25) end)
     action("Window size: largest", function() C.SetWindowScale(99) end)
+  end
+  -- 2.0.20 (Taylor: "give the widget opacity settings"): how see-through the farm widget is
+  -- (it comes back to full while the mouse is over it)
+  do
+    local lbl = C.Text(p, "OVERLAY", "GameFontHighlightSmall"); at()(lbl)
+    local sl = CreateFrame("Slider", "KinaWidgetAlphaSlider", p)
+    sl:SetOrientation("HORIZONTAL"); sl:SetSize(150, 16)
+    sl:EnableMouse(true)
+    if sl.SetFrameLevel then sl:SetFrameLevel((p:GetFrameLevel() or 1) + 10) end
+    sl:SetPoint("TOPLEFT", p, "TOPLEFT", 4 + col * COLW + (COLW - 10 - INSET) - 150, -6 - y + 1)
+    local track = sl:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT", 4, 0); track:SetPoint("RIGHT", -4, 0); track:SetHeight(4); track:SetColorTexture(0.86, 0.53, 0.06, 0.55)
+    sl:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    sl:SetMinMaxValues(0.2, 1); sl:SetValueStep(0.05)
+    if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
+    sl:EnableMouseWheel(true)
+    local function show(v) lbl:SetText(string.format("Widget opacity: %d%%", math.floor(v * 100 + 0.5))) end
+    sl:SetValue(C.WidgetAlpha()); show(C.WidgetAlpha())
+    sl:SetScript("OnValueChanged", function(self, v)
+      v = math.floor(v * 20 + 0.5) / 20
+      show(v)
+      C.settings.widgetAlpha = (v < 0.999) and v or nil
+      if C.ApplyWidgetAlpha then C.ApplyWidgetAlpha(true) end
+    end)
+    sl:SetScript("OnMouseWheel", function(self, d) self:SetValue(math.max(0.2, math.min(1, self:GetValue() + d * 0.05))) end)
+    sl:SetScript("OnEnter", function(self) C.TipOwner(self)
+      GameTooltip:AddLine("How see-through the farm widget is. It turns solid while your mouse is over it. Drag, or scroll the mouse wheel over it.", 1, 1, 1, true)
+      GameTooltip:Show() end)
+    sl:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    y = y + ROWH
   end
   action("Put every Kina window back", function() C.ResetWindows() end)
   toggle("Keep Kina on top of other windows", function() return C.KeepOnTop() end, function(v) C.settings.keepOnTop = v and nil or false; if C.ApplyKeepOnTop then C.ApplyKeepOnTop() end end,
@@ -3175,6 +3301,13 @@ local function build()
     C.settings.pos.mainScale = math.max(0.6, math.min(1.5, math.min(saved[1] / C.MAIN_W, saved[2] / C.MAIN_H)))
   end
   C.settings.pos.mainSize = nil
+  -- 2.0.19 (Taylor: "If I grab the edge of the right side of the ui, it should let me stretch
+  -- it horizontally, same with the bottom edge ... while keeping everything inside the same
+  -- size so that I can see more"): the window keeps the size you dragged it to
+  local wh = C.settings.pos.mainWH
+  if type(wh) == "table" and tonumber(wh[1]) and tonumber(wh[2]) then
+    ui.w, ui.h = math.max(C.MAIN_W, math.min(screenW * 2, wh[1])), math.max(C.MAIN_H, math.min(screenH * 2, wh[2]))
+  end
   f:SetSize(ui.w, ui.h); C.RestorePos(f, "main", "LEFT", UIParent, "LEFT", 40, 40)
   -- never bigger than the screen
   local fit = math.min(screenW / C.MAIN_W, screenH / C.MAIN_H)
@@ -3186,8 +3319,67 @@ local function build()
   f:SetScript("OnSizeChanged", function(_, w, h)
     ui.w, ui.h = w, h
     fitWidths()
+    -- (while an edge is being dragged, the pages refresh a few times a second, not every frame)
+    if f.kinaSizing then
+      local now = GetTime and GetTime() or 0
+      if now - (f.kinaSizedAt or 0) < 0.12 then return end
+      f.kinaSizedAt = now
+    end
     if f:IsShown() then C.Refresh() end
   end)
+  -- the right and bottom edges stretch the window; the corner grip still scales everything
+  if f.SetResizable then
+    f:SetResizable(true)
+    local maxW = math.max(C.MAIN_W, (UIParent:GetWidth() or 1900) * 2)
+    local maxH = math.max(C.MAIN_H, (UIParent:GetHeight() or 1200) * 2)
+    if f.SetResizeBounds then f:SetResizeBounds(C.MAIN_W, C.MAIN_H, maxW, maxH)
+    elseif f.SetMinResize then f:SetMinResize(C.MAIN_W, C.MAIN_H); if f.SetMaxResize then f:SetMaxResize(maxW, maxH) end end
+    local function edge(dir)
+      local e = CreateFrame("Frame", nil, f)
+      e:SetFrameLevel(f:GetFrameLevel() + 19)
+      if dir == "RIGHT" then
+        e:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, -60); e:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2, 28); e:SetWidth(10)
+      else
+        e:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 28, -2); e:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, -2); e:SetHeight(10)
+      end
+      e:EnableMouse(true)
+      local hl = e:CreateTexture(nil, "OVERLAY")
+      if dir == "RIGHT" then hl:SetPoint("TOPRIGHT", -3, 0); hl:SetPoint("BOTTOMRIGHT", -3, 0); hl:SetWidth(2)
+      else hl:SetPoint("BOTTOMLEFT", 0, 3); hl:SetPoint("BOTTOMRIGHT", 0, 3); hl:SetHeight(2) end
+      hl:SetColorTexture(1, 0.78, 0.3, 0.8); hl:Hide()
+      e:SetScript("OnEnter", function(self)
+        hl:Show()
+        if GameTooltip then
+          GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+          GameTooltip:SetText(dir == "RIGHT" and "Drag to make Kina wider" or "Drag to make Kina taller", 1, 0.82, 0.3)
+          GameTooltip:AddLine("Everything inside stays the same size; you see more.", 1, 1, 1, true); GameTooltip:Show()
+        end
+      end)
+      e:SetScript("OnLeave", function() if not f.kinaSizing then hl:Hide() end; if GameTooltip then GameTooltip:Hide() end end)
+      e:SetScript("OnMouseDown", function(_, btn)
+        if btn ~= "LeftButton" then return end
+        if InCombatLockdown and InCombatLockdown() and f:IsProtected() then return end
+        if GameTooltip then GameTooltip:Hide() end
+        f.kinaSizing = true
+        f:StartSizing(dir)
+      end)
+      e:SetScript("OnMouseUp", function()
+        if not f.kinaSizing then return end
+        f:StopMovingOrSizing()
+        f.kinaSizing = nil; hl:Hide()
+        if f.SetUserPlaced then pcall(f.SetUserPlaced, f, false) end
+        local l, tp = f:GetLeft(), f:GetTop()
+        if l and tp then f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, tp) end
+        ui.w, ui.h = f:GetWidth(), f:GetHeight()
+        C.settings.pos.mainWH = { math.floor(ui.w + 0.5), math.floor(ui.h + 0.5) }
+        C.SavePos(f, "main")
+        fitWidths(); C.Refresh()
+      end)
+      e:SetScript("OnHide", function() if f.kinaSizing then f:StopMovingOrSizing(); f.kinaSizing = nil end end)
+      return e
+    end
+    ui.edgeR, ui.edgeB = edge("RIGHT"), edge("BOTTOM")
+  end
   C.MakeDraggable(f, "main", titleStrip(f), rememberDock)
   f:SetFrameStrata("DIALOG")
   -- 1.1.0 iron look: the template's art hidden, the A-30 frame (24 px, Rev 59), the A-33 header
@@ -3394,6 +3586,7 @@ local function build()
   prevB:SetPoint("RIGHT", nextB, "LEFT", -2, 0)
   local sess = button(f, "Start/Stop farm", 130, function() if C.session then C.StopSession() else C.StartSession() end; C.Refresh() end)
   sess:SetPoint("RIGHT", prevB, "LEFT", -6, 0)
+  sess:Hide() -- 2.0.19 (Taylor): starting and stopping a farm lives on the widget only
   local days = button(f, "Ledger: all time", 120, function(self)
     ui.ledgerDays = (ui.ledgerDays == nil) and 7 or (ui.ledgerDays == 7 and 30 or nil)
     self:SetText(ui.ledgerDays and ("Ledger: " .. ui.ledgerDays .. " days") or "Ledger: all time"); ui.tab = "Ledger"; C.Refresh() end)
@@ -3438,6 +3631,13 @@ local function build()
   pricesB:SetPoint("RIGHT", fbB, "LEFT", -6, 0)
   if C.ButtonTip then C.ButtonTip(pricesB, "Prices", "Browse every item from your last AH scan (and other Kinas' scans) anywhere: search, filter, sort, and see each item's cheapest listings. Research only.") end
   ui.pricesButton = pricesB
+  -- 2.0.11 (Taylor: the scan bar's text ran under the Prices button): the bar ends just
+  -- left of the bottom-bar buttons, and its text is clipped to the bar
+  if ui.scanBar then
+    local bar = ui.scanBar
+    bar:ClearAllPoints(); bar:SetPoint("BOTTOMLEFT", 16, 12); bar:SetPoint("RIGHT", pricesB, "LEFT", -8, 0)
+    if bar.text then bar.text:ClearAllPoints(); bar.text:SetPoint("LEFT", bar, "LEFT", 6, 0); bar.text:SetPoint("RIGHT", bar, "RIGHT", -6, 0) end
+  end
   buildSettings(f)
   -- ROI filter row (every tab): rows below the typed ROI %, and with the switch on,
   -- rows that don't pay for your time, are hidden. They are still calculated.
@@ -3617,7 +3817,7 @@ local function build()
   -- 1.5.2: the You tab's pages
   do
     local yb = CreateFrame("Frame", nil, f); yb:SetSize(420, 24); yb.btns = {}
-    local pages = { { "you", "Overview", 86 }, { "youVouch", "Commendations", 124 }, { "youFarms", "Farm stats", 96 } }
+    local pages = { { "you", "Overview", 86 }, { "youVouch", "Commendations", 124 }, { "youFarms", "Farm stats", 96 }, { "youBoard", "Leaderboard", 110 } }
     local prev
     for _, pg in ipairs(pages) do
       local b = button(yb, pg[2], pg[3], function() ui.youView = pg[1]; C.Refresh() end)
@@ -3685,7 +3885,7 @@ local function build()
       C.TipOwner(self)
       if d.id and GameTooltip.SetItemByID then GameTooltip:SetItemByID(d.id) end
       if d.tip then GameTooltip:AddLine(d.tip, 1, 1, 1, true) end
-      GameTooltip:AddLine(d.npc and "Click: details   Right-click: waypoint" or "Click: details   Right-click: actions   Shift-click: link", 0.5, 0.8, 1)
+      GameTooltip:AddLine(d.who and "Click: open their profile" or (d.npc and "Click: details   Right-click: waypoint" or "Click: details   Right-click: actions   Shift-click: link"), 0.5, 0.8, 1)
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3698,6 +3898,8 @@ local function build()
         C.ShowGatherNode(d.gather)
       elseif d.hot and C.ShowHotMob then
         C.ShowHotMob(d.npc)
+      elseif d.who then -- 2.0.20: a leaderboard row opens that player's profile
+        if d.me then ui.youView = "you"; C.Refresh() elseif C.Profile and C.Profile.Show then C.Profile.Show(d.who) end
       elseif d.npc then
         if btn == "RightButton" then mobMenu(d) else C.ShowMob(d.npc, d.farm) end
       elseif d.syncRef and btn == "RightButton" and C.FarmSync then

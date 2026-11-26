@@ -6,6 +6,18 @@
 -- Start plays the "gates open" fanfare; Stop (by hand or timer) plays the
 -- "city cheers" finale. SND turns both off; % changes the background.
 local _, C = ...
+function C.WidgetAlpha()
+  local a = C.settings and tonumber(C.settings.widgetAlpha)
+  return (a and a >= 0.2 and a <= 1) and a or 1
+end
+-- forceSee: while the slider moves, show the chosen opacity even with the mouse over it
+function C.ApplyWidgetAlpha(forceSee)
+  local wf = _G.KinaWidget
+  if not (wf and wf:IsShown()) then return end
+  local a = C.WidgetAlpha()
+  if not forceSee and a < 1 and MouseIsOver and MouseIsOver(wf) then a = 1 end
+  if math.abs((wf:GetAlpha() or 1) - a) > 0.01 then wf:SetAlpha(a) end
+end
 local floor = math.floor
 local W, H = 300, 212
 local function ironOn() return C.Skin and C.Skin.On() end
@@ -310,7 +322,7 @@ local function partyStrip()
       local pr = C.Share and C.Share.ProfileOf and C.Share.ProfileOf(m.name)
       local stand = pr and pr.stand
       local sname = type(stand) == "number" and C.Rep and C.Rep.StandingOf(stand) or nil
-      local klv = pr and pr.kinaLv
+      local klv = (C.Progress and C.Progress.RingOf and C.Progress.RingOf(pr)) or (pr and pr.kinaLv) -- 2.0.14: Renown rank
       C.Cos.UpdatePortrait(c.cos, sname or "Unproven", (klv and klv > 0) and klv or 1, pr and pr.recruits)
       if C.Cos.SetFounder then C.Cos.SetFounder(c.cos, pr and pr.dev) end
       if C.Cos.SetBond then C.Cos.SetBond(c.cos, C.Cos.BondFor(m.name)) end
@@ -471,6 +483,10 @@ local function build()
   local ironLook = C.Skin and C.Skin.On()
   if ironLook then W = 324 end -- 1.2.0: wider, so the 115% text fits the tiles
   w = CreateFrame("Frame", "KinaWidget", UIParent)
+  -- 2.0.20 (Taylor): the widget's opacity (Settings > Window); solid under the mouse
+  if C_Timer and C_Timer.NewTicker then
+    C_Timer.NewTicker(0.2, function() if C.ApplyWidgetAlpha then pcall(C.ApplyWidgetAlpha) end end)
+  end
   local DY = ironLook and 8 or 0 -- 1.1.1: taller tiles in the iron look
   w:SetSize(W, H + DY); w:SetFrameStrata((C.KeepOnTop and C.KeepOnTop()) and "HIGH" or "MEDIUM")
   C.RestorePos(w, "widget", "TOP", UIParent, "TOP", 0, -120)
@@ -529,8 +545,7 @@ local function build()
   w.rep:SetScript("OnEnter", function(self)
     if not GameTooltip then return end
     if C.TipOwner then C.TipOwner(self) else GameTooltip:SetOwner(self, "ANCHOR_BOTTOM") end
-    GameTooltip:AddLine("Kina level (experience)")
-    for _, l in ipairs(C.RepDetail and C.RepDetail() or {}) do GameTooltip:AddLine(l, 1, 1, 1, true) end
+    if C.RenownTip then C.RenownTip() end
     GameTooltip:Show()
   end)
   w.rep:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -719,8 +734,7 @@ local function build()
     plate:SetScript("OnEnter", function(self)
       if not GameTooltip then return end
       if C.TipOwner then C.TipOwner(self) else GameTooltip:SetOwner(self, "ANCHOR_BOTTOM") end
-      GameTooltip:AddLine("Kina level (experience)")
-      for _, l in ipairs(C.RepDetail and C.RepDetail() or {}) do GameTooltip:AddLine(l, 1, 1, 1, true) end
+      if C.RenownTip then C.RenownTip() end
       GameTooltip:Show()
     end)
     plate:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)

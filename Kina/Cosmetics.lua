@@ -118,6 +118,14 @@ function K.Portrait(box, portrait, opts)
   o.glow = addTex("BACKGROUND", -2, "fx_round", W) -- (kept for older callers; unused)
   o.ring = top:CreateTexture(nil, "OVERLAY", nil, 2)
   o.ring:SetPoint("CENTER", portrait, "CENTER", 0, 0); o.ring:SetSize(W * 1.30, W * 1.30)
+  -- 2.0.20 (Taylor: the ring looked flat next to the game's own art): a shadow of the ring's
+  -- own shape under it, and a faint light along its top-left edge (the ring's texture twice)
+  o.ringShadow = top:CreateTexture(nil, "OVERLAY", nil, 1)
+  o.ringShadow:SetPoint("CENTER", portrait, "CENTER", W * 0.03, -W * 0.05); o.ringShadow:SetSize(W * 1.32, W * 1.32)
+  o.ringShadow:SetVertexColor(0, 0, 0, 0.6)
+  o.ringLight = top:CreateTexture(nil, "OVERLAY", nil, 3)
+  o.ringLight:SetPoint("CENTER", portrait, "CENTER", -W * 0.008, W * 0.012); o.ringLight:SetSize(W * 1.30, W * 1.30)
+  o.ringLight:SetBlendMode("ADD"); o.ringLight:SetVertexColor(1, 0.92, 0.75, 0.22)
   o.vig = top:CreateTexture(nil, "OVERLAY", nil, 1); o.vig:SetAllPoints(portrait); o.vig:SetTexture(P .. "fx_vig2"); o.vig:Hide()
   o.glint = addTex("OVERLAY", 3, "fx_glint", W * 1.30)
   o.cracks = top:CreateTexture(nil, "OVERLAY", nil, 1); o.cracks:SetAllPoints(portrait); o.cracks:SetTexture(P .. "fx_cracks")
@@ -133,6 +141,7 @@ function K.Portrait(box, portrait, opts)
   o.plate:SetTexture(P .. "kina_plaque_arc")
   o.num = top:CreateFontString(nil, "OVERLAY")
   K.Font(o.num, 12, "OUTLINE"); o.num:SetPoint("CENTER", o.plate, "CENTER", 0, -W * 0.035); o.num:SetTextColor(1, 0.86, 0.45)
+  if o.num.SetShadowOffset then o.num:SetShadowOffset(1, -1); o.num:SetShadowColor(0, 0, 0, 0.9) end
   o.badge = top:CreateTexture(nil, "OVERLAY", nil, 5)
   o.badge:SetPoint("CENTER", o.ring, "TOP", 0, 2)
   o.badgeGlow = top:CreateTexture(nil, "OVERLAY", nil, 4); o.badgeGlow:SetPoint("CENTER", o.badge, "CENTER")
@@ -255,6 +264,7 @@ function K.UpdatePortrait(o, standing, level, recruits, starter)
   o.ring:SetTexture(K.RingFor(standing))
   local fx0 = FX[standing or ""]
   if fx0 and fx0.ring then o.ring:SetTexture(P .. fx0.ring) end
+  if o.ringShadow then local rt = o.ring:GetTexture(); o.ringShadow:SetTexture(rt); o.ringLight:SetTexture(rt) end
   o.plate:SetTexture(P .. ((fx0 and fx0.plate) or "kina_plaque_arc"))
   local fx = FX[standing or ""]
   o.fx = fx
@@ -370,6 +380,7 @@ function K.SetPlain(o, on)
       o.plus:SetPoint("CENTER", o.portrait, "CENTER", W * 0.38, -W * 0.36); o.plus:SetTexture(P .. "kina_plus")
     end
     o.ring:Hide(); o.plate:Hide(); o.num:Hide(); o.badge:Hide(); o.badgeGlow:Hide()
+    if o.ringShadow then o.ringShadow:Hide(); o.ringLight:Hide() end
     if o.halo then o.halo:Hide() end; if o.halo2 then o.halo2:Hide() end; if o.rays then o.rays:Hide() end
     o.rim:Show(); o.plus:Show()
     if o.portrait then
@@ -380,6 +391,7 @@ function K.SetPlain(o, on)
   else
     if o.rim then o.rim:Hide(); o.plus:Hide() end
     o.ring:Show()
+    if o.ringShadow then o.ringShadow:Show(); o.ringLight:Show() end
     o.plain = nil
   end
 end

@@ -1,3 +1,15 @@
+# Kina 2.1.4
+
+- Fixed: since Nov 20 WoW Forever reports a blank realm name, which split your Kina data and showed 0 Renown. Kina now finds your realm and folds that data back in.
+- Group farms: leave the group, reload or disconnect mid-farm and you stay in it. Catching up after a rejoin takes seconds, the SYNCING chip only shows when you're really behind, and every loot counts exactly once.
+- Two auction houses: Booty Bay is scanned and priced separately. Prices has a My bags tab (sell to the Alliance or Booty Bay AH, post at the live lowest price) and a Transport tab for items worth carrying between them.
+- Hot mobs: far more mobs, levels 25 to 60. Drops count at 8%+ (recipes at 2%+, or 1.5%+ when worth 10g or more), shown as "drop chance", with why a mob is hot.
+- Kina players share what drops from what, so drop chances keep improving.
+- Profile: full names with surnames, one gold per hour (your share on your best farm), hours farmed, bonus breakdown, profession income per session.
+- New: Leaderboard of every Kina player seen this season.
+- /kp opens Kina prices. Widget opacity setting. The main window resizes from its edges.
+- The commend prompt opens with the farm-complete window. Your daily streak now carries across seasons.
+
 # Kina 2.0.8
 
 Kina 2.0: farming with other Kinas now earns Renown, Kina XP and a whole season of cosmetics.

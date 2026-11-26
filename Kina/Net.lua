@@ -46,7 +46,60 @@ function N.Me() return (UnitName and UnitName("player")) or "?" end
 -- 2.0: the game gives your first name, but others (and your own messages coming back) show
 -- "First Surname". Learned from your own messages coming back over the channel.
 N.meFull = nil
-function N.MeFull() return N.meFull or N.Me() end
+-- 2.1.2 (Taylor: "make sure a user's character's last name is also used in our profile.
+-- So instead of Deputize, it's Deputize Deez"): surnames heard on the network are kept
+-- (C.db.surnames[first] = "Surname"), your own per character, and C.FullName() puts
+-- them back on every name Kina shows.
+local function svNames()
+  local d = C.db
+  if not d then return nil end
+  d.surnames = type(d.surnames) == "table" and d.surnames or {}
+  d.meFull = type(d.meFull) == "table" and d.meFull or {}
+  return d
+end
+local function charKey() return C.charKey or N.Me() end
+function N.MeFull()
+  if N.meFull then return N.meFull end
+  local d = svNames()
+  local saved = d and d.meFull[charKey()]
+  if saved and saved:lower():match("^(%S+)") == N.Me():lower() then N.meFull = saved; return saved end
+  return N.Me()
+end
+local nSur = 0
+function C.LearnName(full)
+  if type(full) ~= "string" then return end
+  full = full:gsub("%-.*$", "")
+  local f, sur = full:match("^(%a+) (%a[%a' ]*)$")
+  if not (f and sur) or #sur > 24 then return end
+  local d = svNames()
+  if not d then return end
+  local k = f:lower()
+  if d.surnames[k] == sur then return end
+  if d.surnames[k] == nil then
+    nSur = nSur + 1
+    if nSur > 50 then -- now and then: keep the book to 3000 names
+      nSur = 0
+      local n = 0; for _ in pairs(d.surnames) do n = n + 1 end
+      if n > 3000 then for key in pairs(d.surnames) do d.surnames[key] = nil; n = n - 1; if n <= 2500 then break end end end
+    end
+  end
+  d.surnames[k] = sur
+end
+-- "Deputize" -> "Deputize Deez" (yours, or anyone whose surname Kina has heard); a name
+-- that already has one, or one never heard, comes back as it is. nil = you.
+function C.FullName(name)
+  if name == nil then return N.MeFull() end
+  if type(name) ~= "string" then return tostring(name) end
+  local first = name:gsub("%-.*$", "")
+  if first:find(" ", 1, true) then return first end
+  if first:lower() == N.Me():lower() then
+    local mine = N.MeFull()
+    if mine:find(" ", 1, true) then return mine end
+  end
+  local d = svNames()
+  local sur = d and d.surnames[first:lower()]
+  return sur and (first .. " " .. sur) or first
+end
 local sentRecently = {} -- [message] = when: to recognise your own coming back
 local function isMe(from, msg)
   local f, me = from:lower(), N.Me():lower()
@@ -56,6 +109,7 @@ local function isMe(from, msg)
   end
   if f:match("^(%S+)") == me and msg and sentRecently[msg] and C.Now() - sentRecently[msg] < 60 then
     N.meFull = from
+    local d = svNames(); if d then d.meFull[charKey()] = from end
     N.lastEcho = C.Now()
     return true
   end
@@ -274,6 +328,8 @@ local function sendOne(item)
     if ok and THROTTLED and res == THROTTLED then return false end
     return true
   else
+    -- 2.0.9: never to someone the game says is offline, or not heard from lately
+    if (C.IsGone and C.IsGone(item.to)) or not (N.Heard(item.to) or (C.CanWhisper and C.CanWhisper(item.to))) then return true end
     ok, res = pcall(C_ChatInfo.SendAddonMessage, N.PREFIX, item.msg, "WHISPER", N.WhisperName(item.to))
   end
   if ok and THROTTLED and res == THROTTLED then return false end
@@ -329,6 +385,15 @@ function N.WhisperName(to)
   return (realm and realm ~= "") and (name .. "-" .. realm) or name
 end
 function N.Heard(name) local t = heard[short(name):lower()]; return t and (C.Now() - t) < 5 * 60 end
+-- 2.0.9: the game said they're offline: forget hearing them, drop what's queued for them
+function N.Gone(name)
+  local k = (C.FirstName and C.FirstName(name)) or short(name):lower()
+  for n in pairs(heard) do if ((C.FirstName and C.FirstName(n)) or n) == k then heard[n] = nil end end
+  for i = #queue, 1, -1 do
+    local it = queue[i]
+    if it.kind == "WHISPER" and it.to and ((C.FirstName and C.FirstName(it.to)) or it.to) == k then table.remove(queue, i) end
+  end
+end
 function N.Tell(to, msg, bulk)
   if not (N.Enabled() and to and N.Heard(to)) then return false end
   if #msg > 255 then return false end
@@ -340,6 +405,7 @@ end
 local handlers = {}
 -- N.On("F", function(from, fields, raw, how) ... end)
 function N.On(kind, fn) handlers[kind] = handlers[kind] or {}; table.insert(handlers[kind], fn) end
+N._handlers = handlers -- (tests)
 local function split(msg)
   local out = {}
   for f in (msg .. "|"):gmatch("([^|]*)|") do out[#out + 1] = f end
@@ -348,6 +414,7 @@ end
 N.Split = split
 local function dispatch(from, msg, how)
   heard[from:lower()] = C.Now()
+  C.LearnName(from)
   local kind = msg:match("^([^|]+)")
   for _, fn in ipairs(handlers[kind or ""] or {}) do
     local ok, err = pcall(fn, from, split(msg), msg, how)

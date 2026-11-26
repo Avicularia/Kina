@@ -129,9 +129,27 @@ end
 
 local function addLines(tip, id)
   local r = C.Item(id)
-  if not r then return end
   -- 1.5.4 (Taylor): one clean block, headed by the Kina coin
-  tip:AddLine("|TInterface\\AddOns\\Kina\\Media\\KinaLogo:14:14|t |cffffcf55Kina|r", 1, 1, 1)
+  local head = "|TInterface\\AddOns\\Kina\\Media\\KinaLogo:14:14|t |cffffcf55Kina|r"
+  if not r then
+    -- 2.0.11: an item Kina has no record of can still be a quest item
+    -- (collected first, so an item with nothing to say gets no Kina block at all)
+    if C.QuestItems then
+      local rows = {}
+      local rec = { AddDoubleLine = function(_, ...) rows[#rows + 1] = { 2, ... } end, AddLine = function(_, ...) rows[#rows + 1] = { 1, ... } end }
+      local ok, any = pcall(C.QuestItems.Lines, rec, id)
+      if ok and any then
+        tip:AddLine(head, 1, 1, 1)
+        for _, row in ipairs(rows) do
+          if row[1] == 2 then tip:AddDoubleLine(unpack(row, 2)) else tip:AddLine(unpack(row, 2)) end
+        end
+      end
+    end
+    return
+  end
+  tip:AddLine(head, 1, 1, 1)
+  -- 2.0.11 (Taylor): the quest an item is for, its zone and level, and whether you still have it
+  if C.QuestItems then pcall(C.QuestItems.Lines, tip, id) end
 
   -- Vendor
   local v, how = C.VendorPrice(id)
@@ -146,14 +164,25 @@ local function addLines(tip, id)
   local mi, who, scanT = C.MarketItem(id)
   if r.bind == 1 or r.bind == 4 then
     tip:AddDoubleLine("Auction", "soulbound: can't auction", LABEL[1], LABEL[2], LABEL[3], WARN[1], WARN[2], WARN[3])
-  elseif mi and mi.m then
-    local net, price, cut, risk = C.AHNet(id, 1)
-    tip:AddDoubleLine("Auction (" .. (mi.q or mi.n or 0) .. " listed)", C.Money(mi.m), LABEL[1], LABEL[2], LABEL[3], GOOD[1], GOOD[2], GOOD[3])
+  elseif (mi and mi.m) or (C.Transport and C.Transport.NeutralFresh() and C.Transport.NeutralItem(id)) then
+    -- 2.1.0 (Taylor: "Auction Price (z) where z is which auction house wins the price less
+    -- the fees and taxes"): what a sale keeps at the winning house, after its cut and the
+    -- deposit you lose when ~30% of listings expire
+    local net, price, cut, risk, house = C.AHNet(id, 1)
+    local Tr = C.Transport
+    local hname = Tr and Tr.HouseName(house) or "auction house"
     if net then
-      -- what you actually keep: price used, minus the cut, minus the deposit you lose
-      -- when ~30% of listings expire
-      tip:AddDoubleLine(string.format("   you keep (%s - %s cut - %s deposit risk)", C.Money(price), C.Money(cut or 0), C.Money(risk or 0)),
-        C.Money(net), DIM[1], DIM[2], DIM[3], GOOD[1], GOOD[2], GOOD[3])
+      tip:AddDoubleLine("Auction price (" .. hname .. ")", C.Money(net), LABEL[1], LABEL[2], LABEL[3], GOOD[1], GOOD[2], GOOD[3])
+      local listed = (house == "bb") and Tr.NeutralItem(id) or mi
+      tip:AddLine(string.format("   %s listed (%d), - %s cut - %s deposit risk", C.Money(price), (listed and (listed.q or listed.n)) or 0,
+        C.Money(cut or 0), C.Money(risk or 0)), DIM[1], DIM[2], DIM[3])
+      -- the other house, when both count
+      if Tr and Tr.NeutralFresh() then
+        local other = (house == "bb") and Tr.HomeNet(id) or Tr.BBNet(id)
+        if other then tip:AddLine(string.format("   %s: %s after its cut", Tr.HouseName(house == "bb" and "home" or "bb"), C.Money(other)), DIM[1], DIM[2], DIM[3]) end
+      end
+    elseif mi and mi.m then
+      tip:AddDoubleLine("Auction (" .. (mi.q or mi.n or 0) .. " listed)", C.Money(mi.m), LABEL[1], LABEL[2], LABEL[3], GOOD[1], GOOD[2], GOOD[3])
     end
   elseif C.market.scanTime or (C.Share and next(C.Share.DB().authors)) then
     tip:AddDoubleLine("Auction", "not in last scan", LABEL[1], LABEL[2], LABEL[3], DIM[1], DIM[2], DIM[3])

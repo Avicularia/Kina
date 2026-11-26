@@ -15,7 +15,9 @@ local function setStrata(f, strata, depth)
   end
 end
 -- The farm widget is a HUD: it stays on its own layer and is never raised or lowered.
-local NAMES = { "KinaFrame", "KinaDetail", "KinaMenu" }
+-- 2.0.20 (Taylor: "the prices tab need to open on top of the main tab, in front of it"):
+-- Prices is raised with Kina, after the main window, so it is always in front of it
+local NAMES = { "KinaFrame", "KinaDetail", "KinaPrices", "KinaMenu" }
 local onTop = true
 
 local function frames()

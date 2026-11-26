@@ -83,7 +83,7 @@ end
 S.DB = db
 
 local function myName()
-  local n, r = UnitName and UnitName("player"), GetRealmName and GetRealmName()
+  local n, r = UnitName and UnitName("player"), C.Realm()
   return (n or "?") .. "-" .. ((r or "?"):gsub("%s", ""))
 end
 
@@ -145,10 +145,10 @@ local function vnum(v)
   return a and (tonumber(a) * 1e6 + tonumber(b) * 1e3 + tonumber(c)) or 0
 end
 -- can everyone this goes to take lanes? (a whisper: that player; the group: every Kina in it)
-function S.LanesOK(channel, target)
+function S.LanesOK(channel, target, minVer)
   local F = C.FarmSync
   if not (F and F.KinaVersionOf) then return false end
-  local need = vnum(LANE_MIN)
+  local need = vnum(minVer or LANE_MIN)
   if channel == "WHISPER" then return vnum(F.KinaVersionOf(target) or "") >= need end
   if channel ~= "PARTY" and channel ~= "RAID" then return false end
   local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
@@ -192,11 +192,15 @@ function S.Progress()
   end
   if best then return best end
   local q = #queue + #bulk
-  if q == 0 then peakQ = 0; return nil end
+  if q == 0 then peakQ = 0; S.sendT0 = nil; return nil end
   if S.dumping and S.dumping.M then
     if q > peakQ then peakQ = q end
-    -- about one message a second goes out (the game's limit)
-    return { dir = "out", pct = peakQ > 0 and math.floor((peakQ - q) * 100 / peakQ) or 0, eta = q }
+    -- 2.0.15b (Taylor: "15 minutes" one minute, "4 minutes" the next): the time left comes
+    -- from how fast it's actually going (up to 8 lanes at once), not 1 a second
+    S.sendT0 = S.sendT0 or now
+    local took, done = now - S.sendT0, peakQ - q
+    local eta = (took >= 4 and done >= 8) and math.max(1, math.floor(q * took / done + 0.5)) or nil
+    return { dir = "out", pct = peakQ > 0 and math.floor(done * 100 / peakQ) or 0, eta = eta }
   end
 end
 
@@ -220,6 +224,7 @@ local function sendLanes(dt)
       laneTokens[i] = laneTokens[i] - 1
       local ok, result = pcall(C_ChatInfo.SendAddonMessage, lp, it.msg, it.channel, it.target)
       if ok and THROTTLED and result == THROTTLED then table.insert(bulk, 1, it); laneTokens[i] = 0
+        if S.sendStat then S.sendStat.throttled = (S.sendStat.throttled or 0) + 1 end
       else
         S.sent = (S.sent or 0) + 1
         if ok and C.NetLog then pcall(C.NetLog, "out", it.channel, it.target, it.msg) end
@@ -229,6 +234,16 @@ local function sendLanes(dt)
   if #bulk == 0 and S.laneEnd then
     -- the end marker goes once every part is out
     local e = S.laneEnd; S.laneEnd = nil
+    -- 2.0.19: how long each scan took to send, kept for tuning (the last 10)
+    local st = S.sendStat
+    if st and C.db then
+      st.secs = math.floor(((GetTime and GetTime() or 0) - (st.t0 or 0)) * 10 + 0.5) / 10
+      st.t, st.t0 = C.Now(), nil
+      C.db.sendLog = type(C.db.sendLog) == "table" and C.db.sendLog or {}
+      table.insert(C.db.sendLog, 1, st)
+      while #C.db.sendLog > 10 do table.remove(C.db.sendLog) end
+      S.sendStat = nil
+    end
     enqueue(e.msg, e.channel, e.target, true)
   end
 end
@@ -346,6 +361,13 @@ local function hello(channel, target, force)
       local ok, st = pcall(function() return P and P.State() end)
       if not (ok and st) then return "" end
       return b36(math.floor(st.xp or 0)) .. "." .. b36(math.floor(st.renown or 0)) .. "." .. b36(math.floor(st.gold or 0)) .. "s"
+    end)(),
+    -- 2.0.15: the banner (best gold per hour this season, in copper/100 = 1/100 gold)
+    (function()
+      local P = C.Progress
+      local ok, st = pcall(function() return P and P.State() end)
+      if not (ok and st and st.best) then return "" end
+      return b36(math.floor(((C.Progress and C.Progress.BestGph and C.Progress.BestGph()) or 0) * 100)) .. "b" -- (2.0.19: your share)
     end)() }, "|") -- ("x" / "s" end their fields: a hello cut short can't send a wrong number)
   if #msg > 250 then msg = msg:sub(1, 250):gsub("|[^|]*$", "") end
   enqueue(msg, channel, target, true)
@@ -400,9 +422,47 @@ local function ladderIn(s)
   return L[1] and L or nil
 end
 S.LadderIn = ladderIn
+-- 2.0.19 (Taylor: "lets make everything faster ... always focus on improvements in this
+-- area"): a smaller form of the scan for Kinas 2.0.19 and newer (about a third less to
+-- send): the second price only when it differs, empty fields for zeros, and each listing
+-- level's price as the step up from the one before (smaller numbers, fewer characters).
+-- id:m:d:q:n:L   d empty = same as m, q empty = 0, n empty = same as q
+-- L = p.q[.c],...  p = the step up from the level before (the first: from m); c left out
+-- when it equals q
+local COMPACT_MIN = "2.0.19"
+local function ladderOutN(L, base)
+  if not L or not L[1] then return "" end
+  local out, last = {}, math.floor(base or 0)
+  for i = 1, math.min(8, #L) do
+    local st = L[i]
+    local p = math.ceil(st[1])
+    if p < last then last = 0 end -- (out of order: fall back to the full price)
+    local q, c = st[2] or 1, st[3] or 1
+    out[i] = b36(p - last) .. "." .. b36(q) .. (c ~= q and ("." .. b36(c)) or "")
+    last = p
+  end
+  return table.concat(out, ",")
+end
+local function ladderInN(s, base)
+  if not s or s == "" then return nil end
+  local L, last = {}, math.floor(base or 0)
+  for lv in s:gmatch("[^,]+") do
+    local p, q, c = lv:match("^(%w+)%.(%w+)%.?(%w*)$")
+    p = p and n36(p, 1e11)
+    if p and #L < 8 then
+      q = n36(q, 1e7) or 1
+      last = last + p
+      if last > 0 then L[#L + 1] = { last, q, (c ~= "" and n36(c, 1e6)) or q } end
+    end
+  end
+  return L[1] and L or nil
+end
+S.LadderOutN, S.LadderInN = ladderOutN, ladderInN
 local function sendMarket(ch, to, uid)
   local m = C.market
   local parts = {}
+  local compact = S.LanesOK(ch, to, COMPACT_MIN)
+  local zeroS = function(v) v = math.floor(tonumber(v) or 0); return v > 0 and b36(v) or "" end
   for id, mi in pairs(m.items or {}) do
     if mi.m or mi.sl then
       -- listings only where Kina's math uses them: gear (disenchant / resale) gets 8
@@ -420,8 +480,15 @@ local function sendMarket(ch, to, uid)
       local L = n > 0 and mi.l or nil
       local trimmed = L and {} or nil
       if L then for i = 1, math.min(n, #L) do trimmed[i] = L[i] end end
-      parts[#parts + 1] = table.concat({ b36(id), b36(mi.m or 0), b36(mi.d or mi.m or 0), b36(mi.q or 0), b36(mi.n or 0),
-        ladderOut(trimmed), "" }, ":")
+      if compact then
+        local d = mi.d or mi.m or 0
+        local q, nn = math.floor(mi.q or 0), math.floor(mi.n or 0)
+        parts[#parts + 1] = table.concat({ b36(id), zeroS(mi.m), (d ~= (mi.m or 0)) and zeroS(d) or "", zeroS(q),
+          (nn == q) and "" or b36(nn), ladderOutN(trimmed, mi.m) }, ":")
+      else
+        parts[#parts + 1] = table.concat({ b36(id), b36(mi.m or 0), b36(mi.d or mi.m or 0), b36(mi.q or 0), b36(mi.n or 0),
+          ladderOut(trimmed), "" }, ":")
+      end
     end
   end
   local ver = m.scanTime or 0
@@ -433,12 +500,18 @@ local function sendMarket(ch, to, uid)
     -- end once the last part is out
     local ok = C_ChatInfo and pcall(C_ChatInfo.SendAddonMessage, PREFIX, begin, ch, to)
     if not ok then enqueue(begin, ch, to, true) end
-    local msg, fresh, head = "M|" .. uid .. "|", true, "M|" .. uid .. "|"
+    -- (every single letter is taken, so the compact form is "M" with a "~" in front)
+    local head = "M|" .. uid .. "|" .. (compact and "~" or "")
+    local msg, fresh = head, true
+    S.sendStat = { t0 = GetTime and GetTime() or 0, parts = #parts, bytes = 0, msgs = 0, compact = compact, to = to or ch }
     for _, p in ipairs(parts) do
-      if #msg + #p + 1 > MAX_LEN and not fresh then enqueueBulk(msg, ch, to); msg = head; fresh = true end
+      if #msg + #p + 1 > MAX_LEN and not fresh then
+        enqueueBulk(msg, ch, to); S.sendStat.bytes = S.sendStat.bytes + #msg; S.sendStat.msgs = S.sendStat.msgs + 1
+        msg = head; fresh = true
+      end
       msg = msg .. (fresh and "" or ";") .. p; fresh = false
     end
-    if not fresh then enqueueBulk(msg, ch, to) end
+    if not fresh then enqueueBulk(msg, ch, to); S.sendStat.bytes = S.sendStat.bytes + #msg; S.sendStat.msgs = S.sendStat.msgs + 1 end
     S.laneEnd = { msg = finish, channel = ch, target = to }
     return
   end
@@ -569,7 +642,10 @@ function S.MyFlags()
   local ok, m = pcall(function() return C.Rep and C.Rep.Mine and C.Rep.Mine() end)
   return (C.Mentor and C.Mentor.NewFlag and C.Mentor.NewFlag() or "")
     .. ((C.TrackOnly and C.TrackOnly()) and "t" or "") -- 0.9.20: tracker only
-    .. ((C.Unlocked and C.Unlocked() and C.PUBLIC) and "d" or "") -- 0.9.23: a team (dev) install
+    -- 0.9.23: a team (dev) install. 2.0.12 (Taylor's beta froze Rippy's CurseForge Kina,
+    -- "THEIR KINA IS OUT OF DATE"): every private/beta build is a team build too, so a
+    -- build nobody can download never tells a public Kina it's out of date
+    .. ((C.BETA or (C.Unlocked and C.Unlocked() and C.PUBLIC)) and "d" or "")
 end
 local standCache, standAt = nil, 0
 function S.MyXP()
@@ -770,6 +846,15 @@ local function onHello(from, rest, channel)
   if xs then a.xp = n36(xs, 99999999) or a.xp end
   local sx, sr, sg = (f[20] or ""):match("^(%w+)%.(%w+)%.(%w+)s$")
   if sx then a.season = { xp = n36(sx, 1e9) or 0, renown = n36(sr, 1e9) or 0, gold = n36(sg, 1e9) or 0, t = C.Now() } end
+  local sb = (f[21] or ""):match("^(%w+)b$")
+  if sb and a.season then a.season.gph = (n36(sb, 1e9) or 0) / 100 end
+  -- 2.0.20: the leaderboard hears it too, first-hand
+  if a.season and C.Board and C.Board.Note then
+    pcall(C.Board.Note, { n = from, r = a.season.renown or 0, g = math.floor((a.season.gph or 0) * 10000),
+      f = math.floor((a.season.gold or 0) * 100), t = C.Now(), v = a.ver,
+      -- 2.1.3: a Kina older than 2.0.13 doesn't send gold per hour: shown as "-", not 0g
+      ng = a.season.gph == nil and 1 or nil }, nil)
+  end
   if S.onHello then pcall(S.onHello, from, uid, a, channel) end
   -- 1.2.6: someone in my group runs a newer Kina: say so once per session
   if f[14] and f[14]:match("^%d+%.%d+%.%d+$") and inMyGroup(from) and (tonumber(f[17]) or 0) > (C.BUILD or 0) and (tonumber(f[17]) or 0) <= (C.BUILD or 0) + BUILD_JUMP then
@@ -844,7 +929,9 @@ local function onBegin(from, rest)
     rows = {}, npcs = {}, time = GetTime and GetTime() or 0, from = from }
 end
 
+local onMarketN
 local function onMarket(from, rest)
+  if rest:match("^%x+|~") then return onMarketN(from, (rest:gsub("|~", "|", 1))) end -- 2.0.19: the compact form
   local uid, list = rest:match("^(%x+)|(.*)$")
   local b = uid and buf(from, uid, "M")
   if not b then return end
@@ -860,6 +947,26 @@ local function onMarket(from, rest)
   end
 end
 
+-- 2.0.19: the compact form (see sendMarket)
+onMarketN = function(from, rest)
+  local uid, list = rest:match("^(%x+)|(.*)$")
+  local b = uid and buf(from, uid, "M")
+  if not b then return end
+  b.last = GetTime and GetTime() or 0
+  for part in list:gmatch("[^;]+") do
+    local id, m, dd, q, n, L = part:match("^(%w+):(%w*):(%w*):(%w*):(%w*):?([%w%.,]*)$")
+    id, m = n36(id, 10000000), (m and m ~= "") and n36(m, 1e11) or 0
+    if id and m then
+      local sl = nil
+      local qq = (q ~= "" and n36(q, 1e7)) or 0
+      local row = { m = (m > 0) and m or nil, d = (dd ~= "" and n36(dd, 1e11)) or m, q = qq,
+        n = (n ~= "" and n36(n, 1e6)) or qq, l = ladderInN(L, m) or {}, sl = sl }
+      if row.m then b.rows[id] = row end
+    end
+  end
+end
+
+S._sendMarket, S._onMarketN, S._onMarket = sendMarket, onMarketN, onMarket -- (tests)
 local function npcBuf(b, npc)
   local e = b.npcs[npc]
   if not e then e = { items = {}, ppItems = {}, skinItems = {} }; b.npcs[npc] = e end
@@ -1195,6 +1302,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if (prefix ~= PREFIX and not isLane[prefix]) or type(text) ~= "string" or isMe(from) then return end
     -- Forever sends "First Surname" with no realm: use the group member's Name-Realm
     if C.NetLog then pcall(C.NetLog, "in", channel, from, text) end -- (the full "First Surname" for the log)
+    if C.LearnName then pcall(C.LearnName, from) end -- 2.1.2: their surname, for profiles
     if type(from) == "string" and from:find(" ") then from = (C.GroupMemberName and C.GroupMemberName(from)) or from:match("^(%S+)") end
     if C.Heard then C.Heard(from) end
     if channel == "GUILD" and not db().opts.guild and not text:match("^T|") then return end
@@ -1462,6 +1570,21 @@ end
 -- digests (dgs) and tamper notes (tmp) still travel as T.
 S.DEBT_ACTIONS = { req = true, cnf = true, fgv = true, fga = true, dsp = true, dsn = true, dsa = true, rcv = true,
   plea = true, ext = true, pla = true, exa = true, crh = true, crd = true, clk = true }
+-- 2.1.2: a farm-log catch-up entry over the fast lanes, ahead of any scan waiting there
+-- (one line of the log per message, in order; the receiver re-orders anything that
+-- arrives out of turn). Falls back to the normal queue.
+function S.SendSyncBulk(payload)
+  local ch = groupChannel()
+  if not ch or not db().opts.enabled then return end
+  local msg = table.concat({ "S", db().uid, "", payload }, "|")
+  if #msg > 255 then return end
+  if not S.LanesOK(ch, nil) then return enqueue(msg, ch, nil, true) end
+  for _, q in ipairs(bulk) do if q.msg == msg then return end end
+  local pos = 1
+  while bulk[pos] and bulk[pos].sync do pos = pos + 1 end
+  table.insert(bulk, pos, { msg = msg, channel = ch, sync = true })
+  if S.sender then S.sender:Show() end
+end
 -- settle request: "T|uid|to|action|amount|label"
 function S.SendSettle(action, to, amt, label)
   if S.DEBT_ACTIONS[action or ""] then return end

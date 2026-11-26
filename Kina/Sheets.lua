@@ -137,6 +137,26 @@ local function youPage(p, them)
   standT:SetPoint("TOP", plate.what, "BOTTOM", 0, -6); standT:SetPoint("LEFT", idBox, "LEFT", 10, 0); standT:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
   local lvl = text(idBox, "GameFontNormalLarge", "CENTER"); if lvl.SetWordWrap then lvl:SetWordWrap(true) end -- (1.0.5: the founder line was cut to "Kina II...")
   lvl:SetPoint("TOP", standT, "BOTTOM", 0, -6); lvl:SetPoint("LEFT", idBox, "LEFT", 10, 0); lvl:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+  -- 2.0.15 (Taylor: "the title and sub-titles like Founder should have fancy plates"):
+  -- the name, the rank title and the Founder badge each sit on a plate
+  local SC = C.Showcase
+  local namePlate = SC and SC.Plate(idBox, "name", 230, 40)
+  local titlePlate = SC and SC.Plate(idBox, "title", 200, 26)
+  local badgePlate = SC and SC.Plate(idBox, "badge", 150, 22)
+  if namePlate then
+    portraitBox:SetFrameLevel(idBox:GetFrameLevel() + 4)
+    for _, pl in ipairs({ namePlate, titlePlate, badgePlate }) do pl:SetFrameLevel(idBox:GetFrameLevel() + 12) end
+    -- (each label fills its plate, centred: Taylor saw the name off-centre)
+    for _, pr in ipairs({ { name, namePlate, 1 }, { standT, titlePlate, 0 }, { lvl, badgePlate, 0 } }) do
+      local fs, pl = pr[1], pr[2]
+      fs:SetParent(pl); fs:ClearAllPoints(); fs:SetPoint("LEFT", pl, "LEFT", 14, pr[3]); fs:SetPoint("RIGHT", pl, "RIGHT", -14, pr[3])
+      fs:SetJustifyH("CENTER"); if fs.SetWordWrap then fs:SetWordWrap(false) end
+      if fs.SetShadowOffset then fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 0.9) end -- 2.0.20: easy to read on the metal
+    end
+    line:ClearAllPoints(); line:SetPoint("TOP", namePlate, "BOTTOM", 0, -4)
+    titlePlate:SetPoint("TOP", line, "BOTTOM", 0, -6)
+    badgePlate:SetPoint("TOP", titlePlate, "BOTTOM", 0, -6)
+  end
   -- 2.0 (Taylor: it sat under the Kina level and founder title): top-left, across from Try
   local share = text(idBox, "GameFontHighlightSmall"); share:SetPoint("TOPLEFT", 14, -14)
   -- someone else's page: back, commend / bad, whisper
@@ -144,15 +164,53 @@ local function youPage(p, them)
   back:SetScript("OnClick", function() if C.UI then C.UI.youWho = nil end; if C.Refresh then C.Refresh() end end)
   local wh = CreateFrame("Button", nil, idBox, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(wh) end; wh:SetSize(90, 24); wh:SetText("Whisper"); wh:SetPoint("BOTTOM", idBox, "BOTTOM", 0, 12)
 
-  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(156)
-  local h1 = heading(prog, "Kina level"); h1:SetPoint("TOPLEFT", 16, -14)
-  local xpBar = bar(prog, 0.85, 0.65, 0.15, true); xpBar:SetPoint("TOPLEFT", 16, -48); xpBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local xpNote = text(prog, "GameFontHighlightSmall"); xpNote:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -6); xpNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local h2 = heading(prog, "Standing", true); h2:SetPoint("TOPLEFT", 16, -90)
-  local stBar = bar(prog, 0.30, 0.62, 0.95, true); stBar:SetPoint("TOPLEFT", 16, -110); stBar:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
-  local stNote = text(prog, "GameFontHighlightSmall"); stNote:SetPoint("TOPLEFT", stBar, "BOTTOMLEFT", 0, -7); stNote:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+  -- 2.0.15 (Taylor: three tracks, all on the profile): Renown (the ring), best gold per
+  -- hour (the banner), gold farmed (the coin hoard), one row each: name, bar, what's next
+  local prog = box(p); prog:SetPoint("TOPLEFT", idBox, "TOPRIGHT", 12, 0); prog:SetPoint("RIGHT", p, "RIGHT", 0, 0); prog:SetHeight(196)
+  local h1 = heading(prog, "Season 1"); h1:SetPoint("TOPLEFT", 16, -14)
+  local hReset = text(prog, "GameFontDisableSmall", "RIGHT"); hReset:SetPoint("TOPRIGHT", -16, -18); hReset:SetText("all three reset each season")
+  local tracks = {}
+  for i, def in ipairs({ { "Renown", "the ring and title", 0.30, 0.52, 0.90 }, { "Best gold / hour", "the banner", 0.85, 0.60, 0.18 }, { "Gold farmed", "the coin hoard", 0.85, 0.60, 0.18 } }) do
+    local y = -40 - (i - 1) * 50
+    local lab = text(prog, "GameFontHighlight"); lab:SetPoint("TOPLEFT", 16, y); lab:SetText(def[1] .. GREY .. "  ·  " .. def[2] .. "|r")
+    local val = text(prog, "GameFontHighlightSmall", "RIGHT"); val:SetPoint("TOPRIGHT", -16, y)
+    local br = bar(prog, def[3], def[4], def[5], true); br:SetPoint("TOPLEFT", 16, y - 16); br:SetPoint("RIGHT", prog, "RIGHT", -16, 0); br:SetHeight(10)
+    local nt = text(prog, "GameFontDisableSmall"); nt:SetPoint("TOPLEFT", br, "BOTTOMLEFT", 0, -3); nt:SetPoint("RIGHT", prog, "RIGHT", -16, 0)
+    if nt.SetWordWrap then nt:SetWordWrap(false) end
+    tracks[i] = { lab = lab, val = val, bar = br, note = nt }
+  end
+  -- (the old names, kept so the rest of the page keeps working)
+  local xpBar, xpNote = tracks[1].bar, tracks[1].note
+  local h2 = { SetText = function() end }
+  local stBar, stNote = tracks[2].bar, text(prog, "GameFontDisableSmall")
+  stNote:SetPoint("BOTTOMRIGHT", prog, "BOTTOMRIGHT", -16, 6)
+  -- fills the three rows: renown, best gold an hour (in gold), gold farmed (in gold)
+  local function seasonRows(renown, gph, gold)
+    local PG = C.Progress
+    local function nn(v) v = math.floor((v or 0) + 0.5); return BreakUpLargeNumbers and BreakUpLargeNumbers(v) or tostring(v) end
+    local function gtext(g) return C.Money(math.floor((g or 0) * 10000 + 0.5)) end
+    local r, cur, nx = PG.Rank(renown or 0)
+    tracks[1].bar:Set(nx and math.max(0, math.min(1, ((renown or 0) - cur.at) / math.max(1, nx.at - cur.at))) or 1, "")
+    tracks[1].val:SetText(nx and (nn(renown) .. " / " .. nn(nx.at)) or nn(renown))
+    tracks[1].note:SetText(((PG.QCOLOR[cur.q] or "") .. cur.title .. "|r") .. GREY .. (nx and ("  ·  next: " .. nx.title .. " in " .. nn(nx.at - (renown or 0))) or "  ·  top rank") .. "  ·  gold x time x commendations x bond|r")
+    local function ladder(i, v, tiers, unit)
+      local lv = PG.TierOf(v or 0, tiers)
+      local nxt, prev = tiers[lv + 1], tiers[lv] or 0
+      tracks[i].bar:Set(nxt and math.max(0, math.min(1, ((v or 0) - prev) / math.max(0.0001, nxt - prev))) or 1, "")
+      tracks[i].val:SetText(gtext(v) .. (nxt and (" / " .. gtext(nxt)) or "") .. unit)
+      return lv, nxt
+    end
+    local S1 = C.Season
+    local bTiers, hTiers
+    for _, tr in ipairs(S1.tracks) do if tr.id == "banner" then bTiers = tr.tiers elseif tr.id == "hoard" then hTiers = tr.tiers end end
+    local bl, bn = ladder(2, gph, bTiers or {}, " an hour")
+    tracks[2].note:SetText(GREY .. "banner " .. bl .. " of " .. #(bTiers or {}) .. (bn and ("  ·  next at " .. gtext(bn) .. " an hour") or "  ·  top banner") .. "  ·  your share, best farm this season|r")
+    local hl, hn = ladder(3, gold, hTiers or {}, "")
+    tracks[3].note:SetText(GREY .. "hoard " .. hl .. " of " .. #(hTiers or {}) .. (hn and ("  ·  next at " .. gtext(hn)) or "  ·  top hoard") .. "  ·  every farm this season|r")
+    return r, bl, hl
+  end
 
-  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -12); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(212)
+  local rec = box(p); rec:SetPoint("TOPLEFT", prog, "BOTTOMLEFT", 0, -10); rec:SetPoint("RIGHT", p, "RIGHT", 0, 0); rec:SetHeight(184)
   local h4 = heading(rec, "Record"); h4:SetPoint("TOPLEFT", 16, -14)
   -- 0.9.18: Kina Partner (who, the bonus, the bond)
   -- (1.0.0: the partner line is a record row now; it overlapped the rows under the heading)
@@ -175,16 +233,20 @@ local function youPage(p, them)
   end
   -- 0.9.18: partner up / end it, on someone else's profile
   local pairB = CreateFrame("Button", nil, rec, "UIPanelButtonTemplate"); if C.Skin then C.Skin.Button(pairB) end
-  pairB:SetSize(110, 22); pairB:SetPoint("TOPRIGHT", -14, -10); pairB:Hide()
+  pairB:SetSize(110, 22); pairB:Hide()
+  -- 2.0.15: Whisper and Partner up side by side at the foot of the card
+  pairB:SetParent(idBox); pairB:SetFrameLevel(idBox:GetFrameLevel() + 14); pairB:SetSize(120, 24)
+  pairB:SetPoint("BOTTOMRIGHT", idBox, "BOTTOM", 60 + 63, 12)
+  wh:ClearAllPoints(); wh:SetSize(120, 24); wh:SetPoint("BOTTOMRIGHT", idBox, "BOTTOM", -3, 12); wh:SetFrameLevel(idBox:GetFrameLevel() + 14)
   pairB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  local recL, recR = {}, {}
-  local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -50); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 10)
-  local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -50); colB:SetPoint("BOTTOMRIGHT", -16, 10)
+  local recL, recR, recTip = {}, {}, {}
+  local colA = CreateFrame("Frame", nil, rec); colA:SetPoint("TOPLEFT", 16, -44); colA:SetPoint("BOTTOMRIGHT", rec, "BOTTOM", -10, 6)
+  local colB = CreateFrame("Frame", nil, rec); colB:SetPoint("TOPLEFT", rec, "TOP", 10, -44); colB:SetPoint("BOTTOMRIGHT", -16, 6)
   for i = 1, 16 do -- (1.5.4: two columns of six; 0.9.10: seven; 2.0: eight, for net worth)
     local col = i <= 8 and colA or colB
-    local y = -((i - 1) % 8) * 20
+    local y = -((i - 1) % 8) * 17
     if (i - 1) % 2 == 0 then -- 1.5.5: zebra rows
-      local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 4); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(18)
+      local z = col:CreateTexture(nil, "BACKGROUND"); z:SetPoint("TOPLEFT", -6, y + 3); z:SetPoint("RIGHT", col, "RIGHT", 6, 0); z:SetHeight(16)
       z:SetColorTexture(1, 0.8, 0.51, 0.04)
     end
     local l = text(col, "GameFontHighlightSmall"); l:SetPoint("TOPLEFT", 0, y)
@@ -212,11 +274,16 @@ local function youPage(p, them)
     -- 2.0 (Taylor: "everything is stepping on everything else"): the portrait is sized so
     -- the whole column fits: ring and laurels, then name, class, gold plate, rank, Kina
     -- level and title (about 200 high) above the bottom edge
-    local ps = math.max(0.7, math.min(1.7, (iw - 30) / 320, (H - 96 - 214) / 262))
+    local ps = math.max(0.6, math.min(1.5, (iw - 30) / 320, (H - 96 - 200) / 262))
     portraitBox:SetScale(ps); portraitBox:ClearAllPoints(); portraitBox:SetPoint("TOP", idBox, "TOP", 0, -96 / ps)
     -- below the laurels, which grow with the ring
-    name:ClearAllPoints(); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62 * ps)
-    name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+    if namePlate then
+      namePlate:ClearAllPoints(); namePlate:SetPoint("TOP", portraitBox, "BOTTOM", 0, -40 * ps)
+      namePlate:SetWidth(math.min(iw - 40, 260))
+    else
+      name:ClearAllPoints(); name:SetPoint("TOP", portraitBox, "BOTTOM", 0, -62 * ps)
+      name:SetPoint("LEFT", idBox, "LEFT", 10, 0); name:SetPoint("RIGHT", idBox, "RIGHT", -10, 0)
+    end
   end
   local function setRows(rows)
     relayout()
@@ -229,6 +296,27 @@ local function youPage(p, them)
       r:SetText(x and x[2] or "")
       -- a shorter form when the full one doesn't fit
       if x and x[3] and (r:GetStringWidth() or 0) > colW - l:GetWidth() - 8 then r:SetText(x[3]) end
+      -- 2.0.19 (Taylor: "I want to see the bonuses listed out in tooltip fashion when I hover"):
+      -- a row can carry a tooltip (x.tip: a title and lines)
+      recTip[i] = recTip[i] or (function()
+        local b = CreateFrame("Frame", nil, l:GetParent())
+        b:SetPoint("TOPLEFT", l, "TOPLEFT", -4, 3); b:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 4, -3)
+        b:SetScript("OnEnter", function(self)
+          local tp = self.tip
+          if not (tp and GameTooltip) then return end
+          GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(tp[1], 1, 0.82, 0.3)
+          for j = 2, #tp do
+            local ln = tp[j]
+            if type(ln) == "table" then GameTooltip:AddDoubleLine(ln[1], ln[2], 1, 1, 1, 1, 1, 1)
+            else GameTooltip:AddLine(ln, 0.85, 0.85, 0.85, true) end
+          end
+          GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        return b
+      end)()
+      recTip[i].tip = x and x.tip or nil
+      if recTip[i].EnableMouse then recTip[i]:EnableMouse(recTip[i].tip and true or false) end
     end
   end
   local function setProfs(profs, mine)
@@ -243,6 +331,33 @@ local function youPage(p, them)
       pb[3]:ClearAllPoints(); pb[3]:SetPoint("TOPLEFT", x0, y0)
       pb[1]:ClearAllPoints(); pb[1]:SetPoint("TOPLEFT", x0 + 32, y0 - 2); pb[1]:SetWidth(half - 32)
       pb[2]:ClearAllPoints(); pb[2]:SetPoint("TOPLEFT", pb[1], "BOTTOMLEFT", 0, -3); pb[2]:SetWidth(half - 32)
+      -- 2.0.19 (Taylor): hover a profession for what it has earned (your own profile only)
+      pb.hover = pb.hover or (function()
+        local h = CreateFrame("Frame", nil, profBox)
+        h:SetScript("OnEnter", function(self)
+          if not (self.prof and GameTooltip) then return end
+          local PG = C.Progress
+          local tot = PG and PG.ProfTotals and PG.ProfTotals() or {}
+          local x2 = tot[self.prof]
+          GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(self.prof, 1, 0.82, 0.3)
+          if x2 then
+            GameTooltip:AddDoubleLine("Earned, all time", C.Money(x2.total), 1, 1, 1, 1, 0.82, 0.3)
+            GameTooltip:AddDoubleLine("This season", C.Money(x2.season), 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Farms with it", tostring(x2.farms), 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Best farm", C.Money(x2.best) .. (x2.bestLabel and ("  " .. x2.bestLabel) or ""), 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddLine("What it gathered in your farms, at today's prices. Each farm's share is in its row on the Session tab (search the profession's name).", 0.7, 0.7, 0.7, true)
+          else
+            local gathering = { Skinning = true, Mining = true, Herbalism = true, Fishing = true, Lockpicking = true }
+            GameTooltip:AddLine(gathering[self.prof] and "Nothing gathered in a farm yet." or "Kina counts what gathering brings in during your farms. Crafting isn't counted yet.", 0.85, 0.85, 0.85, true)
+          end
+          GameTooltip:Show()
+        end)
+        h:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        return h
+      end)()
+      pb.hover:ClearAllPoints(); pb.hover:SetPoint("TOPLEFT", pb[3], "TOPLEFT", 0, 0); pb.hover:SetPoint("BOTTOMRIGHT", pb[2], "BOTTOMRIGHT", 0, 0)
+      pb.hover.prof = (x and mine) and x[1] or nil
+      if pb.hover.EnableMouse then pb.hover:EnableMouse(pb.hover.prof and true or false) end
       if x then
         pb[1]:SetText(string.format("%s  %s%d / 300|r", x[1], GREY, x[2])); pb[1]:Show(); pb[2]:Show(); pb[2]:Set(x[2] / 300, "")
         if C.Cos then pb[3]:SetTexture(C.Cos.ProfIcon(x[1])); pb[3]:Show() else pb[3]:Hide() end
@@ -252,20 +367,20 @@ local function youPage(p, them)
   end
   local function makeCos()
     if cos or not C.Cos then return end
-    cos = C.Cos.Portrait(portraitBox, portrait, { model = true }); C.Cos.Font(lvl, 22, "OUTLINE"); C.Cos.Font(name, 30, "OUTLINE")
+    cos = C.Cos.Portrait(portraitBox, portrait, { model = true }); C.Cos.Font(lvl, 13, ""); C.Cos.Font(name, 22, "OUTLINE"); C.Cos.Font(standT, 15, "")
     cos.plate:SetSize(PW * 0.66, PW * 0.33); C.Cos.Font(cos.num, math.floor(PW * 0.13), "THICKOUTLINE")
     cos.xpF = C.Cos.BarFrame(xpBar, "xp_bar"); cos.stF = C.Cos.BarFrame(stBar, "standing_bar")
     local pv = C.Cos.preview
     local function redo() if p.refresh then p.refresh() end end
-    local rings = {}
-    for _, st in ipairs({ "Unproven", "Vouched", "Reliable", "Trusted", "Honored", "Revered", "Exalted" }) do rings[#rings + 1] = { st, st } end
-    table.insert(rings, 1, { "(my real standing)", false })
-    local opts = {}
-    for _, x in ipairs(rings) do opts[#opts + 1] = { "Ring: " .. x[1], { "ring", x[2] } } end
-    for _, x in ipairs({ { "(real)", false }, { "none", "none" }, { "New player", "leaf" }, { "Mentor I", 1 }, { "Mentor II", 5 }, { "Mentor III", 10 }, { "Mentor IV", 20 }, { "Mentor V", 50 } }) do
-      opts[#opts + 1] = { "Badge: " .. x[1], { "badge", x[2] } }
+    -- 2.0.15b (Taylor: "the try menu still has all the old tracks"): the three season tracks
+    local PG = C.Progress
+    local opts = { { "Ring: (my real rank)", { "ring", false } } }
+    for i, rk in ipairs(C.Season.ranks) do
+      if i == 1 or i == 3 or i == 5 or i == 7 or i == 10 then opts[#opts + 1] = { "Ring: rank " .. i .. " " .. rk.title, { "ring", PG.RING_ART[i] } } end
     end
-    for _, x in ipairs({ { "(real)", false }, { "I", 1 }, { "XII", 12 }, { "XX", 20 } }) do opts[#opts + 1] = { "Level: " .. x[1], { "level", x[2] } } end
+    opts[#opts + 1] = { "Banner: (real)", { "banner", false } }
+    for _, b in ipairs({ 1, 3, 4, 6, 8 }) do opts[#opts + 1] = { "Banner: level " .. b, { "banner", b } } end
+    -- (2.0.19: no hoard art for now, so nothing to try)
     cos.try = C.Cos.Picker(idBox, "Try cosmetics", opts, function(v) pv[v[1]] = v[2] or nil; if v[1] == "ring" and C.Cos.UpdateGlows then C.Cos.UpdateGlows() end; redo() end)
     cos.try:SetPoint("TOPRIGHT", idBox, "TOPRIGHT", -8, -8)
     cos.bars = CreateFrame("Frame", nil, prog); cos.bars:Hide() -- (1.0.5: the bar-frame preview is gone)
@@ -291,12 +406,13 @@ local function youPage(p, them)
     -- 2.0.5: their 2.0 numbers (this season's Kina level and Renown) when their Kina sends them
     local PG = C.Progress
     local sea = PG and pr and pr.season
-    if sea then klv = (PG.Level(sea.xp)) end
+    if not sea and C.Board then sea = C.Board.SeasonOf(who) end -- 2.0.20: known from the leaderboard
+    if sea then klv = PG.RingOf(pr) end
     if cos then C.Cos.UpdatePortrait(cos, sname, (klv and klv > 0) and klv or 1, pr and pr.recruits); if not (klv and klv > 0) then cos.plate:Hide(); cos.num:Hide() else cos.plate:Show(); cos.num:Show() end
       if C.Cos.SetFounder then C.Cos.SetFounder(cos, pr and pr.dev) end
       if C.Cos.SetBond then C.Cos.SetBond(cos, C.Cos.BondFor(who)) end
       cos.xpF:Hide(); cos.stF:Hide() end
-    name:SetText(who)
+    name:SetText(C.FullName and C.FullName(who) or who)
     local cls = ch and ch.class and (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ch.class] or ch.class)
     line:SetText(ch and string.format("Level %s %s", tostring(ch.level or "?"), cls or "") or (GREY .. "no Kina heard from them yet|r"))
     local b = C.Profile and C.Profile.Between(who) or {}
@@ -304,44 +420,42 @@ local function youPage(p, them)
       )
     if C.Rules then
       C.Rules.Cover(portraitBox, type(stand) == "number" and stand <= (C.Rep.BLACKLIST or -1000))
-      local newest = math.max((C.Share and C.Share.newestBuild) or 0, C.BUILD or 0)
+      -- 2.0.12: measured against the newest build people can download, not this beta
+      local newest = math.max((C.Share and C.Share.newestBuild) or 0, (not C.BETA) and (C.BUILD or 0) or 0)
       local old = pr and pr.ver and ((pr.build or 0) < newest)
       C.Rules.Cover(p, old and true or false, "THEIR KINA IS OUT OF DATE\n\n|cffffffffThey earn no XP or standing until they update.|r")
     end
-    lvl:SetText(((klv == -1) and (ORANGE .. "Kina log damaged|r") or (GOLD .. "Kina " .. C.Rep.Roman((klv and klv > 0) and klv or 1) .. "|r"))
-      .. ((pr and pr.dev) and ("\n" .. C.Cos.FOUNDER) or ""))
-    -- 0.9.17 (Taylor): their XP toward the next level, when their Kina shares it
-    local txp, lv1 = pr and tonumber(pr.xp), (klv and klv > 0) and klv or 1
-    local lo, hi = C.Rep.XPFor and C.Rep.XPFor(lv1), C.Rep.XPFor and C.Rep.XPFor(lv1 + 1)
-    if txp and lo and hi and hi > lo and klv and klv > 0 then
-      xpBar:Set(math.max(0, math.min(1, (txp - lo) / (hi - lo))), string.format("%d / %d XP", txp, hi))
-    else xpBar:Set(1, "Kina " .. C.Rep.Roman(lv1)) end
-    xpNote:SetText(GREY .. "Their XP and standing are what their Kina reports (unverified).|r")
-    if snext then stBar:Set(math.max(0, math.min(1, ((stand or 0) - sat) / math.max(1, snext - sat))), string.format("%s  %d / %d", sname, stand or 0, snext))
-    else stBar:Set((stand or 0) < 0 and 0 or 1, string.format("%s  %d", sname, stand or 0)) end
-    h2:SetText(sea and "Renown" or "Standing")
+    -- 2.0.15: their season on the card (banner, hoard, plates) and in the three tracks
+    local SC = C.Showcase
+    lvl:SetText((pr and pr.dev) and (C.Cos.FOUNDER or "Kina Founder") or "")
+    if badgePlate then if pr and pr.dev then badgePlate:Show() else badgePlate:Hide() end end
     if sea then
-      local function nn(v) v = math.floor(v + 0.5); return BreakUpLargeNumbers and BreakUpLargeNumbers(v) or tostring(v) end
-      local lv, lo, hi = PG.Level(sea.xp)
-      if hi then xpBar:Set((sea.xp - lo) / math.max(1, hi - lo), string.format("%s / %s XP", nn(sea.xp - lo), nn(hi - lo)))
-      else xpBar:Set(1, nn(sea.xp) .. " XP (top level)") end
-      xpNote:SetText(GREY .. "Their Kina level and Renown this season, as their Kina reports them.|r")
-      local rk, cur, nx = PG.Rank(sea.renown)
-      if nx then stBar:Set(math.max(0, math.min(1, (sea.renown - cur.at) / math.max(1, nx.at - cur.at))), string.format("%s / %s", nn(sea.renown - cur.at), nn(nx.at - cur.at)))
-      else stBar:Set(1, nn(sea.renown) .. " (top rank)") end
-      standT:SetText((PG.RankText and PG.RankText(sea)) or ("Rank " .. rk))
+      local rk, bl, hl = seasonRows(sea.renown, sea.gph or 0, sea.gold or 0)
+      local _, cur = PG.Rank(sea.renown)
+      standT:SetText((PG.QCOLOR[cur.q] or "") .. cur.title .. "|r")
+      if SC then
+        SC.Banner(idBox, bl, (sea.gph or 0) > 0 and ("BEST " .. C.Money(math.floor(sea.gph * 10000)) .. " AN HOUR") or "")
+        SC.Hoard(idBox, portraitBox, 0) -- (2.0.19: no hoard art for now)
+      end
+      if cos then cos.plate:Show(); cos.num:Show() end
+    else
+      seasonRows(0, 0, 0)
+      standT:SetText(GREY .. "on an older Kina|r")
+      tracks[1].note:SetText(GREY .. "Their Kina is older than 2.0.5, so it doesn't share its season yet.|r")
+      if SC then SC.Banner(idBox, 0); SC.Hoard(idBox, portraitBox, 0) end
     end
-    stNote:SetText(pr and pr.seen and (GREY .. "Kina " .. (pr.ver or "?") .. "  ·  last heard " .. math.floor((C.Now() - pr.seen) / 60) .. " min ago|r") or "")
+    if titlePlate then titlePlate:Show() end
+    -- 2.0.19 (Taylor): the rank number plate is back on the ring (set above, with their rank)
+    if cos and not sea then cos.plate:Hide(); cos.num:Hide() end
+    -- 2.0.12 (Taylor: "his version is a little hard to see"): the version in white
+    stNote:SetText(pr and pr.seen and ("|cffffffffKina " .. (pr.ver or "?") .. "|r" .. GREY .. "  ·  heard " .. math.floor((C.Now() - pr.seen) / 60) .. " min ago|r") or "")
     setProfs(ch and ch.profs or {}, false)
     local open = ((b.owe or 0) >= 1 and (ORANGE .. "you owe " .. C.Money(math.floor(b.owe)) .. "|r"))
       or ((b.owed or 0) >= 1 and (GOLD .. "they owe you " .. C.Money(math.floor(b.owed)) .. "|r")) or (GREEN .. "all settled|r")
     setRows({
       { "Farms together", tostring(b.farms or 0) .. ((b.hours or 0) > 0 and (GREY .. string.format("  (%.1f h)", b.hours) .. "|r") or "") },
-      { "You commended them", tostring(b.gave or 0) .. ((b.gaveBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gaveBad .. " bad|r") or "") },
-      { "They commended you", tostring(b.got or 0) .. ((b.gotBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
-      { "Kina version", pr and pr.ver or (GREY .. "?|r") },
-      sea and { "Renown", (PG.RankText and PG.RankText(sea) or "") .. GREY .. "  (" .. math.floor(sea.renown) .. ")|r" } or { "Renown", GREY .. "their Kina is older than 2.0.5|r" },
-      { "Installs shared", tostring(pr and pr.recruits or 0) },
+      { "You commended", tostring(b.gave or 0) .. ((b.gaveBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gaveBad .. " bad|r") or "") },
+      { "Commended you", tostring(b.got or 0) .. ((b.gotBad or 0) > 0 and ("  " .. C.Vouch.RED .. b.gotBad .. " bad|r") or "") },
       { "Partner bond", ((C.Pair and C.Pair.IsPartner(who)) and (GREEN .. "your partner, +" .. math.floor(C.Pair.Bonus(who) * 100 + 0.5) .. "%|r  ") or "")
         .. ((C.Rep.BondOf and C.Rep.BondOf(who) or 0) > 0 and (C.Rep.BondText(C.Rep.BondOf(who)) .. ", " .. math.floor(C.Rep.BondFrac(C.Rep.BondOf(who)) * 100) .. "% full") or (GREY .. "none yet|r")) },
       -- 1.0.5 (Taylor): their record and Kina high score (click either for more)
@@ -379,7 +493,7 @@ local function youPage(p, them)
           if not GameTooltip then return end
           GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(isP and "End partnership" or "Partner up")
           GameTooltip:AddLine(isP and "Ends your Kina partnership. Your bond is kept if you partner up again."
-            or "Asks them to be your Kina Partner: +10% Kina XP and standing on farms and payments together, growing with the gold you farm together (up to +20% in about 20 hours).", 1, 1, 1, true)
+            or "Asks them to be your Kina Partner: you share a bond crest that grows with the gold you farm together.", 1, 1, 1, true)
           GameTooltip:Show()
         end)
       else pairB:Hide() end
@@ -400,16 +514,16 @@ local function youPage(p, them)
     if not (C.Cos and C.Cos.ShowModel and C.Cos.ShowModel(portrait, "player")) then
       if SetPortraitTexture then pcall(SetPortraitTexture, portrait, "player") end
     end
-    name:SetText(me.name or "You")
+    name:SetText(C.FullName and C.FullName(nil) or me.name or "You")
     line:SetText(string.format("Level %s %s", tostring(me.level or "?"), me.className or "?"))
     local m = C.Rep and C.Rep.Mine() or { level = 1, xp = 0, ok = true }
     -- 1.1.0: Kina level, Renown and the gold plate come from the season (Progress.lua)
     local PG = C.Progress
     local st = PG.State()
-    local seasonLv = PG.Level(st.xp)
-    m.level = seasonLv
-    lvl:SetText((GOLD .. "Kina " .. C.Rep.Roman(seasonLv) .. "|r")
-      .. (C.Cos.IsFounder(nil) and ("\n" .. C.Cos.FOUNDER) or ""))
+    -- 2.0.14: the ring number is your Renown rank; no separate Kina level
+    m.level = (PG.Rank(st.renown))
+    lvl:SetText(C.Cos.IsFounder(nil) and (C.Cos.FOUNDER or "Kina Founder") or "")
+    if badgePlate then if C.Cos.IsFounder(nil) then badgePlate:Show() else badgePlate:Hide() end end
     if C.Cos then
       makeCos()
       -- 0.9.20: the Try previews only when unlocked (admin password in Settings)
@@ -421,32 +535,29 @@ local function youPage(p, them)
       if pv.badge == "leaf" then starter = true elseif pv.badge == "none" then starter = false
       elseif type(pv.badge) == "number" then starter, recruits = false, pv.badge end
       local rankNow = PG.Rank(st.renown)
-      C.Cos.UpdatePortrait(cos, pv.ring or PG.RING_ART[rankNow], pv.level or m.level, recruits, starter)
-      cos.plate:Show(); cos.num:Show()
+      C.Cos.UpdatePortrait(cos, pv.ring or PG.RING_ART[rankNow], pv.level or rankNow, recruits, starter)
+      cos.plate:Show(); cos.num:Show() -- 2.0.19 (Taylor: "I want the number plate back on the frame")
       if C.Cos.SetFounder then C.Cos.SetFounder(cos, C.Cos.IsFounder(nil)) end
       local stName = pv.ring or m.standing or "Unproven"
       local vn, _, vbad = 0, nil, 0
       if C.Vouch then vn, _, vbad = C.Vouch.Counts() end
-      standT:SetText(PG.RankText(st) .. ((vn or 0) > 0 and ("   |T" .. C.Vouch.UP_ICON .. ":16|t|cffffc54a" .. vn .. "|r") or ""))
-      local num, what = PG.PlateText(st)
-      plate.num:SetText(GOLD .. num .. "|r"); plate.what:SetText(what .. "  (click to switch)")
-      plate:SetWidth(math.max(160, (plate.num:GetStringWidth() or 100) + 40)); plate:Show(); plate.what:Show()
+      local _, curR = PG.Rank(st.renown)
+      standT:SetText((PG.QCOLOR[curR.q] or "") .. curR.title .. "|r")
+      plate:Hide(); plate.what:Hide() -- (the gold plate: the banner and hoard show it now)
       cos.xpF:Hide(); cos.stF:Hide() -- (1.0.5, Taylor: no frames on the level / standing bars)
     end
-    share:SetText("Data sharing: " .. ((C.ShareData and C.ShareData()) and (GREEN .. "on|r") or (ORANGE .. "off: your Kina level is paused|r")))
+    share:SetText(""); share:Hide() -- 2.0.19 (Taylor): not on this screen (it's in Settings)
     local R = C.Rep
     local function n(v) v = math.floor(v + 0.5); return BreakUpLargeNumbers and BreakUpLargeNumbers(v) or tostring(v) end
-    local lv, lo, hi = PG.Level(st.xp)
-    if not hi then xpBar:Set(1, n(st.xp) .. " XP (top level)")
-    -- 2.0 (Taylor: the bars "still not working"): the number is the fill: progress through
-    -- this level, out of what the level takes
-    else xpBar:Set((st.xp - lo) / math.max(1, hi - lo), string.format("%s / %s XP", n(st.xp - lo), n(hi - lo))) end
-    xpNote:SetText(hi and (GREY .. n(hi - st.xp) .. " XP to Kina " .. R.Roman(lv + 1) .. ". Earned by farming with other Kinas.|r") or "")
-    h2:SetText("Renown")
-    local rk, cur, nx = PG.Rank(st.renown)
-    if nx then stBar:Set(math.max(0, math.min(1, (st.renown - cur.at) / math.max(1, nx.at - cur.at))), string.format("%s / %s", n(st.renown - cur.at), n(nx.at - cur.at)))
-    else stBar:Set(1, n(st.renown) .. " (top rank)") end
-    stNote:SetText(nx and ((PG.QCOLOR[nx.q] or GREY) .. n(nx.at - st.renown) .. " to Rank " .. (rk + 1) .. ": " .. nx.title .. "|r") or (GREEN .. "Top rank this season|r"))
+    -- 2.0.15: the three season tracks, and the card art they drive
+    local _, bl, hl = seasonRows(st.renown, PG.BestGph(), st.gold)
+    stNote:SetText("")
+    if C.Showcase then
+      local g = PG.BestGph()
+      local pv2 = C.Cos and C.Cos.preview or {}
+      C.Showcase.Banner(idBox, pv2.banner or bl, g > 0 and ("BEST " .. C.Money(math.floor(g * 10000)) .. " AN HOUR") or (pv2.banner and "PREVIEW" or ""))
+      C.Showcase.Hoard(idBox, portraitBox, 0) -- 2.0.19 (Taylor): no hoard art until the new art is in
+    end
     setProfs(me.profs, true)
     if C.Rules then
       C.Rules.Cover(portraitBox, m.black and true or false)
@@ -457,24 +568,53 @@ local function youPage(p, them)
     local vn2 = C.Vouch and select(1, C.Vouch.Counts()) or 0
     local k = st.streak or {}
     local streakB = PG.StreakBonus(st)
+    -- 2.0.19 (Taylor): hours are real farm time (15+ minute farms, clock minus pauses); one
+    -- gold per hour (your share, best farm this season); the bonuses itemized on hover
+    local hAll, hGrp, hSolo = PG.Hours(0)
+    local hSea = PG.Hours(PG.SeasonStart())
+    local bg, be = PG.BestGph()
+    local B = C.Season.bonus
+    local function pc(v) return "+" .. math.floor((v or 0) * 100 + 0.5) .. "%" end
+    local tl, tlOf = 0, 0
+    for _, e in ipairs(PG.Tracks(st)) do tl, tlOf = tl + (e.level or 0), tlOf + (e.of or 0) end
+    local partnerB = 0
+    if C.Pair and C.Pair.Partner and C.Pair.Partner() then local ok, b = pcall(C.Pair.Bonus, C.Pair.Partner()); partnerB = ok and tonumber(b) or 0 end
+    local bonusTip = { "Bonus now: " .. pc(PG.BonusNow(st)),
+      { "Streak (" .. (k.days or 0) .. " days" .. (k.half and ", half" or "") .. ")", pc(streakB) },
+      { "Track levels (" .. tl .. " x " .. pc(B.trackLevel) .. ")", pc(B.trackLevel * tl) },
+      " ",
+      "Added during a farm:",
+      { "Party: each other Kina", pc(B.partyEach) .. " (up to " .. pc(B.partyMax) .. ")" },
+      { "Campfire (Camp Benefits on you)", "up to " .. pc(B.campfire) },
+      { "Kina Partner in the farm", partnerB > 0 and pc(partnerB) or "+10% to +20%" },
+      { "Each commendation for that farm", pc(B.commend) },
+      " ",
+      "All of these add up and multiply the Renown a farm earns." }
+    local hsr = C.Record and C.Record.Of(UnitName("player"))
+    local hsT = C.Record and C.Record.HighScoreText(hsr) or ""
     setRows({
-      { "Hours farmed", string.format("%.1f h", st.hours) .. GREY .. "  (this season)|r", string.format("%.1f h", st.hours) },
+      { "Hours farmed", string.format("%.1f h", hAll) .. GREY .. string.format("  (%.1f h this season)", hSea) .. "|r", string.format("%.1f h", hAll),
+        tip = { "Hours farmed", "Every farm of 15 minutes or more that Kina logged, clock time minus pauses.",
+          { "All time", string.format("%.1f h", hAll) }, { "This season", string.format("%.1f h", hSea) },
+          { "In a group", string.format("%.1f h", hGrp) }, { "Solo", string.format("%.1f h", hSolo) } } },
       { "Gold farmed", GOLD .. PG.ShortGold(st.gold) .. "|r" .. GREY .. "  (whole group's loot)|r", GOLD .. PG.ShortGold(st.gold) .. "|r" },
-      { "Gold per hour", PG.ShortGold(PG.PerHour(st)) .. "/hr" .. GREY .. "  best " .. PG.ShortGold((st.best.perHour or 0) / 10000) .. "/hr|r", PG.ShortGold(PG.PerHour(st)) .. "/hr" },
+      { "Gold per hour", GOLD .. C.Money(math.floor(bg * 10000)) .. "/hr|r" .. GREY .. "  (your share, best farm)|r", GOLD .. C.Money(math.floor(bg * 10000)) .. "/hr|r",
+        tip = be and { "Gold per hour", "Your own share (what you looted and were paid) per hour, on your best farm of 15+ minutes this season. This is the banner's number.",
+          { be.label or "farm", date and date("%b %d", be.t) or "" } } or nil },
       { "Best farm", PG.ShortGold((st.best.farm or 0) / 10000) },
-      { "Streak", (k.days and k.days > 0 and streakB > 0) and (string.format("%d days  ", k.days) .. GREEN .. "+" .. math.floor(streakB * 100 + 0.5) .. "%|r" .. (k.half and (ORANGE .. " (half)|r") or "")) or (GREY .. "farm today to start one|r") },
-      { "Bonus now", GREEN .. "+" .. math.floor(PG.BonusNow(st) * 100 + 0.5) .. "%|r" .. GREY .. "  + party, campfire, commendations|r", GREEN .. "+" .. math.floor(PG.BonusNow(st) * 100 + 0.5) .. "%|r" },
-      { "Track levels", tostring(PG.TrackLevels(st)) .. GREY .. "  (+1% each)|r" },
+      { "Streak", (k.days and k.days > 0 and streakB > 0) and (string.format("%d days  ", k.days) .. GREEN .. "+" .. math.floor(streakB * 100 + 0.5) .. "%|r" .. (k.half and (ORANGE .. " (half)|r") or "")) or (GREY .. "farm today to start one|r"),
+        tip = { "Streak", "Days in a row with a farm. +2% a day, up to +20%. Miss a day: half. Miss two: it starts over. It carries into every new season." } },
+      { "Bonus now", GREEN .. pc(PG.BonusNow(st)) .. "|r" .. GREY .. "  (hover for the list)|r", GREEN .. pc(PG.BonusNow(st)) .. "|r", tip = bonusTip },
+      { "Track levels", tl .. " / " .. tlOf .. GREY .. "  (+1% each)|r" .. (PG.Complete(st) and ("  " .. GOLD .. C.Season.masterTitle .. "|r") or ""), tl .. " / " .. tlOf,
+        tip = { "Track levels", "Every level of every track this season adds +1% to the Renown you earn. All of them: the title " .. C.Season.masterTitle .. "." } },
       { "Commendations", tostring(vn2 or 0) },
       { "Installs shared", tostring(C.Mentor and C.Mentor.Count() or 0) },
-      { "Kina high score", C.Record and (C.Record.HighScoreText(C.Record.Of(UnitName("player"))) .. "  |cff78beff>|r") or "",
-        C.Record and ((C.Record.HighScoreText(C.Record.Of(UnitName("player"))):match("^(.-/hr|r)") or "") .. " |cff78beff>|r") or nil },
+      { "Kina high score", hsT .. "  |cff78beff>|r", (hsT:match("^(.-/hr|r)") or "") .. " |cff78beff>|r" },
       { "Farmed with", r.partners or (GREY .. "nobody yet|r") },
       { "Kina Partner", C.Pair and C.Pair.Short() or (GREY .. "none yet|r") },
       { "Season", (C.Season and C.Season.name or "") .. GREY .. "  (resets track bonuses)|r", C.Season and C.Season.name or "" },
       { "Net worth", C.NetWorth and (GOLD .. PG.ShortGold(C.NetWorth.Total() / 10000) .. "|r" .. GREY .. "  " .. C.NetWorth.Breakdown(PG.ShortGold) .. "|r") or "",
         C.NetWorth and (GOLD .. PG.ShortGold(C.NetWorth.Total() / 10000) .. "|r") or "" },
-      { "Master of Coin", PG.Complete(st) and (GOLD .. C.Season.masterTitle .. "|r") or (GREY .. "every track at the top|r") },
     })
     -- 1.0.5: your high score opens that farm
     if C.Record and not p.hsMine then

@@ -66,13 +66,33 @@ local help = {
   "/kina roi [percent] - hide rows under this ROI on every tab (same as the Min ROI box)",
   "/kina share [on | off | guild | now | verbose | forget] - pool AH, loot and vendor data with other Kina users in your group",
   "/kina link - Kina's download link, ready to copy",
-  "/kina tracker [on | off] - tracker only: track your farms, no splits, debts or Kina XP",
+  "/kina tracker [on | off] - tracker only: track your farms, no group farms or Renown",
   "/kina partner [name | end | ask off] - your Kina Partner: +10% XP and standing together, growing with your bond",
   "/kina reset - put every Kina window back in its default place",
   "/kina forgive [name] - forgive what someone owes you (the oldest debt first)",
   "/kina pp - pickpocketing (badges, pocket data, sharing): /kina pp help for more",
   "/kina pph [number] - picks per hour used for pick-only estimates",
 }
+
+-- 2.0.20 (Taylor: "i want /kp to be the kina price command"): /kp opens Prices; /kp copper
+-- (or a shift-clicked item) opens it searching for that. Kaydee's Pockets also uses /kp: Taylor
+-- chose Kina to have it, so at login Kina takes /kp back (Pockets keeps /pockets).
+SLASH_KINAPRICE1 = "/kp"
+SlashCmdList.KINAPRICE = function(msg)
+  msg = tostring(msg or "")
+  msg = msg:gsub("|c%x+|H[^|]+|h%[([^%]]+)%]|h|r", "%1"):gsub("^%s+", ""):gsub("%s+$", "")
+  if not C.Prices then return end
+  if msg ~= "" then C.Prices.Open(msg) else C.Prices.Toggle() end
+end
+local function claimKP()
+  for i = 1, 9 do
+    local k = "SLASH_KAYDEESPOCKETS" .. i
+    if _G[k] and tostring(_G[k]):lower() == "/kp" then _G[k] = "/pockets" end
+  end
+  if type(hash_SlashCmdList) == "table" then hash_SlashCmdList["/KP"] = SlashCmdList.KINAPRICE; hash_SlashCmdList["/kp"] = nil end
+  SLASH_KINAPRICE1 = "/kp"
+end
+C.On("PLAYER_LOGIN", function() pcall(claimKP); if C.After then C.After(5, function() pcall(claimKP) end) end end)
 
 SLASH_KINA1 = "/kina"
 SLASH_KINA2 = "/ksc" -- old name, still works

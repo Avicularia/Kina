@@ -4,10 +4,10 @@
 local ADDON, C = ...
 C.Dialogs = C.Dialogs or {} -- 1.0.4: Kina's own question definitions (never the game's popup table)
 C.name = "Kina"
-C.version = "2.0.8"
+C.version = "2.1.4"
 -- 1.5.5 / 0.9.0 (Taylor): Kina is a beta until its CurseForge launch (1.0.0). Builds are
 -- compared by C.BUILD, which only ever goes up (the shown version went back to 0.9).
-C.BUILD = 191
+C.BUILD = 208
 -- is version a newer than b? ("1.2.10" > "1.2.9")
 function C.VersionNewer(a, b)
   local function parts(v) local t = {}; for n in tostring(v or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
@@ -209,10 +209,90 @@ function C.VersionFamily()
   return major and (major .. "." .. minor) or tostring(v)
 end
 
+-- 2.0.19 (Taylor: "Hours farmed doesn't even make sense"): since Nov 20 WoW Forever gives
+-- addons a blank realm name, all the time, not just at load. Kina's profile, AH prices and
+-- characters were split between the real realm and a blank one, and the step that joins
+-- them waited for a name that never came. The realm now comes from the first good answer:
+-- the game, then the last good name Kina saw, then the one realm this install already knows.
+local function goodRealm(r) return type(r) == "string" and r ~= "" and r ~= "?" end
+C.GoodRealm = goodRealm
+function C.Realm()
+  local r = GetRealmName and GetRealmName()
+  local db = KinaDB
+  if goodRealm(r) then
+    if type(db) == "table" then db.lastRealm = r end
+    return r
+  end
+  if type(db) == "table" then
+    if goodRealm(db.lastRealm) then return db.lastRealm end
+    local only, n = nil, 0
+    local seen = {}
+    local function see(x) if goodRealm(x) and not seen[x] then seen[x] = true; only = x; n = n + 1 end end
+    if type(db.realms) == "table" then for k in pairs(db.realms) do see(k) end end
+    see(db.profileRealm)
+    if type(db.markets) == "table" then for k in pairs(db.markets) do see((tostring(k):match("^(.-)|"))) end end
+    if n == 1 then db.lastRealm = only; return only end
+  end
+  local nr = GetNormalizedRealmName and GetNormalizedRealmName()
+  if goodRealm(nr) then return nr end
+  if UnitFullName then local _, fr = UnitFullName("player"); if goodRealm(fr) then return fr end end
+  return r or ""
+end
 function C.MarketKey()
-  local realm = (GetRealmName and GetRealmName()) or "?"
+  local realm = C.Realm()
+  if not goodRealm(realm) then realm = "?" end
   local faction = (UnitFactionGroup and UnitFactionGroup("player")) or "?"
   return realm .. "|" .. faction
+end
+-- 2.0.16 (found checking Taylor's hot list): when the realm name is blank at load, the AH
+-- prices were kept under "|Alliance", apart from the realm's own (and its price history,
+-- which hot streaks need). Once the realm is known, Kina folds them into one.
+function C.FixMarketKey()
+  local d = C.db
+  if not (d and type(d.markets) == "table") then return end
+  local key = C.MarketKey()
+  local realm, faction = key:match("^(.-)|(.*)$")
+  if not realm or realm == "" or realm == "?" or faction == "?" then return end
+  local good = d.markets[key]
+  if type(good) ~= "table" then good = { items = {}, history = {} }; d.markets[key] = good end
+  good.items = good.items or {}; good.history = good.history or {}
+  local function fold(m)
+    if m == good or type(m) ~= "table" then return end
+    if (m.scanTime or 0) > (good.scanTime or 0) then
+      for k, v in pairs(m) do if k ~= "history" then good[k] = v end end
+    end
+    for id, days in pairs(m.history or {}) do
+      if type(days) == "table" then
+        good.history[id] = good.history[id] or {}
+        for day, p in pairs(days) do if good.history[id][day] == nil then good.history[id][day] = p end end
+      end
+    end
+  end
+  for k, m in pairs(d.markets) do
+    local r, f = tostring(k):match("^(.-)|(.*)$")
+    if f == faction and (r == "" or r == "?") then fold(m); d.markets[k] = nil end
+  end
+  if C.market ~= good then fold(C.market); C.market = good end
+  -- 2.0.19: characters saved under a blank realm ("Deputize-") join the real one
+  if type(d.chars) == "table" then
+    for k, ch in pairs(d.chars) do
+      local nm = tostring(k):match("^(.-)%-$")
+      if nm and nm ~= "" and type(ch) == "table" then
+        local gk = nm .. "-" .. realm
+        local g = d.chars[gk]
+        if type(g) ~= "table" then d.chars[gk] = ch
+        else for kk, vv in pairs(ch) do g[kk] = vv end end -- the blank one is the newer
+        d.chars[k] = nil
+      end
+    end
+    local ck = ((UnitName and UnitName("player")) or "?") .. "-" .. realm
+    if C.charKey ~= ck and d.chars[ck] then C.charKey = ck; C.char = d.chars[ck] end
+  end
+end
+if CreateFrame then
+  local mf = CreateFrame("Frame")
+  mf:RegisterEvent("PLAYER_ENTERING_WORLD")
+  mf:SetScript("OnEvent", function(self) if C.db then pcall(C.FixMarketKey); if C.market then self:UnregisterAllEvents() end end end)
 end
 
 ------------------------------------------------------------------ saved data
@@ -280,7 +360,8 @@ local function foldBlank(back, now)
       for _, x in ipairs(b) do if type(x) == "table" then seen[x.start or 0] = true; all[#all + 1] = x end end
       for _, x in ipairs(n) do if type(x) == "table" and not seen[x.start or 0] then seen[x.start or 0] = true; all[#all + 1] = x end end
       table.sort(all, function(x, y) return (x.start or 0) > (y.start or 0) end)
-      while #all > 50 do table.remove(all) end
+      -- 2.0.19: nothing is trimmed here: every farm reaches the farm history first (Progress
+      -- HistBackfill, at login); the next farm end trims the list back to 50
       back[k] = all
     elseif k == "log" then
       -- the real profile's record stands (Kina level and record come from it; the blank one
@@ -309,7 +390,7 @@ local function foldBlank(back, now)
   end
 end
 function C.RealmProfile(db, cur)
-  cur = cur or (GetRealmName and GetRealmName()) or ""
+  cur = cur or C.Realm() or ""
   if type(db.realms) ~= "table" then db.realms = {} end
   if blank(cur) then C.realmPending = true; return end
   C.realmPending = nil
@@ -408,7 +489,7 @@ function C.InitDB()
   if not m then m = { items = {}, history = {} }; C.db.markets[key] = m end
   m.items = m.items or {}; m.history = m.history or {}
   C.market = m
-  C.charKey = ((UnitName and UnitName("player")) or "?") .. "-" .. ((GetRealmName and GetRealmName()) or "?")
+  C.charKey = ((UnitName and UnitName("player")) or "?") .. "-" .. (C.Realm() or "?")
   C.db.chars[C.charKey] = C.db.chars[C.charKey] or { prof = {} }
   C.char = C.db.chars[C.charKey]
 end
@@ -470,7 +551,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         -- first time ever: one line on what Kina is for
         if C.PUBLIC and not C.settings.welcomed then
           C.settings.welcomed = C.Now()
-          C.Print("|cffffc54aWelcome!|r Press Start on the Kina widget when you farm. Group with other Kina users: everyone's widget shows the same totals and split, and farming together earns Renown and Kina XP.")
+          C.Print("|cffffc54aWelcome!|r Press Start on the Kina widget when you farm. Group with other Kina users: everyone's widget shows the same totals and split, and farming together earns Renown.")
         end
         if C.dataRepaired then C.Print("|cffff8040some of Kina's saved data was damaged and has been cleaned up (" .. C.dataRepaired .. " entries).|r") end
         if C.migrated then C.Print("your Kina Scout C data was moved over. You can delete the old KinaScoutC folder after this session.") end

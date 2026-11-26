@@ -90,7 +90,7 @@ local STEPS = {
     body = "At the end of a qualifying farm, this window asks how your partners did. "
       .. "Give a " .. G .. "thumbs up|r to the ones who made it great, and a " .. R .. "thumbs down|r if someone was a problem.\n\n"
       .. "It stays open until you press Done; then that farm's commendations are closed.",
-    rules = "- Up to " .. G .. "2 thumbs up per farm|r: each gives that player +10% Renown and Kina XP for that farm.\n"
+    rules = "- Up to " .. G .. "2 thumbs up per farm|r: each gives that player +10% Renown for that farm.\n"
       .. "- Thumbs down for as many as deserve one: it shows on their profile, nothing more. Never both to the same person.\n"
       .. "- Never to yourself or your own characters.",
     target = function()
@@ -108,14 +108,14 @@ local STEPS = {
 
   { id = "ledger", title = "The Ledger",
     body = "Every farm you've done, with what the group looted and each player's fair share. " .. G .. "Gold flow|r and "
-      .. G .. "XP|r show where your gold and Kina XP came from.",
+      .. G .. "XP|r show where your gold and Renown came from.",
     open = mainTab("Ledger"), target = mainFrame, close = hideMain },
 
   { id = "you", title = "Your profile",
     body = "Your Kina " .. G .. "level|r (I to XX), your " .. G .. "Renown|r rank and title, the gold plate (gold farmed or gold "
       .. "per hour: click it), and your farming record. The Commendations and Farm stats pages show who you farm with most.\n\n"
       .. "Other players' profiles look the same: click a party portrait or a name.",
-    rules = "Kina XP and Renown come from farms another Kina confirmed:\n"
+    rules = "Renown come from farms another Kina confirmed:\n"
       .. "- 10 a minute while you're active, times your pace for your level (0.5x to 3x).\n"
       .. "- Bonuses add up: party, daily streak, campfire, track levels, and +10% per commendation.\n"
       .. "- Quest gold and XP never count.",

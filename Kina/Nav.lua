@@ -148,7 +148,7 @@ local CONTESTED = {
   ["Silithus"] = true, ["Alterac Mountains"] = true, ["The Hinterlands"] = true, ["Deadwind Pass"] = true,
 }
 function C.IsPvPRuleset()
-  local realm = (GetRealmName and GetRealmName()) or ""
+  local realm = C.Realm() or ""
   return realm:find("PvP") ~= nil
 end
 

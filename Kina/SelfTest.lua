@@ -85,7 +85,7 @@ function T.Run()
   -- 2. saved data and the event log
   local ok, bad = C.EventLog and C.EventLog.Verify()
   if ok then add("PASS", string.format("event log checks out (%d lines)", #(C.db.log and C.db.log.lines or {})))
-  else add("FAIL", "event log broken at line " .. tostring(bad) .. " (Kina XP counts as 0)") end
+  else add("FAIL", "event log broken at line " .. tostring(bad) .. " (Renown counts as 0)") end
   if C.dataRepaired then add("WARN", "saved data was damaged and cleaned up at login (" .. C.dataRepaired .. " entries" ..
     ((C.repairPaths and C.repairPaths[1]) and (": " .. C.repairPaths[1]) or "") .. ")") end
   local m = C.Rep and C.Rep.Mine()

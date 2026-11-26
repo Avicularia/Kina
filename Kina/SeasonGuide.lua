@@ -92,7 +92,7 @@ G.RULES = {
     { "Bond XP from a farm", PALE .. "your share of the gold / the usual gold per hour at your level, x100|r" },
     { "Time spent", PALE .. "+1% per minute of the farm|r" },
     { "Levels", PALE .. "20 (4 tiers of 5 gems); the last levels need the most|r" },
-    { "Full bond", PALE .. "about 20 hours of usual farming together|r" },
+    { "Full bond", PALE .. "level 20, +20%|r" },
     { "What it gives", GREEN .. "+10% XP and standing together, +0.5% per bond level|r" } } },
 }
 

@@ -281,12 +281,14 @@ local function fillCard(c, e)
   c.down:SetScript("OnClick", function(self) V.OpenReasons(self, e.who, true, give) end)
   paint()
 end
-function V.ShowPrompt(preview)
+function V.ShowPrompt(preview, onlyRef)
   local open = {}
   if preview then
     open = { { who = "Triforce" }, { who = "Elwyn" }, { who = "Stranger" } }
   else
-    for _, e in ipairs(V.Eligible()) do if V.CanVouch(e.who) then open[#open + 1] = e end end
+    for _, e in ipairs(V.Eligible()) do
+      if V.CanVouch(e.who) and (not onlyRef or e.ref == onlyRef) then open[#open + 1] = e end
+    end
   end
   if #open == 0 then return false end
   if not pop then
@@ -314,6 +316,10 @@ function V.ShowPrompt(preview)
     pop.cards = {}
   end
   for _, c in ipairs(pop.cards) do c:Hide() end
+  -- 2.0.15: back to a window of its own unless the Farm complete window takes it in
+  if pop:GetParent() ~= UIParent then pop:SetParent(UIParent); pop:SetFrameStrata("FULLSCREEN_DIALOG") end
+  pop.done:Show(); pop.title:SetText("Commend your party")
+  if pop.SetBackdropColor then pop:SetBackdropColor(0.05, 0.04, 0.03, 0.95); pop:SetBackdropBorderColor(0.94, 0.58, 0.03, 1) end
   pop.previewGood = 0
   local n = math.min(#open, 8)
   local cols = math.min(n, PER_ROW)
@@ -334,5 +340,6 @@ function V.ShowPrompt(preview)
   pop.refs = {}
   for i = 1, n do if open[i].ref then pop.refs[open[i].ref] = true end end
   pop:Show()
+  if not preview and C.RecapDock then pcall(C.RecapDock, pop) end
   return true
 end

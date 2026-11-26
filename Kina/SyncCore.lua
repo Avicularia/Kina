@@ -103,6 +103,7 @@ end
 function Core:Resume(saved)
   self.s = saved
   saved.buf = saved.buf or {}
+  saved.probe, saved.probeStart = nil, nil
   saved.lastHB = self:now()
   if saved.leader ~= self:name() then
     if self:Verify() then self:askFrom(saved.head + 1, saved.leader) end
@@ -213,11 +214,15 @@ function Core:Observe(kind, data)
   -- 0.9.1: what I reported, so an entry in my name I never made is spotted (takeEvent)
   s.mine = s.mine or {}
   s.mine[s.oseq] = kind .. ":" .. tostring(data or ""):match("^([^:]*)")
+  -- 2.1.2: when it happened, kept so a report re-sent after a resync still counts at its
+  -- real time (the away and pause rules go by it)
+  s.mineAt = s.mineAt or {}
+  s.mineAt[s.oseq] = math.floor(self:now())
   -- Stop: the leader first collects every report still on its way (see beginStop)
   if kind == "S" and self:IsLeader() then s.stopData = data; self:beginStop(); return end
   if self:IsLeader() and s.settleUntil and self:now() < s.settleUntil then
     s.deferred = s.deferred or {}
-    s.deferred[#s.deferred + 1] = { self:name(), s.oseq, kind, clean(data) }
+    s.deferred[#s.deferred + 1] = { self:name(), s.oseq, kind, clean(data), math.floor(self:now()) }
   elseif self:IsLeader() then
     self:append(self:name(), s.oseq, kind, data or "")
   else
@@ -249,7 +254,7 @@ function Core:truncate(from)
       if ev.origin == self:name() and ev.oseq > 0 and ev.kind ~= "S" then
         local data = ev.data
         if ev.kind == "L" or ev.kind == "U" then data = data:gsub(":%-?%d*$", "") end -- the leader re-prices it
-        s.outbox[ev.oseq] = { kind = ev.kind, data = data, t = 0 }
+        s.outbox[ev.oseq] = { kind = ev.kind, data = data, t = 0, at = s.mineAt and s.mineAt[ev.oseq], q = math.floor(self:now()) }
       end
       if ev.oseq > 0 then s.seenOrig[ev.origin .. ":" .. ev.oseq] = nil end
     end
@@ -259,6 +264,7 @@ function Core:truncate(from)
   s.hash = s.head > 0 and s.chain[s.head].hash or "0"
   s.closed = false
   s.buf = {}
+  s.probe, s.probeStart = nil, nil
 end
 
 function Core:askFrom(from, who)
@@ -266,6 +272,9 @@ function Core:askFrom(from, who)
   if not s then return end
   if self:now() - (s.lastQ or 0) < 2 then return end
   s.lastQ = self:now()
+  -- 2.1.2: the batch this ask brings; once it's all in and the leader has more, we ask
+  -- for the next batch at once (we used to wait for the next heartbeat, 10 s a batch)
+  s.askedTo = from + Core.BatchSize(self) - 1
   self:send(table.concat({ "Q", s.sid, from, self:name() }, "|"), who or s.leader)
 end
 
@@ -278,6 +287,25 @@ function Core:takeEvent(ev)
       self:truncate(ev.seq)
       s.lastQ = 0
       self:askFrom(s.head + 1)
+    elseif mine and s.probe and ev.seq >= s.probe and not self:IsLeader() then
+      -- 2.1.2: looking for where our copy went its own way (see below): this one matches
+      s.probe = ev.seq + 1
+      if s.probe > s.head then
+        if (s.probeStart or 1) <= 1 then
+          -- every entry we have matches: the one that didn't chain was damaged
+          s.probe, s.probeStart = nil, nil
+          s.lastQ = 0
+          self:askFrom(s.head + 1)
+        else
+          s.probeStart = math.max(1, s.probeStart - 120)
+          s.probe = s.probeStart
+          s.lastQ = 0
+          self:askFrom(s.probe)
+        end
+      elseif ev.seq >= (s.askedTo or 0) then
+        s.lastQ = 0
+        self:askFrom(s.probe)
+      end
     end
     return
   end
@@ -288,11 +316,15 @@ function Core:takeEvent(ev)
   end
   if fp(s.hash, ev) ~= ev.hash then
     -- it doesn't chain onto our copy: either the entry is damaged, or our copy went a
-    -- different way (after a takeover). Step back 10 entries and fetch the leader's.
-    if not self:IsLeader() and s.head > 0 then
-      self:truncate(math.max(1, s.head - 9))
+    -- different way (after a takeover). 2.1.2: we re-read the leader's entries below our
+    -- end and compare each one with ours; the first that differs is where ours is cut
+    -- (above). Stepping back 10 at a time used to take minutes on a long split and could
+    -- fall behind a busy leader for good (the fuzz test found it).
+    if not self:IsLeader() and s.head > 0 and not s.probe then
+      s.probeStart = math.max(1, s.head - 59)
+      s.probe = s.probeStart
       s.lastQ = 0
-      self:askFrom(s.head + 1)
+      self:askFrom(s.probe)
     end
     return
   end
@@ -309,11 +341,15 @@ function Core:takeEvent(ev)
       if self.env.onForged then pcall(self.env.onForged, ev) end
     end
   end
-  if ev.kind == "S" then s.closed = true; s.outbox = {}; s.mine = nil end -- the farm is over: nothing left to send
+  if ev.kind == "S" then s.closed = true; s.outbox = {}; s.mine = nil; s.mineAt = nil end -- the farm is over: nothing left to send
   self:ackOwn(ev)
   local nxt = s.buf[s.head + 1]
   s.buf[s.head + 1] = nil
   if nxt then return self:takeEvent(nxt) end
+  if not self:IsLeader() and (s.leaderHead or 0) > s.head and s.head >= (s.askedTo or 0) then
+    s.lastQ = 0
+    self:askFrom(s.head + 1)
+  end
   self:changed()
 end
 
@@ -382,7 +418,7 @@ function Core:Receive(from, msg)
         if theirHead > s.head + 300 then wins = false end
         if not wins then return end
         for _, d in ipairs(s.deferred or {}) do
-          if d[1] == self:name() then s.outbox[d[2]] = { kind = d[3], data = d[4], t = 0 } end
+          if d[1] == self:name() then s.outbox[d[2]] = { kind = d[3], data = d[4], t = 0, at = d[5], q = math.floor(self:now()) } end
         end
         s.deferred, s.settleUntil, s.stopping, s.announce = nil, nil, nil, nil
         s.leader = from
@@ -403,7 +439,10 @@ function Core:Receive(from, msg)
       self:serve(head + 1, from)
     elseif head == s.head and h ~= s.hash then
       -- same length, different log: ours is wrong. Start over from the leader's.
-      s.chain, s.head, s.hash, s.buf, s.closed = {}, 0, "0", {}, false
+      -- 2.1.2: through truncate, so our own reports in the copy we throw away go back in
+      -- the outbox (wiping the copy outright lost them: the fuzz test found loot missing)
+      self:truncate(1)
+      s.lastQ = 0
       self:askFrom(1)
     end
   end
@@ -455,10 +494,21 @@ function Core:Verify()
   return true
 end
 
+-- 2.1.2: catch-up batches go over the fast lanes (8 messages a second instead of 1) when
+-- Kina can send them there, so the batch is bigger
+function Core.BatchSize(node) return (node and node.env.sendBulk) and Core.MAX_RESEND_FAST or Core.MAX_RESEND end
+Core.MAX_RESEND_FAST = 60
 -- send entries from..head to one player (capped; they ask again for the rest)
 function Core:serve(from, to)
   local s = self.s
-  local last = math.min(s.head, from + Core.MAX_RESEND - 1)
+  local last = math.min(s.head, from + Core.BatchSize(self) - 1)
+  if self.env.sendBulk and last > from then
+    for i = from, last do
+      local ev = s.chain[i]
+      if ev then self.env.sendBulk(table.concat({ "E", s.sid, ev.seq, ev.origin, ev.oseq, ev.kind, ev.t, ev.hash, ev.data }, "|")) end
+    end
+    return
+  end
   -- sent to everyone, not just the asker: every member hears group messages anyway,
   -- members who already have an entry ignore it, and when several members ask for the
   -- same entries (a raid joining at once) the send queue keeps one copy of each
@@ -537,6 +587,8 @@ function Core:Tick()
   if now - (s.lastVerify or 0) >= 60 then s.lastVerify = now; if not self:Verify() then return end end
   -- the leader has been quiet for 25 s: ask whether we missed anything
   if now - (s.lastHB or now) > 25 and now - (s.lastQ or 0) > 25 then self:askFrom(s.head + 1) end
+  -- 2.1.2: still comparing copies (an answer got lost): ask again
+  if s.probe and now - (s.lastQ or 0) >= 8 then self:askFrom(s.probe) end
   -- re-send reports the leader hasn't filed yet
   for oseq, o in pairs(s.outbox) do
     if now - (o.t or 0) >= Core.RESEND then self:sendReport(oseq) end
@@ -549,7 +601,13 @@ function Core:Tick()
   local gone = self.env.leaderGone and self.env.leaderGone(s.leader)
   if gone then s.goneSince = s.goneSince or now else s.goneSince = nil end
   gone = gone and now - s.goneSince >= 10
-  if not s.closed and (gone or now - (s.lastHB or now) > Core.LEADER_TIMEOUT) then
+  -- 2.1.2: never while we're out of the group ourselves: silence then is ours, not the
+  -- leader's (a member back after 5+ minutes away used to come back as a second leader)
+  local grouped = not self.env.grouped or self.env.grouped()
+  -- (and silence while we were out doesn't count: back in the group, the leader gets a
+  -- fresh 5 minutes to be heard; taking over the moment we rejoined made two leaders)
+  if not grouped then s.lastHB = now end
+  if not s.closed and grouped and (gone or now - (s.lastHB or now) > Core.LEADER_TIMEOUT) then
     s.goneSince = nil
     local order = {}
     for name in pairs(self:members()) do if name ~= s.leader then order[#order + 1] = name end end
@@ -558,6 +616,17 @@ function Core:Tick()
       s.leader = self:name()
       s.announce = true
       s.settleUntil = now + 25
+      -- 2.1.2: our own reports the old leader never filed: we file them ourselves after
+      -- the settle (a leader has no one to send them to; they used to sit there forever)
+      s.deferred = s.deferred or {}
+      local mine = {}
+      for oseq in pairs(s.outbox) do mine[#mine + 1] = oseq end
+      table.sort(mine)
+      for _, oseq in ipairs(mine) do
+        local o = s.outbox[oseq]
+        s.deferred[#s.deferred + 1] = { self:name(), oseq, o.kind, o.data, o.at }
+      end
+      s.outbox = {}
       s.startAt = now - (s.chain[s.head] and s.chain[s.head].t or 0)
       s.lastBeat = 0
       self:changed()

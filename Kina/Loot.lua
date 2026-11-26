@@ -1013,10 +1013,14 @@ function C.StopSession(at, why, silent, fromParty)
   if C.FarmEndAd and not silent then pcall(C.FarmEndAd, s) end -- 1.0.2b
   if not silent and not (C.Toast and C.Toast.ThemeAtFarmEnd and C.Toast.ThemeAtFarmEnd()) then C.PlayCue("stop") end
   -- 1.5.0: a qualifying group farm just ended: remind about vouching
-  if not silent and s.sync then
-    C.After(4, function()
-      if C.Vouch and C.Vouch.ShowPrompt then pcall(C.Vouch.ShowPrompt) end -- 1.5.0: commendation window
-    end)
+  -- 2.0.15: only for this farm, and only when it ran 15 minutes or more (an earlier farm's
+  -- open commendations don't pop up after a short one)
+  local farmSecs = (s.stop or C.Now()) - (s.start or C.Now()) - (s.pausedSecs or 0)
+  if not silent and s.sync and farmSecs >= 900 then
+    local ref = s.sync.sid or ("t" .. tostring(s.start))
+    -- 2.0.18 (Taylor: it came 5 s late and people clicked away): opens in the same moment as
+    -- the Farm complete window (which is already built by FarmEnded above) and docks into it
+    if C.Vouch and C.Vouch.ShowPrompt then pcall(C.Vouch.ShowPrompt, false, ref) end
   end
   C.Print(string.format("farm ended (%s): %s total (%s/hour), %d kills.", s.why, C.Money(sum.total), C.Money(sum.perHour), sum.kills))
   if C.OnSessionChange then C.OnSessionChange() end
@@ -1071,7 +1075,7 @@ function C.TrackLevels(s)
     C.settings.lowLevelSeen = C.settings.lowLevelSeen or {}
     if not C.settings.lowLevelSeen[key] then
       C.settings.lowLevelSeen[key] = true
-      C.Print("|cffffc54aNote:|r someone in this farm is under level 10, so it won't give Kina XP or standing. The gold tracking and the split still work. (Shown once per character.)")
+      C.Print("|cffffc54aNote:|r someone in this farm is under level 10, so it won't give Renown. The gold tracking and the split still work. (Shown once per character.)")
     end
   end
 end

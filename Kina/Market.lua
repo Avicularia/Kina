@@ -61,8 +61,15 @@ local function velocity(m, items, now)
   for id, v in pairs(m.vel) do if now - (v.t or 0) > 14 * 86400 then m.vel[id] = nil end end
 end
 
+-- 2.1.0 (Taylor: Booty Bay's cross-faction auction house): a scan goes into the price book
+-- of the house it was made at. Your own faction's book (C.market) is what Kina values things
+-- with; the cross-faction book is kept apart (Transport.lua decides when it counts).
+function C.ScanBook()
+  if C.ahNeutral and C.Transport and C.Transport.Book then return C.Transport.Book() end
+  return C.market
+end
 local function commit(acc, rows)
-  local m = C.market
+  local m = C.ScanBook()
   -- a scan read without a reply of our own is only as new as the last snapshot event seen
   local now = C.stampOverride or C.Now()
   C.stampOverride = nil
@@ -166,7 +173,10 @@ local function readAll()
     sig[#sig + 1] = tostring(iid) .. ":" .. tostring(bo) .. ":" .. tostring(cnt)
   end
   sig = table.concat(sig, ",")
-  if C.market.sig == sig then
+  -- (2.1.0: either house's last read: the game keeps the last scan in memory, so a Booty Bay
+  -- scan must never be read again at Stormwind as Stormwind's prices, or the other way round)
+  local nb = C.Transport and C.Transport.Book and C.Transport.Book()
+  if C.ScanBook().sig == sig or C.market.sig == sig or (nb and nb.sig == sig) then
     phase("noreply")
     C.Print("the auction house only has the scan Kina already read: no new prices yet.")
     return
@@ -215,9 +225,10 @@ local function readAll()
     if i >= n then
       reading = false
       if next(acc) then
+        local bk = C.ScanBook()
         commit(acc, n)
-        C.market.sig = sig
-        C.market.soldRows, C.market.soldBy = soldRows, soldBy
+        bk.sig = sig
+        bk.soldRows, bk.soldBy = soldRows, soldBy
         C.Print(string.format("scan read: %d listings%s.", n, soldRows > 0 and string.format(", %d marked SOLD (real sales data)", soldRows) or ", none marked sold"))
       end
       return true
@@ -275,7 +286,7 @@ C.GuardScript(waiter, "OnUpdate", "Market:244", function(self)
   end
 end)
 C.On("REPLICATE_ITEM_LIST_UPDATE", function()
-  local last = C.market.scanTime or 0
+  local last = C.ScanBook().scanTime or 0
   ownRequest = false
   if reading or waiter:IsShown() then return end
   if C.Now() - last < 60 then return end -- same snapshot already read
@@ -327,7 +338,7 @@ function C.Scan(auto)
       C.scanReply = C.Now()
       -- how old is it? as old as the last snapshot this client was seen to receive
       -- (unknown: keep the age of Kina's own last scan, never "just now")
-      C.stampOverride = C.db.lastSnapshotSeen or C.market.scanTime or 0
+      C.stampOverride = C.db.lastSnapshotSeen or C.ScanBook().scanTime or 0
       waiter.lastN, waiter.stableAt, waiter.started = -1, GetTime and GetTime() or 0, GetTime and GetTime() or 0
       phase("request"); waiter:Show()
       C.Print("another addon used the 15-minute scan: reading the scan it made instead.")
